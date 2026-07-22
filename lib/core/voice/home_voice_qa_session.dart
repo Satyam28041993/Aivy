@@ -14,6 +14,7 @@ import '../../features/chat/data/voice_file_upload.dart'
     as voice_io;
 import 'aivy_chat_voice_coordinator.dart';
 import 'aivy_voice_ask_service.dart';
+import 'gemini_live/gemini_live_voice_session.dart';
 import '../../services/google_home_voice_service.dart';
 
 /// Push-to-talk / Live conversation: mic ON → speak → answer → auto-listen again.
@@ -43,29 +44,49 @@ class HomeVoiceQaSession {
     ChatRepository? repository,
     AivyVoiceAskService? ask,
     GoogleHomeVoiceService? tts,
+    GeminiLiveVoiceSession? geminiLive,
+    this.useGeminiLive = true,
   }) : _repository = repository ?? ChatRepository(),
        _ask = ask ?? AivyVoiceAskService(),
-       _tts = tts ?? GoogleHomeVoiceService();
+       _tts = tts ?? GoogleHomeVoiceService(),
+       _geminiLive = geminiLive ?? GeminiLiveVoiceSession(userId: userId);
 
   final String userId;
   final ChatRepository _repository;
   final AivyVoiceAskService _ask;
   final GoogleHomeVoiceService _tts;
+  final GeminiLiveVoiceSession _geminiLive;
+
+  /// Phase 1: real-time Gemini Live + function calling (falls back to legacy on failure).
+  bool useGeminiLive;
+  bool _geminiLiveFailed = false;
 
   final AudioRecorder _recorder = AudioRecorder();
 
   HomeVoiceQaPhase phase = HomeVoiceQaPhase.idle;
-  String? lastTranscript;
-  String? lastAnswer;
+  final List<Map<String, String>> _history = [];
+  final List<VoiceConversationTurn> _legacyTurns = [];
+
+  List<VoiceConversationTurn> get turns =>
+      useGeminiLive && !_geminiLiveFailed ? _geminiLive.turns : _legacyTurns;
+
+  String? get lastTranscript => useGeminiLive && !_geminiLiveFailed
+      ? (_geminiLive.lastTranscript ?? _legacyLastTranscript)
+      : _legacyLastTranscript;
+
+  String? get lastAnswer => useGeminiLive && !_geminiLiveFailed
+      ? (_geminiLive.lastAnswer ?? _legacyLastAnswer)
+      : _legacyLastAnswer;
+
+  String? _legacyLastTranscript;
+  String? _legacyLastAnswer;
+
   double lastDb = -160;
   List<dynamic>? lastSources;
 
   /// Live mode (continuous Gemini-style conversation) — default ON.
   bool handsFreeEnabled = true;
   bool silenceDetectionEnabled = true;
-
-  final List<Map<String, String>> _history = [];
-  final List<VoiceConversationTurn> turns = [];
 
   static const _silenceAutoSubmitMs = 1300;
   static const _liveLoopDelayMs = 450;
@@ -87,6 +108,9 @@ class HomeVoiceQaSession {
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
   void Function(String message)? onError;
 
+  bool get _activeGeminiLive =>
+      useGeminiLive && !_geminiLiveFailed && _geminiLive.isSessionActive;
+
   bool get isRecording => phase == HomeVoiceQaPhase.listening;
   bool get isBusy =>
       phase == HomeVoiceQaPhase.processing || phase == HomeVoiceQaPhase.speaking;
@@ -101,6 +125,10 @@ class HomeVoiceQaSession {
   void _startSafetyTimerForPhase(HomeVoiceQaPhase currentPhase) {
     _safetyTimer?.cancel();
     _safetyTimer = null;
+
+    if (_activeGeminiLive) {
+      return;
+    }
 
     if (currentPhase == HomeVoiceQaPhase.listening) {
       // Auto-submit after 45 seconds of continuous listening
@@ -151,8 +179,23 @@ class HomeVoiceQaSession {
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
 
-  /// Mic tap: idle → start recording; listening → stop & send.
+  void _wireGeminiCallbacks() {
+    _geminiLive.onPhaseChanged = (next) {
+      phase = next;
+      if (next == HomeVoiceQaPhase.listening) {
+        lastDb = _geminiLive.lastDb;
+      }
+      onPhaseChanged?.call(next);
+    };
+    _geminiLive.onError = onError;
+  }
+
+  /// Mic tap: idle → start; listening → stop & send (or end Live session).
   Future<void> toggleMic() async {
+    if (useGeminiLive && !_geminiLiveFailed) {
+      await _toggleMicGeminiLive();
+      return;
+    }
     if (_submitting) {
       return;
     }
@@ -173,8 +216,49 @@ class HomeVoiceQaSession {
     await startRecording();
   }
 
+  Future<void> _toggleMicGeminiLive() async {
+    _wireGeminiCallbacks();
+
+    if (_geminiLive.isSessionActive) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
+
+    if (phase == HomeVoiceQaPhase.speaking ||
+        phase == HomeVoiceQaPhase.processing) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
+
+    try {
+      await _geminiLive.startSession();
+      phase = _geminiLive.phase;
+      lastDb = _geminiLive.lastDb;
+      onPhaseChanged?.call(phase);
+    } catch (_) {
+      _geminiLiveFailed = true;
+      if (kDebugMode) {
+        debugPrint('[Aivy] Gemini Live unavailable — falling back to legacy voice.');
+      }
+      onError?.call(
+        'Gemini Live start nahi hua — purana voice mode use ho raha hai.',
+      );
+      await startRecording();
+    }
+  }
+
   /// Cancel current recording without sending.
   Future<void> cancelRecording() async {
+    if (_activeGeminiLive) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
     if (phase != HomeVoiceQaPhase.listening) {
       return;
     }
@@ -189,18 +273,22 @@ class HomeVoiceQaSession {
 
   /// Full reset: stops all recording/speech, clears screen texts, and resets session history.
   void reset() {
+    if (_geminiLive.isSessionActive) {
+      unawaited(_geminiLive.stopSession());
+    }
+    _geminiLive.reset();
     _recordGen++;
     _safetyTimer?.cancel();
     _safetyTimer = null;
     unawaited(_stopRecorderOnly());
     unawaited(_tts.stop());
     unawaited(AivyChatVoiceCoordinator.instance.stop());
-    lastTranscript = null;
-    lastAnswer = null;
+    _legacyLastTranscript = null;
+    _legacyLastAnswer = null;
     lastSources = null;
     lastDb = -160;
     _history.clear();
-    turns.clear();
+    _legacyTurns.clear();
     phase = HomeVoiceQaPhase.idle;
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
@@ -431,14 +519,16 @@ class HomeVoiceQaSession {
         audioUrl: url,
         history: _history.isNotEmpty ? _history : null,
       );
-      lastTranscript = result.transcript;
-      lastAnswer = result.answer;
+      _legacyLastTranscript = result.transcript;
+      _legacyLastAnswer = result.answer;
       lastSources = result.sources;
 
-      if (lastTranscript != null && lastTranscript!.trim().isNotEmpty &&
-          lastAnswer != null && lastAnswer!.trim().isNotEmpty) {
-        _history.add({'role': 'user', 'text': lastTranscript!});
-        _history.add({'role': 'model', 'text': lastAnswer!});
+      if (_legacyLastTranscript != null &&
+          _legacyLastTranscript!.trim().isNotEmpty &&
+          _legacyLastAnswer != null &&
+          _legacyLastAnswer!.trim().isNotEmpty) {
+        _history.add({'role': 'user', 'text': _legacyLastTranscript!});
+        _history.add({'role': 'model', 'text': _legacyLastAnswer!});
         if (_history.length > 6) {
           _history.removeRange(0, _history.length - 6);
         }
@@ -473,17 +563,19 @@ class HomeVoiceQaSession {
 
       _setPhase(HomeVoiceQaPhase.idle);
 
-      if (lastTranscript != null && lastTranscript!.trim().isNotEmpty &&
-          lastAnswer != null && lastAnswer!.trim().isNotEmpty) {
-        turns.add(
+      if (_legacyLastTranscript != null &&
+          _legacyLastTranscript!.trim().isNotEmpty &&
+          _legacyLastAnswer != null &&
+          _legacyLastAnswer!.trim().isNotEmpty) {
+        _legacyTurns.add(
           VoiceConversationTurn(
-            userText: lastTranscript!,
-            assistantText: lastAnswer!,
+            userText: _legacyLastTranscript!,
+            assistantText: _legacyLastAnswer!,
             sources: lastSources,
           ),
         );
-        lastTranscript = null;
-        lastAnswer = null;
+        _legacyLastTranscript = null;
+        _legacyLastAnswer = null;
         lastSources = null;
         onPhaseChanged?.call(HomeVoiceQaPhase.idle);
       }
@@ -563,8 +655,9 @@ class HomeVoiceQaSession {
     await _stopRecorderOnly();
     await _tts.stop();
     await _tts.dispose();
+    await _geminiLive.dispose();
     _history.clear();
-    turns.clear();
+    _legacyTurns.clear();
     try {
       await _recorder.dispose();
     } catch (_) {}
