@@ -28,6 +28,7 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   late final AnimationController _voiceSim;
   final _stars = <_Star>[];
   final _math = math.Random(17);
+  final ScrollController _conversationScroll = ScrollController();
 
   late final HomeVoiceQaSession _qa;
 
@@ -65,6 +66,7 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
       ..onPhaseChanged = (_) {
         if (mounted) {
           setState(() {});
+          _autoScrollConversation();
         }
       }
       ..onError = (msg) {
@@ -88,11 +90,25 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   @override
   void dispose() {
     unawaited(_qa.dispose());
+    _conversationScroll.dispose();
     _spiralRotation.dispose();
     _twinkle.dispose();
     _ringBreath.dispose();
     _voiceSim.dispose();
     super.dispose();
+  }
+
+  void _autoScrollConversation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_conversationScroll.hasClients) {
+        return;
+      }
+      _conversationScroll.animateTo(
+        _conversationScroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   double _simulatedVoiceLevel() {
@@ -116,13 +132,18 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   String get _subtitle {
     switch (_qa.phase) {
       case HomeVoiceQaPhase.idle:
-        return 'Boliye, mai sun rahi hoon. Hands-Free Mode on karke bina tap kiye baat karein.';
+        if (_qa.liveActive) {
+          return 'Live baat-cheet on hai — ek pal, phir sun rahi hoon…';
+        }
+        return _qa.handsFreeEnabled
+            ? 'Live mode ready. Mic dabaiye — phir bina ruke baat karte rahiye, main sunti rahungi.'
+            : 'Mic dabaiye aur apna sawaal poochiye.';
       case HomeVoiceQaPhase.listening:
-        return 'Aapki aawaaz sun rahi hoon. Bolne ke baad 2 second rukein, ya mic dabayein.';
+        return 'Sun rahi hoon… boliye. Ruk jaayenge to main khud samajh jaungi.';
       case HomeVoiceQaPhase.processing:
-        return 'Prakruti Graphic ka data check kar rahi hoon…';
+        return 'Soch rahi hoon…';
       case HomeVoiceQaPhase.speaking:
-        return 'Aapke sawaal ka jawaab de rahi hoon…';
+        return 'Jawaab de rahi hoon… baat karni ho to mic tap karein.';
     }
   }
 
@@ -263,56 +284,18 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Hands-Free Switch on the Left (swapped to match user instruction)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _qa.handsFreeEnabled
-                              ? const Color(0xFF10B981).withValues(alpha: 0.1)
-                              : Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _qa.handsFreeEnabled
-                                ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                                : Colors.white.withValues(alpha: 0.08),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _qa.handsFreeEnabled
-                                  ? Icons.spatial_audio_rounded
-                                  : Icons.spatial_audio_off_rounded,
-                              color: _qa.handsFreeEnabled
-                                  ? const Color(0xFF10B981)
-                                  : Colors.white38,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Transform.scale(
-                              scale: 0.7,
-                              child: SizedBox(
-                                height: 20,
-                                width: 32,
-                                child: Switch(
-                                  value: _qa.handsFreeEnabled,
-                                  activeColor: const Color(0xFF10B981),
-                                  activeTrackColor: const Color(0xFF065F46),
-                                  inactiveThumbColor: Colors.white38,
-                                  inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-                                  onChanged: (val) async {
-                                    await HapticFeedback.selectionClick();
-                                    setState(() {
-                                      _qa.handsFreeEnabled = val;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Premium "Live" conversation toggle pill
+                      _LivePill(
+                        enabled: _qa.handsFreeEnabled,
+                        active: _qa.liveActive,
+                        pulse: _ringBreath,
+                        onChanged: (val) async {
+                          await HapticFeedback.selectionClick();
+                          await _qa.setHandsFree(val);
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        },
                       ),
                       // Title in the Center
                       Column(
@@ -370,19 +353,31 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                         ),
                   ),
 
-                  // Floating Transcript Card with real-time text reveal
-                  if ((_qa.lastTranscript != null && _qa.lastTranscript!.isNotEmpty) ||
-                      (_qa.lastAnswer != null && _qa.lastAnswer!.isNotEmpty)) ...[
+                  // Running conversation transcript (premium, Gemini-style flow)
+                  if (_qa.conversation.isNotEmpty ||
+                      _qa.phase == HomeVoiceQaPhase.processing) ...[
                     const SizedBox(height: 16),
                     Expanded(
-                      child: SingleChildScrollView(
+                      child: ListView.builder(
+                        controller: _conversationScroll,
                         physics: const BouncingScrollPhysics(),
-                        child: _VoiceTranscriptCard(
-                          transcript: _qa.lastTranscript ?? '',
-                          answer: _qa.lastAnswer ?? '',
-                          phase: _qa.phase,
-                          sources: _qa.lastSources,
-                        ),
+                        padding: EdgeInsets.zero,
+                        itemCount: _qa.conversation.length +
+                            (_qa.phase == HomeVoiceQaPhase.processing ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index >= _qa.conversation.length) {
+                            return const _VoiceThinkingCard();
+                          }
+                          final turn = _qa.conversation[index];
+                          final isLast = index == _qa.conversation.length - 1;
+                          return _VoiceTranscriptCard(
+                            transcript: turn.question,
+                            answer: turn.answer,
+                            sources: turn.sources,
+                            animateAnswer: isLast &&
+                                _qa.phase == HomeVoiceQaPhase.speaking,
+                          );
+                        },
                       ),
                     ),
                   ] else
@@ -682,14 +677,16 @@ class _VoiceTranscriptCard extends StatelessWidget {
   const _VoiceTranscriptCard({
     required this.transcript,
     required this.answer,
-    required this.phase,
     this.sources,
+    this.animateAnswer = false,
   });
 
   final String transcript;
   final String answer;
-  final HomeVoiceQaPhase phase;
   final List<dynamic>? sources;
+
+  /// Only the newest reply types out character-by-character; history stays static.
+  final bool animateAnswer;
 
   @override
   Widget build(BuildContext context) {
@@ -812,16 +809,27 @@ class _VoiceTranscriptCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Real-time character typewriter reveal
-                  _TypingText(
-                    text: answer,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white,
-                      height: 1.45,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.25,
+                  // Newest reply types out; older replies render instantly.
+                  if (animateAnswer)
+                    _TypingText(
+                      text: answer,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.25,
+                      ),
+                    )
+                  else
+                    Text(
+                      answer,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.25,
+                      ),
                     ),
-                  ),
                   if (sources != null && sources!.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
@@ -897,32 +905,140 @@ class _VoiceTranscriptCard extends StatelessWidget {
                     ),
                   ],
                 ],
-                if (phase == HomeVoiceQaPhase.processing) ...[
-                  if (transcript.isNotEmpty) const SizedBox(height: 12),
-                  const Row(
-                    children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFFA78BFA),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Thinking…',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Premium glass "thinking" card shown while Aivy processes the latest question.
+class _VoiceThinkingCard extends StatelessWidget {
+  const _VoiceThinkingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.10),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFA78BFA),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Soch rahi hoon…',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Premium "Live" conversation toggle pill with an animated status dot.
+class _LivePill extends StatelessWidget {
+  const _LivePill({
+    required this.enabled,
+    required this.active,
+    required this.pulse,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final bool active;
+  final Animation<double> pulse;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const on = Color(0xFF10B981);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => onChanged(!enabled),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: enabled
+                ? on.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: enabled
+                  ? on.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: pulse,
+                builder: (context, _) {
+                  final glow = active
+                      ? (0.4 + 0.6 * Curves.easeInOut.transform(pulse.value))
+                      : 1.0;
+                  return Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: enabled ? on : Colors.white38,
+                      boxShadow: enabled
+                          ? [
+                              BoxShadow(
+                                color: on.withValues(alpha: 0.7 * glow),
+                                blurRadius: 8 * glow,
+                                spreadRadius: 1.5 * glow,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Live',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: enabled ? on : Colors.white54,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1136,10 +1252,10 @@ class _VoiceHomeMic extends StatelessWidget {
             ? Icons.hourglass_top_rounded
             : Icons.mic_rounded;
         final label = listening
-            ? 'Mic OFF'
+            ? 'Sun rahi hoon'
             : busy
             ? '…'
-            : 'Mic ON';
+            : 'Boliye';
             
         Color micGradientStart;
         Color micGradientEnd;

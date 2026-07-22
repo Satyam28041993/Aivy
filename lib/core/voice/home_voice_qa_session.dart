@@ -24,6 +24,14 @@ enum HomeVoiceQaPhase {
   speaking,
 }
 
+/// One completed exchange in the live conversation (for premium transcript view).
+class VoiceTurn {
+  VoiceTurn({required this.question, required this.answer, this.sources});
+  final String question;
+  final String answer;
+  final List<dynamic>? sources;
+}
+
 class HomeVoiceQaSession {
   HomeVoiceQaSession({
     required this.userId,
@@ -47,11 +55,20 @@ class HomeVoiceQaSession {
   double lastDb = -160;
   List<dynamic>? lastSources;
 
-  // Toggle options for premium Hands-Free Mode
-  bool handsFreeEnabled = false;
+  // Premium "Live" conversation mode: after Aivy answers, she keeps listening
+  // automatically so the conversation flows continuously (Gemini-style).
+  bool handsFreeEnabled = true;
   bool silenceDetectionEnabled = true;
 
+  /// True once the user has started a Live session (first tap). Used so we can
+  /// keep looping without re-tapping, and stop the loop cleanly on pause.
+  bool _liveActive = false;
+  bool get liveActive => _liveActive;
+
   final List<Map<String, String>> _history = [];
+
+  /// Full running conversation for the premium on-screen transcript.
+  final List<VoiceTurn> conversation = [];
 
   StreamSubscription<Amplitude>? _ampSub;
   DateTime? _startedAt;
@@ -72,6 +89,19 @@ class HomeVoiceQaSession {
   bool get isRecording => phase == HomeVoiceQaPhase.listening;
   bool get isBusy =>
       phase == HomeVoiceQaPhase.processing || phase == HomeVoiceQaPhase.speaking;
+
+  /// Enable/disable Live conversation mode. Turning it off stops the auto-loop
+  /// and any in-progress listening cleanly.
+  Future<void> setHandsFree(bool enabled) async {
+    handsFreeEnabled = enabled;
+    if (!enabled) {
+      _liveActive = false;
+      if (phase == HomeVoiceQaPhase.listening) {
+        await cancelRecording();
+      }
+    }
+    onPhaseChanged?.call(phase);
+  }
 
   void _setPhase(HomeVoiceQaPhase next) {
     phase = next;
@@ -95,14 +125,15 @@ class HomeVoiceQaSession {
         }
       });
     } else if (currentPhase == HomeVoiceQaPhase.processing) {
-      // Force recover to idle if cloud function takes more than 28 seconds
-      _safetyTimer = Timer(const Duration(seconds: 28), () {
+      // Force recover to idle only if the cloud function truly stalls. Aligned
+      // closer to the 120s server timeout so we don't bail while it's working.
+      _safetyTimer = Timer(const Duration(seconds: 45), () {
         if (kDebugMode) {
           debugPrint('[Aivy] Safety timeout: processing took too long, resetting.');
         }
         if (phase == HomeVoiceQaPhase.processing) {
           _submitting = false;
-          _friendlyReset('Sochne me thoda waqt lag raha hai. Dubara mic daba kar boliye.');
+          _friendlyReset('Thoda slow chal raha hai — dubara boliye.');
         }
       });
     } else if (currentPhase == HomeVoiceQaPhase.speaking) {
@@ -139,33 +170,46 @@ class HomeVoiceQaSession {
       return;
     }
     if (phase == HomeVoiceQaPhase.listening) {
+      // In Live mode a tap while listening means "pause the conversation".
+      if (handsFreeEnabled) {
+        _liveActive = false;
+        await cancelRecording();
+        return;
+      }
       await submitRecording();
       return;
     }
-    // If she is speaking, tapping stops the speech
+    // While Aivy is speaking: in Live mode, tapping barges in — stop the reply
+    // and immediately start listening so the user can talk over her.
     if (phase == HomeVoiceQaPhase.speaking) {
       await stopSpeaking();
+      if (handsFreeEnabled && _liveActive) {
+        await startRecording();
+      }
       return;
     }
     if (phase == HomeVoiceQaPhase.processing) {
       // Allow user to break/interrupt processing and go back to idle
+      _liveActive = false;
       _friendlyReset('Process cancel kiya gaya.');
       return;
     }
+    // idle → start. Entering here (re)activates the Live loop.
+    _liveActive = handsFreeEnabled;
     await startRecording();
   }
 
-  /// Cancel current recording without sending.
+  /// Cancel current recording without sending (also used to pause Live mode).
+  /// Prior conversation turns are preserved so context isn't lost on pause.
   Future<void> cancelRecording() async {
     if (phase != HomeVoiceQaPhase.listening) {
       return;
     }
     _recordGen++;
     await _stopRecorderOnly();
-    _history.clear();
     _safetyTimer?.cancel();
     _safetyTimer = null;
-    
+
     await HapticFeedback.selectionClick();
     _setPhase(HomeVoiceQaPhase.idle);
   }
@@ -173,6 +217,7 @@ class HomeVoiceQaSession {
   /// Full reset: stops all recording/speech, clears screen texts, and resets session history.
   void reset() {
     _recordGen++;
+    _liveActive = false;
     _safetyTimer?.cancel();
     _safetyTimer = null;
     unawaited(_stopRecorderOnly());
@@ -183,6 +228,7 @@ class HomeVoiceQaSession {
     lastSources = null;
     lastDb = -160;
     _history.clear();
+    conversation.clear();
     phase = HomeVoiceQaPhase.idle;
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
@@ -282,13 +328,14 @@ class HomeVoiceQaSession {
         }
 
         if (_hasSpoken) {
-          // If amplitude stays quiet (below -38dB) for 2.0 seconds, auto-submit
+          // If amplitude stays quiet (below -38dB) for ~1.3s, auto-submit. This
+          // keeps the conversation snappy without clipping natural pauses.
           if (amp.current < -38.0) {
             if (_lastSpeechTime != null &&
-                now.difference(_lastSpeechTime!).inMilliseconds > 2000) {
-              // Ensure we recorded at least 1.5s total to avoid premature triggers
+                now.difference(_lastSpeechTime!).inMilliseconds > 1300) {
+              // Ensure we recorded at least ~1.1s total to avoid premature triggers
               final totalDurationMs = now.difference(_startedAt!).inMilliseconds;
-              if (totalDurationMs >= 1500) {
+              if (totalDurationMs >= 1100) {
                 _lastSpeechTime = null; // Prevent double submission
                 if (kDebugMode) {
                   debugPrint('[Aivy] Smart Silence Detected. Auto-submitting.');
@@ -406,6 +453,14 @@ class HomeVoiceQaSession {
         if (_history.length > 6) {
           _history.removeRange(0, _history.length - 6);
         }
+        conversation.add(VoiceTurn(
+          question: lastTranscript!,
+          answer: lastAnswer!,
+          sources: result.sources,
+        ));
+        if (conversation.length > 30) {
+          conversation.removeRange(0, conversation.length - 30);
+        }
       }
 
       if (kDebugMode) {
@@ -440,10 +495,11 @@ class HomeVoiceQaSession {
         debugPrint('[Aivy] home QA ready — tap mic for next question');
       }
 
-      // Hands-Free Loop Trigger: automatically listen again after a comfortable delay
-      if (handsFreeEnabled) {
-        Timer(const Duration(milliseconds: 1200), () {
-          if (phase == HomeVoiceQaPhase.idle && handsFreeEnabled) {
+      // Live loop: automatically resume listening after a short, natural gap so
+      // the conversation keeps flowing without the user tapping again.
+      if (handsFreeEnabled && _liveActive) {
+        Timer(const Duration(milliseconds: 450), () {
+          if (phase == HomeVoiceQaPhase.idle && handsFreeEnabled && _liveActive) {
             startRecording();
           }
         });
