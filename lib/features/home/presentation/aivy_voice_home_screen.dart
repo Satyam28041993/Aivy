@@ -82,8 +82,8 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
             backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            duration: const Duration(seconds: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            duration: Duration(seconds: msg.length > 80 ? 8 : 4),
           ),
         );
         setState(() {});
@@ -120,6 +120,18 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   }
 
   String get _subtitle {
+    if (_qa.isLegacyVoiceMode) {
+      switch (_qa.phase) {
+        case HomeVoiceQaPhase.idle:
+          return 'Purana voice mode (slow) — mic dabayein. Gemini Live ke liye App Check setup karein.';
+        case HomeVoiceQaPhase.listening:
+          return 'Sun rahi hoon — bolne ke baad mic band karein.';
+        case HomeVoiceQaPhase.processing:
+          return 'Soch rahi hoon… (server par process ho raha hai)';
+        case HomeVoiceQaPhase.speaking:
+          return 'Jawaab de rahi hoon…';
+      }
+    }
     if (!_qa.handsFreeEnabled) {
       switch (_qa.phase) {
         case HomeVoiceQaPhase.idle:
@@ -134,9 +146,11 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
     }
     switch (_qa.phase) {
       case HomeVoiceQaPhase.idle:
-        return _qa.turns.isEmpty
-            ? 'Live mode ON — mic dabayein aur boliye. Baar-baar tap ki zaroorat nahi.'
-            : 'Live mode ON — boliye, mai sunungi aur jawaab dungi.';
+        return _qa.isGeminiLiveActive
+            ? 'Gemini Live — boliye, mai sun rahi hoon.'
+            : (_qa.turns.isEmpty
+                ? 'Mic dabayein — Gemini Live shuru hoga (fast voice).'
+                : 'Mic dabayein — conversation continue karein.');
       case HomeVoiceQaPhase.listening:
         return 'Sun rahi hoon… boliye, rukne par khud samajh lungi.';
       case HomeVoiceQaPhase.processing:
@@ -290,6 +304,21 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                           setState(() {
                             _qa.handsFreeEnabled = !_qa.handsFreeEnabled;
                           });
+                        },
+                        onLongPress: () async {
+                          await HapticFeedback.heavyImpact();
+                          _qa.useLegacyVoiceMode();
+                          if (!mounted) return;
+                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Purana slow voice mode ON. Gemini Live ke liye App Check debug token register karein.',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              duration: Duration(seconds: 6),
+                            ),
+                          );
+                          setState(() {});
                         },
                         child: AnimatedBuilder(
                           animation: _livePulse,

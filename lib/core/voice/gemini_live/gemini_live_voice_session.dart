@@ -110,7 +110,14 @@ class GeminiLiveVoiceSession {
       await _audioInput.init();
       await _audioOutput.init();
 
-      _session = await _liveModel!.connect();
+      _session = await _liveModel!
+          .connect()
+          .timeout(
+            const Duration(seconds: 25),
+            onTimeout: () => throw StateError(
+              'Gemini Live connect timeout — Firebase AI Logic / App Check check karein',
+            ),
+          );
       _sessionActive = true;
       _receiveLoop = _processMessages();
 
@@ -348,13 +355,21 @@ class GeminiLiveVoiceSession {
     if (s.contains('unauthenticated') || s.contains('permission-denied')) {
       return 'Please sign in again.';
     }
-    if (s.contains('network') || s.contains('socket')) {
-      return 'Internet check karein — connection issue.';
+    if (s.contains('network') || s.contains('socket') || s.contains('timeout')) {
+      return 'Internet ya Firebase connection issue — dubara try karein.';
     }
-    if (s.contains('app check') || s.contains('appcheck')) {
-      return 'App Check setup pending — Firebase Console mein AI Logic enable karein.';
+    if (s.contains('app check') ||
+        s.contains('appcheck') ||
+        s.contains('403') ||
+        s.contains('failed-precondition')) {
+      return 'App Check token register karein: Firebase Console → App Check → '
+          'Android app → Manage debug tokens. Pehli baar app kholo, logcat mein '
+          '"debug secret" copy karke add karein. AI Logic bhi enable hona chahiye.';
     }
-    return 'Gemini Live error — dubara try karein.';
+    if (s.contains('not found') || s.contains('404') || s.contains('ai logic')) {
+      return 'Firebase Console → Build → AI Logic → Get started enable karein.';
+    }
+    return 'Gemini Live start nahi hua ($e). Setup check karein, phir dubara mic dabayein.';
   }
 
   Future<void> dispose() async {

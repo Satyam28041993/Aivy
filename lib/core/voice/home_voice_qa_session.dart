@@ -108,8 +108,16 @@ class HomeVoiceQaSession {
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
   void Function(String message)? onError;
 
+  /// True when Gemini Live session is active (not legacy upload pipeline).
+  bool get isGeminiLiveActive => _activeGeminiLive;
+
   bool get _activeGeminiLive =>
       useGeminiLive && !_geminiLiveFailed && _geminiLive.isSessionActive;
+
+  /// Legacy slow pipeline after user opts in or repeated Gemini failures.
+  bool get isLegacyVoiceMode => _geminiLiveFailed || !useGeminiLive;
+
+  int _geminiLiveFailCount = 0;
 
   bool get isRecording => phase == HomeVoiceQaPhase.listening;
   bool get isBusy =>
@@ -236,19 +244,35 @@ class HomeVoiceQaSession {
 
     try {
       await _geminiLive.startSession();
+      _geminiLiveFailCount = 0;
       phase = _geminiLive.phase;
       lastDb = _geminiLive.lastDb;
       onPhaseChanged?.call(phase);
-    } catch (_) {
-      _geminiLiveFailed = true;
+    } catch (e) {
+      _geminiLiveFailCount++;
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
       if (kDebugMode) {
-        debugPrint('[Aivy] Gemini Live unavailable — falling back to legacy voice.');
+        debugPrint('[Aivy] Gemini Live start failed (#$_geminiLiveFailCount): $e');
       }
+      // Do NOT auto-start legacy recording — it feels like a hang and hides the real issue.
       onError?.call(
-        'Gemini Live start nahi hua — purana voice mode use ho raha hai.',
+        _geminiLiveFailCount >= 3
+            ? 'Gemini Live 3 baar fail — Firebase App Check debug token + AI Logic setup karein. '
+                'Settings → More se "Purana voice mode" try kar sakte hain.'
+            : 'Gemini Live start nahi hua. Firebase App Check debug token register karein, '
+                'phir dubara mic dabayein.',
       );
-      await startRecording();
     }
+  }
+
+  /// Opt into the legacy upload + Cloud Function voice pipeline (slow).
+  void useLegacyVoiceMode() {
+    _geminiLiveFailed = true;
+    useGeminiLive = false;
+    unawaited(_geminiLive.stopSession());
+    phase = HomeVoiceQaPhase.idle;
+    onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
 
   /// Cancel current recording without sending.
