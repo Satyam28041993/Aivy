@@ -37,3 +37,26 @@ emulator config in `firebase.json`.
 - The app points at the live cloud project (no emulator), so deploying functions
   or writing Firestore requires Firebase credentials that are not present by
   default.
+
+### Exercising the live backend without Google OAuth
+Because the UI is Google-OAuth-only, the fastest way to test the deployed
+`aivyProcess` (and other callables) end-to-end is to mint an **anonymous**
+Firebase ID token directly (anonymous sign-in is enabled on the project even
+though the app signs anonymous users out), then call the callable over HTTPS:
+
+```bash
+API_KEY="AIzaSyD9kg-3Q5Etl9GQ_EJqvw2MQvyogCDeCqw"   # public web key (firebase_options.dart)
+ID_TOKEN=$(curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$API_KEY" \
+  -H "Content-Type: application/json" -d '{"returnSecureToken":true}' \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['idToken'])")
+
+curl -s -X POST "https://us-central1-aivy-5c031.cloudfunctions.net/aivyProcess" \
+  -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
+  -d '{"data":{"text":"Remind me to call Sam tomorrow at 5pm","timezone":"UTC","nowIso":"2026-01-01T00:00:00.000Z"}}'
+```
+
+The callable request body must be wrapped in `{"data":{...}}` and the response
+comes back as `{"result":{...}}`. `aivyProcess` only checks that a request is
+authenticated (`request.auth`), so an anonymous token is sufficient. This hits
+live Gemini + Firestore under a throwaway anonymous uid.
