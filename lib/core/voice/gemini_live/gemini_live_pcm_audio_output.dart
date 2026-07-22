@@ -43,7 +43,7 @@ class GeminiLivePcmAudioOutput {
       channels: Channels.mono,
       format: BufferType.s16le,
     );
-    _handle = SoLoud.instance.play(_stream!);
+    _handle = await SoLoud.instance.play(_stream!);
   }
 
   void playChunk(Uint8List audioChunk) {
