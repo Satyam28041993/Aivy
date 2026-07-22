@@ -26,6 +26,7 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   late final AnimationController _twinkle;
   late final AnimationController _ringBreath;
   late final AnimationController _voiceSim;
+  late final AnimationController _livePulse;
   final _stars = <_Star>[];
   final _math = math.Random(17);
 
@@ -60,6 +61,10 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 780),
     )..repeat(reverse: true);
+    _livePulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
 
     _qa = HomeVoiceQaSession(userId: widget.userId)
       ..onPhaseChanged = (_) {
@@ -92,6 +97,7 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
     _twinkle.dispose();
     _ringBreath.dispose();
     _voiceSim.dispose();
+    _livePulse.dispose();
     super.dispose();
   }
 
@@ -114,15 +120,29 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   }
 
   String get _subtitle {
+    if (!_qa.handsFreeEnabled) {
+      switch (_qa.phase) {
+        case HomeVoiceQaPhase.idle:
+          return 'Mic dabayein, boliye, phir mic band karein.';
+        case HomeVoiceQaPhase.listening:
+          return 'Sun rahi hoon — bolne ke baad mic band karein.';
+        case HomeVoiceQaPhase.processing:
+          return 'Soch rahi hoon…';
+        case HomeVoiceQaPhase.speaking:
+          return 'Jawaab de rahi hoon…';
+      }
+    }
     switch (_qa.phase) {
       case HomeVoiceQaPhase.idle:
-        return 'Boliye, mai sun rahi hoon. Hands-Free Mode on karke bina tap kiye baat karein.';
+        return _qa.turns.isEmpty
+            ? 'Live mode ON — mic dabayein aur boliye. Baar-baar tap ki zaroorat nahi.'
+            : 'Live mode ON — boliye, mai sunungi aur jawaab dungi.';
       case HomeVoiceQaPhase.listening:
-        return 'Aapki aawaaz sun rahi hoon. Bolne ke baad 2 second rukein, ya mic dabayein.';
+        return 'Sun rahi hoon… boliye, rukne par khud samajh lungi.';
       case HomeVoiceQaPhase.processing:
-        return 'Prakruti Graphic ka data check kar rahi hoon…';
+        return 'Soch rahi hoon…';
       case HomeVoiceQaPhase.speaking:
-        return 'Aapke sawaal ka jawaab de rahi hoon…';
+        return 'Jawaab de rahi hoon — beech me mic dabakar interrupt kar sakte hain.';
     }
   }
 
@@ -263,55 +283,79 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Hands-Free Switch on the Left (swapped to match user instruction)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _qa.handsFreeEnabled
-                              ? const Color(0xFF10B981).withValues(alpha: 0.1)
-                              : Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _qa.handsFreeEnabled
-                                ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                                : Colors.white.withValues(alpha: 0.08),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _qa.handsFreeEnabled
-                                  ? Icons.spatial_audio_rounded
-                                  : Icons.spatial_audio_off_rounded,
-                              color: _qa.handsFreeEnabled
-                                  ? const Color(0xFF10B981)
-                                  : Colors.white38,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Transform.scale(
-                              scale: 0.7,
-                              child: SizedBox(
-                                height: 20,
-                                width: 32,
-                                child: Switch(
-                                  value: _qa.handsFreeEnabled,
-                                  activeColor: const Color(0xFF10B981),
-                                  activeTrackColor: const Color(0xFF065F46),
-                                  inactiveThumbColor: Colors.white38,
-                                  inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-                                  onChanged: (val) async {
-                                    await HapticFeedback.selectionClick();
-                                    setState(() {
-                                      _qa.handsFreeEnabled = val;
-                                    });
-                                  },
+                      // Live mode pill (default ON)
+                      GestureDetector(
+                        onTap: () async {
+                          await HapticFeedback.selectionClick();
+                          setState(() {
+                            _qa.handsFreeEnabled = !_qa.handsFreeEnabled;
+                          });
+                        },
+                        child: AnimatedBuilder(
+                          animation: _livePulse,
+                          builder: (context, _) {
+                            final live = _qa.handsFreeEnabled;
+                            final pulse = live
+                                ? 0.55 + 0.45 * _livePulse.value
+                                : 0.35;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: live
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                                    : Colors.white.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: live
+                                      ? const Color(0xFF10B981).withValues(alpha: 0.45)
+                                      : Colors.white.withValues(alpha: 0.08),
                                 ),
                               ),
-                            ),
-                          ],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: live
+                                          ? const Color(0xFF34D399)
+                                              .withValues(alpha: pulse)
+                                          : Colors.white38,
+                                      boxShadow: live
+                                          ? [
+                                              BoxShadow(
+                                                color: const Color(0xFF34D399)
+                                                    .withValues(alpha: 0.55 * pulse),
+                                                blurRadius: 8,
+                                                spreadRadius: 1,
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Live',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: live
+                                              ? const Color(0xFF6EE7B7)
+                                              : Colors.white54,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.4,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ),
                       // Title in the Center
@@ -370,19 +414,20 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                         ),
                   ),
 
-                  // Floating Transcript Card with real-time text reveal
-                  if ((_qa.lastTranscript != null && _qa.lastTranscript!.isNotEmpty) ||
-                      (_qa.lastAnswer != null && _qa.lastAnswer!.isNotEmpty)) ...[
+                  // Running conversation transcript (Gemini-style)
+                  if (_qa.turns.isNotEmpty ||
+                      (_qa.lastTranscript != null &&
+                          _qa.lastTranscript!.isNotEmpty) ||
+                      (_qa.lastAnswer != null && _qa.lastAnswer!.isNotEmpty) ||
+                      _qa.phase == HomeVoiceQaPhase.processing) ...[
                     const SizedBox(height: 16),
                     Expanded(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: _VoiceTranscriptCard(
-                          transcript: _qa.lastTranscript ?? '',
-                          answer: _qa.lastAnswer ?? '',
-                          phase: _qa.phase,
-                          sources: _qa.lastSources,
-                        ),
+                      child: _VoiceConversationTranscript(
+                        turns: _qa.turns,
+                        pendingTranscript: _qa.lastTranscript,
+                        pendingAnswer: _qa.lastAnswer,
+                        pendingSources: _qa.lastSources,
+                        phase: _qa.phase,
                       ),
                     ),
                   ] else
@@ -678,18 +723,101 @@ class _VoiceRingsPainter extends CustomPainter {
 }
 
 /// Floating Transcript & Response Card (Glassmorphic look)
+/// Scrollable multi-turn transcript — older turns static, latest answer typewriter.
+class _VoiceConversationTranscript extends StatefulWidget {
+  const _VoiceConversationTranscript({
+    required this.turns,
+    required this.pendingTranscript,
+    required this.pendingAnswer,
+    required this.pendingSources,
+    required this.phase,
+  });
+
+  final List<VoiceConversationTurn> turns;
+  final String? pendingTranscript;
+  final String? pendingAnswer;
+  final List<dynamic>? pendingSources;
+  final HomeVoiceQaPhase phase;
+
+  @override
+  State<_VoiceConversationTranscript> createState() =>
+      _VoiceConversationTranscriptState();
+}
+
+class _VoiceConversationTranscriptState extends State<_VoiceConversationTranscript> {
+  final _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _VoiceConversationTranscript oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showPending = widget.phase == HomeVoiceQaPhase.processing ||
+        widget.phase == HomeVoiceQaPhase.speaking ||
+        (widget.pendingAnswer != null && widget.pendingAnswer!.isNotEmpty);
+
+    return ListView.builder(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: widget.turns.length + (showPending ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index < widget.turns.length) {
+          final turn = widget.turns[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _VoiceTranscriptCard(
+              transcript: turn.userText,
+              answer: turn.assistantText,
+              phase: HomeVoiceQaPhase.idle,
+              sources: turn.sources,
+              animateAnswer: false,
+            ),
+          );
+        }
+        return _VoiceTranscriptCard(
+          transcript: widget.pendingTranscript ?? '',
+          answer: widget.pendingAnswer ?? '',
+          phase: widget.phase,
+          sources: widget.pendingSources,
+          animateAnswer: widget.phase == HomeVoiceQaPhase.speaking,
+        );
+      },
+    );
+  }
+}
+
 class _VoiceTranscriptCard extends StatelessWidget {
   const _VoiceTranscriptCard({
     required this.transcript,
     required this.answer,
     required this.phase,
     this.sources,
+    this.animateAnswer = true,
   });
 
   final String transcript;
   final String answer;
   final HomeVoiceQaPhase phase;
   final List<dynamic>? sources;
+  final bool animateAnswer;
 
   @override
   Widget build(BuildContext context) {
@@ -812,16 +940,26 @@ class _VoiceTranscriptCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Real-time character typewriter reveal
-                  _TypingText(
-                    text: answer,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white,
-                      height: 1.45,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.25,
+                  if (animateAnswer)
+                    _TypingText(
+                      text: answer,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.25,
+                      ),
+                    )
+                  else
+                    Text(
+                      answer,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.25,
+                      ),
                     ),
-                  ),
                   if (sources != null && sources!.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
@@ -899,26 +1037,46 @@ class _VoiceTranscriptCard extends StatelessWidget {
                 ],
                 if (phase == HomeVoiceQaPhase.processing) ...[
                   if (transcript.isNotEmpty) const SizedBox(height: 12),
-                  const Row(
-                    children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFFA78BFA),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1B4B).withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFA78BFA).withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFC4B5FD),
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Soch rahi hoon…',
+                              style: TextStyle(
+                                color: Color(0xFFE9D5FF),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Thinking…',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ],
@@ -1050,6 +1208,7 @@ class _VoiceConversationBar extends StatelessWidget {
           voiceLevel: voiceLevel,
           busy: busy,
           listening: listening,
+          speaking: speaking,
           onTap: onMicTap, // Don't block click so user can cancel processing
         ),
         const Spacer(),
@@ -1112,6 +1271,7 @@ class _VoiceHomeMic extends StatelessWidget {
     required this.voiceLevel,
     required this.busy,
     required this.listening,
+    required this.speaking,
     required this.onTap,
   });
 
@@ -1120,6 +1280,7 @@ class _VoiceHomeMic extends StatelessWidget {
   final double Function() voiceLevel;
   final bool busy;
   final bool listening;
+  final bool speaking;
   final VoidCallback? onTap;
 
   @override
@@ -1136,10 +1297,12 @@ class _VoiceHomeMic extends StatelessWidget {
             ? Icons.hourglass_top_rounded
             : Icons.mic_rounded;
         final label = listening
-            ? 'Mic OFF'
+            ? 'Sun rahi hoon'
             : busy
-            ? '…'
-            : 'Mic ON';
+            ? 'Soch rahi hoon'
+            : speaking
+            ? 'Boliye'
+            : 'Boliye';
             
         Color micGradientStart;
         Color micGradientEnd;

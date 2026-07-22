@@ -16,12 +16,25 @@ import 'aivy_chat_voice_coordinator.dart';
 import 'aivy_voice_ask_service.dart';
 import '../../services/google_home_voice_service.dart';
 
-/// Push-to-talk/Hands-free: mic ON → speak → mic OFF → answer.
+/// Push-to-talk / Live conversation: mic ON → speak → answer → auto-listen again.
 enum HomeVoiceQaPhase {
   idle,
   listening,
   processing,
   speaking,
+}
+
+/// One user ↔ Aivy turn in the running Live conversation.
+class VoiceConversationTurn {
+  const VoiceConversationTurn({
+    required this.userText,
+    required this.assistantText,
+    this.sources,
+  });
+
+  final String userText;
+  final String assistantText;
+  final List<dynamic>? sources;
 }
 
 class HomeVoiceQaSession {
@@ -47,11 +60,16 @@ class HomeVoiceQaSession {
   double lastDb = -160;
   List<dynamic>? lastSources;
 
-  // Toggle options for premium Hands-Free Mode
-  bool handsFreeEnabled = false;
+  /// Live mode (continuous Gemini-style conversation) — default ON.
+  bool handsFreeEnabled = true;
   bool silenceDetectionEnabled = true;
 
   final List<Map<String, String>> _history = [];
+  final List<VoiceConversationTurn> turns = [];
+
+  static const _silenceAutoSubmitMs = 1300;
+  static const _liveLoopDelayMs = 450;
+  static const _processingSafetySeconds = 110;
 
   StreamSubscription<Amplitude>? _ampSub;
   DateTime? _startedAt;
@@ -95,8 +113,8 @@ class HomeVoiceQaSession {
         }
       });
     } else if (currentPhase == HomeVoiceQaPhase.processing) {
-      // Force recover to idle if cloud function takes more than 28 seconds
-      _safetyTimer = Timer(const Duration(seconds: 28), () {
+      // Align with aivyVoiceAsk server timeout (120s) minus a small buffer.
+      _safetyTimer = Timer(const Duration(seconds: _processingSafetySeconds), () {
         if (kDebugMode) {
           debugPrint('[Aivy] Safety timeout: processing took too long, resetting.');
         }
@@ -142,9 +160,9 @@ class HomeVoiceQaSession {
       await submitRecording();
       return;
     }
-    // If she is speaking, tapping stops the speech
+    // Interrupt: stop speech and immediately listen again in Live mode.
     if (phase == HomeVoiceQaPhase.speaking) {
-      await stopSpeaking();
+      await _interruptSpeaking(andListen: handsFreeEnabled);
       return;
     }
     if (phase == HomeVoiceQaPhase.processing) {
@@ -162,10 +180,9 @@ class HomeVoiceQaSession {
     }
     _recordGen++;
     await _stopRecorderOnly();
-    _history.clear();
     _safetyTimer?.cancel();
     _safetyTimer = null;
-    
+
     await HapticFeedback.selectionClick();
     _setPhase(HomeVoiceQaPhase.idle);
   }
@@ -183,8 +200,26 @@ class HomeVoiceQaSession {
     lastSources = null;
     lastDb = -160;
     _history.clear();
+    turns.clear();
     phase = HomeVoiceQaPhase.idle;
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+  }
+
+  Future<void> _interruptSpeaking({required bool andListen}) async {
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    await _tts.stop();
+    await AivyChatVoiceCoordinator.instance.stop();
+    await HapticFeedback.mediumImpact();
+    if (phase != HomeVoiceQaPhase.speaking) {
+      return;
+    }
+    if (andListen) {
+      _setPhase(HomeVoiceQaPhase.idle);
+      await startRecording();
+      return;
+    }
+    _setPhase(HomeVoiceQaPhase.idle);
   }
 
   Future<void> stopSpeaking() async {
@@ -282,10 +317,11 @@ class HomeVoiceQaSession {
         }
 
         if (_hasSpoken) {
-          // If amplitude stays quiet (below -38dB) for 2.0 seconds, auto-submit
+          // If amplitude stays quiet (below -38dB) for ~1.3s, auto-submit.
           if (amp.current < -38.0) {
             if (_lastSpeechTime != null &&
-                now.difference(_lastSpeechTime!).inMilliseconds > 2000) {
+                now.difference(_lastSpeechTime!).inMilliseconds >
+                    _silenceAutoSubmitMs) {
               // Ensure we recorded at least 1.5s total to avoid premature triggers
               final totalDurationMs = now.difference(_startedAt!).inMilliseconds;
               if (totalDurationMs >= 1500) {
@@ -436,13 +472,29 @@ class HomeVoiceQaSession {
       }
 
       _setPhase(HomeVoiceQaPhase.idle);
+
+      if (lastTranscript != null && lastTranscript!.trim().isNotEmpty &&
+          lastAnswer != null && lastAnswer!.trim().isNotEmpty) {
+        turns.add(
+          VoiceConversationTurn(
+            userText: lastTranscript!,
+            assistantText: lastAnswer!,
+            sources: lastSources,
+          ),
+        );
+        lastTranscript = null;
+        lastAnswer = null;
+        lastSources = null;
+        onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      }
+
       if (kDebugMode) {
         debugPrint('[Aivy] home QA ready — tap mic for next question');
       }
 
-      // Hands-Free Loop Trigger: automatically listen again after a comfortable delay
+      // Live loop: auto-listen again after a short gap (Gemini-style).
       if (handsFreeEnabled) {
-        Timer(const Duration(milliseconds: 1200), () {
+        Timer(const Duration(milliseconds: _liveLoopDelayMs), () {
           if (phase == HomeVoiceQaPhase.idle && handsFreeEnabled) {
             startRecording();
           }
@@ -512,6 +564,7 @@ class HomeVoiceQaSession {
     await _tts.stop();
     await _tts.dispose();
     _history.clear();
+    turns.clear();
     try {
       await _recorder.dispose();
     } catch (_) {}
