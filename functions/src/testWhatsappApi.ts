@@ -7,7 +7,7 @@ const { sendWhatsAppMessageOrTemplate } = require("../services/whatsappService.j
   sendWhatsAppMessageOrTemplate: (
     to: string,
     message: string,
-    opts?: { contactName?: string },
+    opts?: { contactName?: string; ownerUid?: string | null },
   ) => Promise<{ messageId: string; raw: unknown; usedTemplate?: boolean }>;
 };
 
@@ -57,7 +57,10 @@ export const testWhatsapp = onCall(
       const { messageId, usedTemplate } = await sendWhatsAppMessageOrTemplate(
         phone,
         message,
-        { contactName: "Test" },
+        {
+          contactName: "Test",
+          ownerUid: request.auth.uid,
+        },
       );
       logger.info("[testWhatsapp] Sent OK", { messageId, usedTemplate });
       return {

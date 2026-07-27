@@ -14,6 +14,10 @@
 import { logger } from "firebase-functions";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { withRetry } from "./retry";
+import {
+  recordSuccessfulWhatsAppSend,
+  resolveWhatsAppCredentials,
+} from "./credentials/resolver";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -72,25 +76,31 @@ export async function generateAIReply(
 // Internal: send via Meta Cloud API using Firestore config or .env fallback
 // ---------------------------------------------------------------------------
 async function sendAutoReply(to: string, text: string): Promise<string | null> {
-  // Read credentials — prefer Firestore, fall back to .env
-  let token = process.env.WHATSAPP_TOKEN ?? "";
-  let phoneId = process.env.WHATSAPP_PHONE_ID ?? "";
-
+  let resolved;
   try {
-    const snap = await getFirestore().collection("app_config").doc("whatsapp").get();
-    if (snap.exists) {
-      const d = snap.data() ?? {};
-      if (d.token) token = String(d.token);
-      if (d.phoneId) phoneId = String(d.phoneId);
-    }
+    resolved = await resolveWhatsAppCredentials({
+      operation: "auto_reply",
+    });
   } catch {
-    // tolerate read failure — env vars are the fallback
+    logger.error("[autoReply] credentials missing — cannot send auto-reply");
+    return null;
   }
+
+  const token = resolved.token;
+  const phoneId = resolved.phoneNumberId;
 
   if (!token || !phoneId) {
     logger.error("[autoReply] credentials missing — cannot send auto-reply");
     return null;
   }
+
+  logger.info("[autoReply] using credentials", {
+    credentialSource: resolved.credentialSource,
+    connectionStatus: resolved.connectionStatus,
+    phoneNumberId: resolved.phoneNumberId,
+    wabaId: resolved.wabaId,
+    fallbackReason: resolved.fallbackReason,
+  });
 
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`;
   const body = {
@@ -127,7 +137,22 @@ async function sendAutoReply(to: string, text: string): Promise<string | null> {
   }
 
   const messages = parsed.messages as Array<{ id?: string }> | undefined;
-  return messages?.[0]?.id ?? null;
+  const outboundMessageId = messages?.[0]?.id ?? null;
+  if (outboundMessageId) {
+    await recordSuccessfulWhatsAppSend({
+      credentialSource: resolved.credentialSource,
+      phoneNumberId: resolved.phoneNumberId,
+      wabaId: resolved.wabaId,
+      connectionStatus: resolved.connectionStatus,
+      ownerUid: resolved.ownerUid,
+      messageId: outboundMessageId,
+    }).catch((e) => {
+      logger.warn("[autoReply] migration dashboard update failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    });
+  }
+  return outboundMessageId;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
-import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { resolveWhatsAppCredentials } from "./whatsapp/credentials/resolver";
 
 const GRAPH_VERSION = "v18.0";
 
@@ -14,16 +14,44 @@ export const checkWhatsappHealth = onCall(
       throw new HttpsError("permission-denied", "Admin access required");
     }
 
-    const snap = await getFirestore().collection("app_config").doc("whatsapp").get();
-    const cfg = snap.data() ?? {};
-    const token = String(cfg.token ?? process.env.WHATSAPP_TOKEN ?? "").trim();
-    const phoneId = String(cfg.phoneId ?? process.env.WHATSAPP_PHONE_ID ?? "").trim();
+    const body =
+      typeof request.data === "object" && request.data !== null
+        ? (request.data as { ownerUid?: unknown })
+        : {};
+    const explicitOwnerUid = String(body.ownerUid ?? "").trim();
+    const ownerUid =
+      explicitOwnerUid.length > 8 ? explicitOwnerUid : request.auth.uid;
+
+    let resolved;
+    try {
+      resolved = await resolveWhatsAppCredentials({
+        ownerUid,
+        operation: "health_check",
+      });
+    } catch {
+      throw new HttpsError(
+        "failed-precondition",
+        "WhatsApp credentials unavailable",
+      );
+    }
+
+    const token = resolved.token;
+    const phoneId = resolved.phoneNumberId;
     if (!token || !phoneId) {
       throw new HttpsError(
         "failed-precondition",
-        "WhatsApp token/phoneId missing in settings",
+        "WhatsApp token/phoneNumberId missing after credential resolution",
       );
     }
+
+    logger.info("[checkWhatsappHealth] using credentials", {
+      credentialSource: resolved.credentialSource,
+      connectionStatus: resolved.connectionStatus,
+      phoneNumberId: resolved.phoneNumberId,
+      wabaId: resolved.wabaId,
+      fallbackReason: resolved.fallbackReason,
+      templateSource: resolved.templateSource,
+    });
 
     const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}?fields=id,display_phone_number`;
     const res = await fetch(url, {
@@ -49,14 +77,20 @@ export const checkWhatsappHealth = onCall(
       logger.warn("[checkWhatsappHealth] health check failed", {
         status: res.status,
         message: rawMessage,
+        credentialSource: resolved.credentialSource,
       });
       return {
         ok: false,
         severity: isTokenIssue ? "warning" : "error",
         statusCode: res.status,
         message: isTokenIssue
-            ? "Access token invalid or expired. Update token in settings."
+            ? "Access token invalid or expired."
             : rawMessage,
+        credentialSource: resolved.credentialSource,
+        connectionStatus: resolved.connectionStatus,
+        fallbackReason: resolved.fallbackReason,
+        phoneId,
+        wabaId: resolved.wabaId,
       };
     }
 
@@ -67,6 +101,11 @@ export const checkWhatsappHealth = onCall(
       message: "WhatsApp token is healthy.",
       phoneId,
       displayPhoneNumber: String(data.display_phone_number ?? ""),
+      credentialSource: resolved.credentialSource,
+      connectionStatus: resolved.connectionStatus,
+      fallbackReason: resolved.fallbackReason,
+      wabaId: resolved.wabaId,
+      templateSource: resolved.templateSource,
     };
   },
 );

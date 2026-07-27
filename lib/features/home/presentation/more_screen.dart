@@ -1,8 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 
-import '../../../app/settings/whatsapp_settings_screen.dart';
 import '../../../core/auth/aivy_auth_scope.dart';
 import '../../../core/firebase/firebase_session.dart';
 import '../../integrations/data/google_integration_store.dart';
@@ -12,6 +11,8 @@ import '../../chat/data/chat_repository.dart';
 import '../../chat/models/chat_session.dart';
 import '../../contacts/presentation/contacts_list_screen.dart';
 import '../../whatsapp/data/whatsapp_inbox_repository.dart';
+import '../../whatsapp/presentation/whatsapp_coexistence_diagnostics_screen.dart';
+import '../../whatsapp/presentation/whatsapp_connect_screen.dart';
 import '../../whatsapp/presentation/whatsapp_conversations_screen.dart';
 import 'data_management_screen.dart';
 
@@ -308,17 +309,42 @@ class _MoreScreenState extends State<MoreScreen> {
           },
         ),
         ListTile(
-          leading: const Icon(Icons.chat_rounded),
-          title: const Text('WhatsApp'),
-          subtitle: const Text('Cloud API token & phone number ID'),
+          leading: const Icon(Icons.add_link_rounded),
+          title: const Text('Connect WhatsApp Business'),
+          subtitle: const Text(
+            'Meta Embedded Signup — Tech Provider coexistence',
+          ),
           onTap: () {
             Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (context) => const WhatsappSettingsScreen(),
+                builder: (context) => const WhatsAppConnectScreen(),
               ),
             );
           },
         ),
+        if (kDebugMode)
+          ListTile(
+            leading: Icon(
+              Icons.monitor_heart_outlined,
+              color: theme.colorScheme.outline,
+            ),
+            title: Text(
+              'Coexistence Diagnostics',
+              style: TextStyle(color: theme.colorScheme.outline),
+            ),
+            subtitle: const Text(
+              'History / SMB sync / echoes — debug only',
+            ),
+            onTap: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) =>
+                      const WhatsappCoexistenceDiagnosticsScreen(),
+                ),
+              );
+            },
+          ),
+
       ],
     );
   }
