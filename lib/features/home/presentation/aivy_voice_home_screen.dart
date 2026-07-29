@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show BackdropFilter, ImageFilter, lerpDouble;
+import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -306,10 +306,11 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                           });
                         },
                         onLongPress: () async {
+                          final messenger = ScaffoldMessenger.maybeOf(context);
                           await HapticFeedback.heavyImpact();
                           _qa.useLegacyVoiceMode();
                           if (!mounted) return;
-                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                          messenger?.showSnackBar(
                             const SnackBar(
                               content: Text(
                                 'Purana slow voice mode ON. Gemini Live ke liye App Check debug token register karein.',

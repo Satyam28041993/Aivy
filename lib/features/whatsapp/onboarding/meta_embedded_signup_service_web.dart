@@ -103,12 +103,19 @@ String? _readOAuthCode(Object? response) {
   if (auth == null) {
     return null;
   }
-  final code = js_util.getProperty(auth, 'code');
-  if (code == null) {
-    return null;
+  if (js_util.hasProperty(auth, 'code')) {
+    final code = js_util.getProperty(auth, 'code');
+    if (code != null && '$code'.trim().isNotEmpty) {
+      return '$code'.trim();
+    }
   }
-  final s = '$code'.trim();
-  return s.isEmpty ? null : s;
+  if (js_util.hasProperty(auth, 'accessToken')) {
+    final token = js_util.getProperty(auth, 'accessToken');
+    if (token != null && '$token'.trim().isNotEmpty) {
+      return '$token'.trim();
+    }
+  }
+  return null;
 }
 
 bool _loginWasCancelled(Object? response) {
@@ -168,7 +175,7 @@ Future<MetaEmbeddedSignupResult> launchMetaEmbeddedSignup() async {
     if (completer.isCompleted) {
       return;
     }
-    if (oauthCode != null || finishEventName == _finishEvent) {
+    if (oauthCode != null && finishEventName == _finishEvent) {
       final href = html.window.location.href;
       final hashIndex = href.indexOf('#');
       final currentRedirectUri = hashIndex != -1 ? href.substring(0, hashIndex) : href;

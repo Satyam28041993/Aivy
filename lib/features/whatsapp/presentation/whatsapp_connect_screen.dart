@@ -6,6 +6,7 @@ import '../../../core/config/meta_whatsapp_runtime_config.dart';
 import '../onboarding/meta_embedded_signup_result.dart';
 import '../onboarding/whatsapp_onboarding_repository.dart';
 import 'connect_whatsapp_button.dart';
+import 'whatsapp_coexistence_diagnostics_screen.dart';
 
 /// Standalone coexistence onboarding entry point — isolated from legacy Cloud API UI.
 class WhatsAppConnectScreen extends StatefulWidget {
@@ -49,6 +50,19 @@ class _WhatsAppConnectScreenState extends State<WhatsAppConnectScreen> {
       appBar: AppBar(
         title: const Text('Connect WhatsApp Business'),
         backgroundColor: theme.colorScheme.surface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            tooltip: 'View Coexistence Diagnostics',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const WhatsappCoexistenceDiagnosticsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
@@ -142,6 +156,19 @@ class _WhatsAppConnectScreenState extends State<WhatsAppConnectScreen> {
             const SizedBox(height: 16),
             _ConnectionSummary(connection: _lastConnection!),
           ],
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.analytics_outlined),
+            label: const Text('View Webhook Diagnostics & Logs'),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) =>
+                      const WhatsappCoexistenceDiagnosticsScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
