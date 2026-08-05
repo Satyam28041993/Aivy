@@ -63,6 +63,14 @@ The app uses Firebase Authentication plus `cloud_functions` to call the private
 `aivyProcess` callable function, so no public Function URL or `allUsers` IAM
 binding is required.
 
+## Docs
+
+- [`docs/VOICE_GCP_SETUP.md`](docs/VOICE_GCP_SETUP.md) — Google Cloud STT + TTS setup
+  (service accounts, IAM roles, function deployment).
+- [`docs/VOICE_HOME_REVIEW.md`](docs/VOICE_HOME_REVIEW.md) — review of the Voice Home
+  (first tab) pipeline: architecture, per-turn latency budget, defects found, and a
+  phased remediation plan.
+
 ## Firestore Data Shape (Phase 2)
 
 - `users/{uid}/messages`:
