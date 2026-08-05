@@ -70,6 +70,8 @@ binding is required.
 - [`docs/VOICE_HOME_REVIEW.md`](docs/VOICE_HOME_REVIEW.md) — review of the Voice Home
   (first tab) pipeline: architecture, per-turn latency budget, defects found, and a
   phased remediation plan.
+- [`docs/VOICE_HOME_NEXT_STEPS.md`](docs/VOICE_HOME_NEXT_STEPS.md) — pick-up checklist
+  for that work: setup commands and an ordered task queue with file/line pointers.
 
 ## Firestore Data Shape (Phase 2)
 
