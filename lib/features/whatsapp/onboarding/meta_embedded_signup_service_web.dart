@@ -14,8 +14,19 @@ import 'meta_embedded_signup_result.dart';
 
 bool get metaEmbeddedSignupSupported => true;
 
-const _finishEvent = 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
+// Meta emits a different FINISH event per flow: coexistence onboarding, a plain
+// new-WABA signup, and a WABA-only signup. Treat them all as completion.
+const _finishEvents = <String>{
+  'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+  'FINISH',
+  'FINISH_ONLY_WABA',
+};
 const _cancelEvent = 'CANCEL';
+
+/// How long to keep waiting for the popup's FINISH message after `FB.login`
+/// has already handed us the OAuth code. If it never arrives we still continue:
+/// the backend resolves the WABA and phone number from the token.
+const _finishGrace = Duration(seconds: 3);
 
 bool _messageListenerRegistered = false;
 StreamSubscription<html.MessageEvent>? _messageSub;
@@ -171,51 +182,79 @@ Future<MetaEmbeddedSignupResult> launchMetaEmbeddedSignup() async {
   String? finishEventName;
   Map<String, dynamic>? finishEventData;
 
+  Timer? graceTimer;
+
+  void finishNow() {
+    if (completer.isCompleted) {
+      return;
+    }
+    graceTimer?.cancel();
+    final href = html.window.location.href;
+    final hashIndex = href.indexOf('#');
+    final currentRedirectUri = hashIndex != -1 ? href.substring(0, hashIndex) : href;
+
+    completer.complete(
+      MetaEmbeddedSignupResult.completed(
+        oauthCode: oauthCode,
+        redirectUri: currentRedirectUri,
+        eventName: finishEventName,
+        eventData: finishEventData,
+      ),
+    );
+  }
+
   void tryComplete() {
     if (completer.isCompleted) {
       return;
     }
-    if (oauthCode != null && finishEventName == _finishEvent) {
-      final href = html.window.location.href;
-      final hashIndex = href.indexOf('#');
-      final currentRedirectUri = hashIndex != -1 ? href.substring(0, hashIndex) : href;
-
-      completer.complete(
-        MetaEmbeddedSignupResult.completed(
-          oauthCode: oauthCode,
-          redirectUri: currentRedirectUri,
-          eventName: finishEventName,
-          eventData: finishEventData,
-        ),
-      );
+    if (finishEventName == _cancelEvent) {
+      graceTimer?.cancel();
+      completer.complete(MetaEmbeddedSignupResult.cancelled());
       return;
     }
-    if (finishEventName == _cancelEvent) {
-      completer.complete(MetaEmbeddedSignupResult.cancelled());
+    if (oauthCode == null) {
+      // The popup finished but FB.login has not called back yet; wait for it.
+      return;
     }
+    if (_finishEvents.contains(finishEventName)) {
+      finishNow();
+      return;
+    }
+    // We have the code but no FINISH message yet. Give the popup a moment —
+    // some flows (notably reconnects) never send one — then proceed anyway.
+    graceTimer ??= Timer(_finishGrace, finishNow);
   }
 
   _registerMessageListener((payload) {
+    html.window.console.log('[aivy-es] message ${jsonEncode(payload)}');
     final eventName = '${payload['event'] ?? ''}'.trim();
     if (eventName.isEmpty) {
       return;
     }
-    finishEventName = eventName;
-    finishEventData = _coerceEventData(payload['data']);
-    if (eventName == _cancelEvent) {
-      if (!completer.isCompleted) {
-        completer.complete(MetaEmbeddedSignupResult.cancelled());
-      }
+    // Meta emits one message per step; never let a later step overwrite the
+    // FINISH payload that carries waba_id / phone_number_id.
+    if (_finishEvents.contains(finishEventName)) {
       return;
     }
-    if (eventName == _finishEvent) {
-      tryComplete();
-    }
+    finishEventName = eventName;
+    finishEventData = _coerceEventData(payload['data']);
+    tryComplete();
   });
 
-  final launchConfig = MetaEmbeddedSignupLaunchConfig.fromRuntime(runtime);
+  // `?es=plain` runs Embedded Signup without the coexistence featureType, which
+  // is what we A/B against when the code exchange keeps failing with 36008.
+  final esMode = Uri.base.queryParameters['es']?.trim().toLowerCase();
+  final launchConfig = MetaEmbeddedSignupLaunchConfig.fromRuntime(
+    runtime,
+    featureTypeOverride: esMode == 'plain' ? '' : null,
+  );
+  html.window.console.log(
+    '[aivy-es] launching with ${jsonEncode(launchConfig.toLoginOptionsMap())}',
+  );
   js_util.callMethod(fb, 'login', [
     js_util.allowInterop((Object? response) {
+      html.window.console.log('[aivy-es] FB.login response');
+      html.window.console.log(response);
       oauthCode = _readOAuthCode(response);
       if (_loginWasCancelled(response) && oauthCode == null) {
         if (!completer.isCompleted) {
@@ -236,6 +275,7 @@ Future<MetaEmbeddedSignupResult> launchMetaEmbeddedSignup() async {
       ),
     );
   } finally {
+    graceTimer?.cancel();
     await _disposeMessageListener();
   }
 }

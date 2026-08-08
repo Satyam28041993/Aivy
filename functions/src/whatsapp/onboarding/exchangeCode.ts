@@ -157,6 +157,90 @@ export async function exchangeEmbeddedSignupCode(opts: {
   };
 }
 
+/**
+ * Discovers the WABA id and phone number id straight from the business token.
+ *
+ * The Embedded Signup popup is supposed to postMessage `waba_id` /
+ * `phone_number_id` back to the page, but that message is easy to miss (popup
+ * closed early, blocked opener, coexistence flows that emit a different event
+ * name). The token itself is authoritative: `/debug_token` lists the WABAs the
+ * token was granted against under `granular_scopes`, and `/{waba}/phone_numbers`
+ * resolves the number. This makes onboarding independent of the postMessage.
+ */
+export async function discoverWabaAndPhoneFromToken(opts: {
+  accessToken: string;
+  appId: string;
+  appSecret: string;
+  graphApiVersion?: string;
+}): Promise<{ wabaId: string; phoneNumberId: string; displayPhoneNumber: string }> {
+  const empty = { wabaId: "", phoneNumberId: "", displayPhoneNumber: "" };
+  const graphApiVersion =
+    String(opts.graphApiVersion ?? DEFAULT_GRAPH_VERSION).trim() || DEFAULT_GRAPH_VERSION;
+
+  const debugUrl = new URL(`https://graph.facebook.com/${graphApiVersion}/debug_token`);
+  debugUrl.searchParams.set("input_token", opts.accessToken);
+  debugUrl.searchParams.set("access_token", `${opts.appId}|${opts.appSecret}`);
+
+  let granularScopes: Array<{ scope?: string; target_ids?: string[] }> = [];
+  try {
+    const res = await fetch(debugUrl.toString(), { method: "GET" });
+    const text = await res.text();
+    if (!res.ok) {
+      logger.warn("[whatsapp-onboarding] debug_token failed", { status: res.status, body: text });
+      return empty;
+    }
+    const parsed = JSON.parse(text) as {
+      data?: { granular_scopes?: Array<{ scope?: string; target_ids?: string[] }> };
+    };
+    granularScopes = parsed.data?.granular_scopes ?? [];
+  } catch (e) {
+    logger.error("[whatsapp-onboarding] debug_token threw", e);
+    return empty;
+  }
+
+  const pick = (scope: string) =>
+    granularScopes.find((s) => s.scope === scope)?.target_ids?.[0] ?? "";
+  const wabaId =
+    pick("whatsapp_business_management") || pick("whatsapp_business_messaging");
+
+  if (!wabaId) {
+    logger.warn("[whatsapp-onboarding] no WABA in token granular_scopes", {
+      scopes: granularScopes.map((s) => s.scope),
+    });
+    return empty;
+  }
+
+  const phonesUrl = new URL(`https://graph.facebook.com/${graphApiVersion}/${wabaId}/phone_numbers`);
+  phonesUrl.searchParams.set("fields", "id,display_phone_number");
+  try {
+    const res = await fetch(phonesUrl.toString(), {
+      method: "GET",
+      headers: { Authorization: `Bearer ${opts.accessToken}` },
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      logger.warn("[whatsapp-onboarding] phone_numbers lookup failed", {
+        status: res.status,
+        wabaId,
+        body: text,
+      });
+      return { ...empty, wabaId };
+    }
+    const parsed = JSON.parse(text) as {
+      data?: Array<{ id?: string; display_phone_number?: string }>;
+    };
+    const first = parsed.data?.[0];
+    return {
+      wabaId,
+      phoneNumberId: String(first?.id ?? "").trim(),
+      displayPhoneNumber: String(first?.display_phone_number ?? "").trim(),
+    };
+  } catch (e) {
+    logger.error("[whatsapp-onboarding] phone_numbers threw", e);
+    return { ...empty, wabaId };
+  }
+}
+
 export async function fetchDisplayPhoneNumber(opts: {
   phoneNumberId: string;
   accessToken: string;

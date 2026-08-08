@@ -5,6 +5,7 @@ import { readLegacyContactsOwnerUid, readLegacyOutboundTemplates } from "../cred
 import { readMetaWhatsappClientConfig } from "./clientConfig";
 import { writeWhatsappConnectionMetadata } from "./connectionStore";
 import {
+  discoverWabaAndPhoneFromToken,
   exchangeEmbeddedSignupCode,
   fetchDisplayPhoneNumber,
 } from "./exchangeCode";
@@ -86,6 +87,30 @@ export const completeWhatsappEmbeddedSignup = onCall(
       graphApiVersion: clientCfg.graphApiVersion,
     });
 
+    // The popup's postMessage is unreliable, so derive the ids from the token
+    // itself whenever the client could not supply them.
+    if (!wabaId || !phoneNumberId) {
+      logger.warn("[whatsapp-onboarding] client did not supply waba/phone; discovering from token", {
+        uid,
+        hasWabaId: Boolean(wabaId),
+        hasPhoneNumberId: Boolean(phoneNumberId),
+      });
+      const discovered = await discoverWabaAndPhoneFromToken({
+        accessToken: exchanged.accessToken,
+        appId: clientCfg.appId,
+        appSecret,
+        graphApiVersion: clientCfg.graphApiVersion,
+      });
+      wabaId = wabaId || discovered.wabaId;
+      phoneNumberId = phoneNumberId || discovered.phoneNumberId;
+      displayPhoneNumber = displayPhoneNumber || discovered.displayPhoneNumber;
+      logger.info("[whatsapp-onboarding] token discovery result", {
+        uid,
+        wabaId: wabaId || null,
+        phoneNumberId: phoneNumberId || null,
+      });
+    }
+
     if (!displayPhoneNumber && phoneNumberId) {
       displayPhoneNumber = await fetchDisplayPhoneNumber({
         phoneNumberId,
@@ -94,31 +119,26 @@ export const completeWhatsappEmbeddedSignup = onCall(
       });
     }
 
-    const tokenSecretRef = await storeBusinessTokenSecret({
-      ownerUid: uid,
-      accessToken: exchanged.accessToken,
-    });
-
-    if (!wabaId || !phoneNumberId) {
-      logger.warn("[whatsapp-onboarding] missing waba/phone metadata from client", {
-        uid,
-        hasWabaId: Boolean(wabaId),
-        hasPhoneNumberId: Boolean(phoneNumberId),
-      });
-    }
-
     if (!wabaId) {
       throw new HttpsError(
         "failed-precondition",
-        "wabaId is required after Embedded Signup",
+        "Could not determine the WhatsApp Business Account. The Embedded Signup " +
+          "popup returned no WABA and the access token is not granted against one — " +
+          "finish the WhatsApp onboarding steps in the popup and try again.",
       );
     }
     if (!phoneNumberId) {
       throw new HttpsError(
         "failed-precondition",
-        "phoneNumberId is required after Embedded Signup",
+        `WhatsApp Business Account ${wabaId} has no phone number registered yet. ` +
+          "Add and verify a phone number for it, then reconnect.",
       );
     }
+
+    const tokenSecretRef = await storeBusinessTokenSecret({
+      ownerUid: uid,
+      accessToken: exchanged.accessToken,
+    });
 
     const legacyTemplates = await readLegacyOutboundTemplates();
     const legacyContactsOwnerUid = await readLegacyContactsOwnerUid();

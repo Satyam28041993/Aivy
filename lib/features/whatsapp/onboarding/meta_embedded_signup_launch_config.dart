@@ -10,11 +10,16 @@ class MetaEmbeddedSignupLaunchConfig {
     this.sessionInfoVersion = '3',
   });
 
+  /// [featureTypeOverride] swaps the signup flavour. Pass an empty string for
+  /// plain Embedded Signup (no coexistence), which does not require the app to
+  /// be an approved Tech Provider.
   factory MetaEmbeddedSignupLaunchConfig.fromRuntime(
-    MetaWhatsappRuntimeConfig runtime,
-  ) {
+    MetaWhatsappRuntimeConfig runtime, {
+    String? featureTypeOverride,
+  }) {
     return MetaEmbeddedSignupLaunchConfig(
       configId: runtime.embeddedSignupConfigId,
+      featureType: featureTypeOverride ?? 'whatsapp_business_app_onboarding',
     );
   }
 
@@ -31,7 +36,8 @@ class MetaEmbeddedSignupLaunchConfig {
       'response_type': responseType,
       'override_default_response_type': overrideDefaultResponseType,
       'extras': {
-        'featureType': featureType,
+        // Omitted entirely for plain Embedded Signup — Meta rejects an empty value.
+        if (featureType.isNotEmpty) 'featureType': featureType,
         'sessionInfoVersion': sessionInfoVersion,
       },
     };
