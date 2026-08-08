@@ -3,8 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 
-/// Streams 24 kHz PCM16 mono mic audio for Gemini Live API input.
+/// Streams PCM16 mono mic audio for Gemini Live API input.
 class GeminiLivePcmAudioInput {
+  /// Gemini Live requires **16 kHz** input (its *output* is 24 kHz — the two
+  /// are not the same, and recording at 24 kHz made every utterance arrive
+  /// stretched, so the model heard nothing it could answer).
+  static const int sampleRate = 16000;
+
   AudioRecorder _recorder = AudioRecorder();
   StreamController<Uint8List>? _audioDataController;
   StreamSubscription<Uint8List>? _recorderStreamSub;
@@ -42,7 +47,7 @@ class GeminiLivePcmAudioInput {
 
     final config = const RecordConfig(
       encoder: AudioEncoder.pcm16bits,
-      sampleRate: 24000,
+      sampleRate: sampleRate,
       numChannels: 1,
       androidConfig: AndroidRecordConfig(
         audioSource: AndroidAudioSource.voiceCommunication,

@@ -40,6 +40,11 @@ class GeminiLiveVoiceSession {
   String _pendingUserText = '';
   String _pendingAssistantText = '';
 
+  // Counters make "she listens but never replies" diagnosable: they separate
+  // "mic audio never left the device" from "the server never answered".
+  int _micChunksSent = 0;
+  int _serverMessages = 0;
+
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
   void Function(String message)? onError;
 
@@ -104,12 +109,24 @@ class GeminiLiveVoiceSession {
       return;
     }
 
+    // Each step is labelled so a failure names the stage that broke. A bare
+    // "Null check operator used on a null value" from somewhere in here is
+    // impossible to act on — especially on web, where the audio plugins have
+    // different capabilities than on Android.
+    var stage = 'audio-session';
     try {
       await _prepareAudioSession();
+
+      stage = 'init-model';
       _initModel();
+
+      stage = 'mic-init';
       await _audioInput.init();
+
+      stage = 'speaker-init';
       await _audioOutput.init();
 
+      stage = 'connect';
       _session = await _liveModel!
           .connect()
           .timeout(
@@ -121,7 +138,10 @@ class GeminiLiveVoiceSession {
       _sessionActive = true;
       _receiveLoop = _processMessages();
 
+      stage = 'start-playback';
       await _audioOutput.startPlayback();
+
+      stage = 'start-mic-stream';
       final stream = await _audioInput.startRecordingStream();
       if (stream == null) {
         throw StateError('Mic stream could not start');
@@ -134,7 +154,15 @@ class GeminiLiveVoiceSession {
             return;
           }
           try {
-            await session.sendAudioRealtime(InlineDataPart('audio/pcm', data));
+            // The rate MUST be declared: without it Gemini assumes 16 kHz, so
+            // a mislabelled stream is silently misheard rather than rejected.
+            await session.sendAudioRealtime(
+              InlineDataPart(
+                'audio/pcm;rate=${GeminiLivePcmAudioInput.sampleRate}',
+                data,
+              ),
+            );
+            _micChunksSent++;
           } catch (e) {
             debugPrint('[GeminiLive] sendAudioRealtime: $e');
           }
@@ -151,9 +179,9 @@ class GeminiLiveVoiceSession {
       await HapticFeedback.mediumImpact();
       _setPhase(HomeVoiceQaPhase.listening);
     } catch (e) {
-      debugPrint('[GeminiLive] startSession failed: $e');
+      debugPrint('[GeminiLive] startSession failed at [$stage]: $e');
       await _tearDownSession();
-      onError?.call(_friendlyError(e));
+      onError?.call('[$stage] ${_friendlyError(e)}');
       rethrow;
     }
   }
@@ -190,6 +218,13 @@ class GeminiLiveVoiceSession {
       await for (final response in session.receive()) {
         if (!_sessionActive || _disposed) {
           break;
+        }
+        _serverMessages++;
+        if (_serverMessages <= 3 || _serverMessages % 25 == 0) {
+          debugPrint(
+            '[GeminiLive] server msg #$_serverMessages '
+            '(${response.message.runtimeType}), mic chunks sent: $_micChunksSent',
+          );
         }
         await _handleServerMessage(response);
       }

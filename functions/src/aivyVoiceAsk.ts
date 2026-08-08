@@ -405,7 +405,7 @@ JSON RESPONSE:`;
 export const aivyVoiceAsk = onCall(
   {
     region: "us-central1",
-    timeoutSeconds: 120,
+    timeoutSeconds: 45,
     memory: "512MiB",
     secrets: [geminiApiKey],
   },
@@ -495,11 +495,7 @@ export const aivyVoiceAsk = onCall(
     }
     question = correctedQuestion;
 
-    // Romanize Devanagari transcripts to clean Hinglish (English letters)
-    const romanizedQuestion = await romanizeUserFacingText(question, geminiKey);
-    question = romanizedQuestion.trim() || question;
-
-    // Pass 2: Aggressive Hinglish name corrections on the final romanized Hinglish text
+    // Pass 2: Aggressive Hinglish name corrections
     const hinglishCorrections = [
       // Always replace "ravi" or "Ravi" (since they are not standard vocabulary words in Hinglish conversations)
       { pattern: /\b(ravi|Ravi|rawi|Rawi|raavi|Raavi)\b/gi, replacement: "Aivy" },
@@ -561,14 +557,20 @@ export const aivyVoiceAsk = onCall(
       };
     }
 
-    const result = await answerVoiceQuestion({
-      geminiKey,
-      question: romanizedQuestion,
-      snapshot,
-      tc,
-      history: body.history,
-      searchResults,
-    });
+    // Gemini reads Devanagari natively, so the answer must not wait on
+    // romanization — that call only prettifies the transcript we echo back.
+    // Running them together removes a full LLM round trip from every turn.
+    const [result, romanizedTranscript] = await Promise.all([
+      answerVoiceQuestion({
+        geminiKey,
+        question,
+        snapshot,
+        tc,
+        history: body.history,
+        searchResults,
+      }),
+      romanizeUserFacingText(question, geminiKey),
+    ]);
 
     const answer = result.writtenAnswer;
     const spokenAnswer = result.spokenAnswer;
@@ -584,7 +586,7 @@ export const aivyVoiceAsk = onCall(
 
     return {
       answer,
-      transcript: question,
+      transcript: romanizedTranscript.trim() || question,
       ttsAudioUrl,
       sources: searchResults ? searchResults.map(r => ({ title: r.title, link: r.link })) : undefined,
     };

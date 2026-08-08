@@ -443,6 +443,12 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                           height: 1.4,
                         ),
                   ),
+                  // Without a moving indicator the screen reads as frozen while
+                  // the model is working.
+                  if (_qa.phase != HomeVoiceQaPhase.idle) ...[
+                    const SizedBox(height: 12),
+                    _PhaseDots(phase: _qa.phase),
+                  ],
 
                   // Running conversation transcript (Gemini-style)
                   if (_qa.turns.isNotEmpty ||
@@ -1436,6 +1442,81 @@ class _VoiceHomeMic extends StatelessWidget {
                   ),
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Three dots that travel in a wave, tinted per phase.
+///
+/// The orb alone does not read as progress — users reported the screen looking
+/// hung while Gemini was still working.
+class _PhaseDots extends StatefulWidget {
+  const _PhaseDots({required this.phase});
+
+  final HomeVoiceQaPhase phase;
+
+  @override
+  State<_PhaseDots> createState() => _PhaseDotsState();
+}
+
+class _PhaseDotsState extends State<_PhaseDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _wave = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _wave.dispose();
+    super.dispose();
+  }
+
+  /// Lighter tints of the nebula colours this screen already uses per phase.
+  Color get _tint {
+    switch (widget.phase) {
+      case HomeVoiceQaPhase.listening:
+        return const Color(0xFF4ADE80);
+      case HomeVoiceQaPhase.processing:
+        return const Color(0xFFA78BFA);
+      case HomeVoiceQaPhase.speaking:
+        return const Color(0xFFFBBF24);
+      case HomeVoiceQaPhase.idle:
+        return Colors.white24;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = _tint;
+    return AnimatedBuilder(
+      animation: _wave,
+      builder: (context, _) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (i) {
+            // Stagger each dot a third of a cycle apart.
+            final t = (_wave.value + i / 3) % 1.0;
+            final lift = math.sin(t * 2 * math.pi);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Transform.translate(
+                offset: Offset(0, -3 * lift),
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: tint.withValues(
+                      alpha: 0.35 + 0.45 * ((lift + 1) / 2),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
         );
       },
     );

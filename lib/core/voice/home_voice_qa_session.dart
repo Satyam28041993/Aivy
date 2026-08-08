@@ -90,7 +90,9 @@ class HomeVoiceQaSession {
 
   static const _silenceAutoSubmitMs = 1300;
   static const _liveLoopDelayMs = 450;
-  static const _processingSafetySeconds = 110;
+  // Kept just above the aivyVoiceAsk callable timeout (50s) so the server error
+  // surfaces first; the user should never sit through a two-minute dead wait.
+  static const _processingSafetySeconds = 55;
 
   StreamSubscription<Amplitude>? _ampSub;
   DateTime? _startedAt;
@@ -256,12 +258,14 @@ class HomeVoiceQaSession {
         debugPrint('[Aivy] Gemini Live start failed (#$_geminiLiveFailCount): $e');
       }
       // Do NOT auto-start legacy recording — it feels like a hang and hides the real issue.
+      // Surface the ACTUAL failure: blaming App Check unconditionally sent us
+      // chasing the wrong cause more than once.
+      final detail = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
       onError?.call(
         _geminiLiveFailCount >= 3
-            ? 'Gemini Live 3 baar fail — Firebase App Check debug token + AI Logic setup karein. '
-                'Settings → More se "Purana voice mode" try kar sakte hain.'
-            : 'Gemini Live start nahi hua. Firebase App Check debug token register karein, '
-                'phir dubara mic dabayein.',
+            ? 'Gemini Live 3 baar fail: $detail\n'
+                'More → "Purana voice mode" se fallback le sakte hain.'
+            : 'Gemini Live start nahi hua: $detail',
       );
     }
   }
