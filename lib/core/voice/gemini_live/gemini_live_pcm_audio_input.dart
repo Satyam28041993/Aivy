@@ -20,9 +20,11 @@ class GeminiLivePcmAudioInput {
 
   Stream<Amplitude>? get amplitudeStream => _amplitudeController?.stream;
 
+  Future<bool> hasPermission() => _recorder.hasPermission();
+
   Future<void> init() async {
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
+    final ok = await _recorder.hasPermission();
+    if (!ok) {
       throw StateError('Microphone permission not granted');
     }
   }

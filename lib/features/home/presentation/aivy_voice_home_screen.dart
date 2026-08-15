@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter, lerpDouble;
+import 'dart:ui' show FontFeature, ImageFilter, lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -448,6 +448,16 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                   if (_qa.phase != HomeVoiceQaPhase.idle) ...[
                     const SizedBox(height: 12),
                     _PhaseDots(phase: _qa.phase),
+                    if (_qa.isGeminiLiveActive) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'mic ${_qa.liveMicChunks} · server ${_qa.liveServerMessages}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Colors.white38,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                      ),
+                    ],
                   ],
 
                   // Running conversation transcript (Gemini-style)
