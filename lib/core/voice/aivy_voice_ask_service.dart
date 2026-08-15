@@ -62,7 +62,7 @@ class AivyVoiceAskService {
 
     final callable = _functions.httpsCallable(
       'aivyVoiceAsk',
-      options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 50)),
     );
     try {
       final res = await callable.call<Map<String, dynamic>>(payload);

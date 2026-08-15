@@ -235,7 +235,16 @@ class _HomeShellState extends State<HomeShell> {
           ? const Color(0xFF030712)
           : theme.scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
-      body: IndexedStack(index: _currentIndex, children: screens),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          for (var i = 0; i < screens.length; i++)
+            TickerMode(
+              enabled: i == _currentIndex,
+              child: screens[i],
+            ),
+        ],
+      ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: isJarvisNav

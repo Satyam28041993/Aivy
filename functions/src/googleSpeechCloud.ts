@@ -97,6 +97,28 @@ function pickEncodingForPath(filePath: string): {
  * Transcribes audio stored in Firebase Storage (download URL).
  * Optimised for Hindi + English (India) code-switching.
  */
+/**
+ * Phrase hints so the recogniser stops hearing the assistant's name as "Ravi",
+ * "baby", "heavy", "Abhi" etc. Fixing it here is far cheaper — and far more
+ * reliable — than the regex substitution passes that used to clean it up after
+ * the fact. Boost is deliberately high: "Aivy" is not a common Hindi word, so
+ * there is little risk of over-triggering.
+ */
+const SPEECH_CONTEXT = {
+  phrases: [
+    "Aivy",
+    "Hello Aivy",
+    "Suno Aivy",
+    "quotation",
+    "dispatch",
+    "purchase order",
+    "reminder",
+    "follow up",
+    "payment received",
+  ],
+  boost: 18,
+};
+
 export async function transcribeFromFirebaseStorageUrl(
   audioUrl: string,
 ): Promise<string> {
@@ -114,6 +136,7 @@ export async function transcribeFromFirebaseStorageUrl(
       enableAutomaticPunctuation: true,
       model: "latest_short",
       useEnhanced: false,
+      speechContexts: [SPEECH_CONTEXT],
     },
     audio: { content: buf },
   });

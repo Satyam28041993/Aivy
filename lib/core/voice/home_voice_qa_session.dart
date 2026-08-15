@@ -14,14 +14,28 @@ import '../../features/chat/data/voice_file_upload.dart'
     as voice_io;
 import 'aivy_chat_voice_coordinator.dart';
 import 'aivy_voice_ask_service.dart';
+import 'gemini_live/gemini_live_voice_session.dart';
 import '../../services/google_home_voice_service.dart';
 
-/// Push-to-talk/Hands-free: mic ON → speak → mic OFF → answer.
+/// Push-to-talk / Live conversation: mic ON → speak → answer → auto-listen again.
 enum HomeVoiceQaPhase {
   idle,
   listening,
   processing,
   speaking,
+}
+
+/// One user ↔ Aivy turn in the running Live conversation.
+class VoiceConversationTurn {
+  const VoiceConversationTurn({
+    required this.userText,
+    required this.assistantText,
+    this.sources,
+  });
+
+  final String userText;
+  final String assistantText;
+  final List<dynamic>? sources;
 }
 
 class HomeVoiceQaSession {
@@ -30,28 +44,59 @@ class HomeVoiceQaSession {
     ChatRepository? repository,
     AivyVoiceAskService? ask,
     GoogleHomeVoiceService? tts,
+    GeminiLiveVoiceSession? geminiLive,
+    this.useGeminiLive = true,
   }) : _repository = repository ?? ChatRepository(),
        _ask = ask ?? AivyVoiceAskService(),
-       _tts = tts ?? GoogleHomeVoiceService();
+       _tts = tts ?? GoogleHomeVoiceService(),
+       _geminiLive = geminiLive ?? GeminiLiveVoiceSession(userId: userId);
 
   final String userId;
   final ChatRepository _repository;
   final AivyVoiceAskService _ask;
   final GoogleHomeVoiceService _tts;
+  final GeminiLiveVoiceSession _geminiLive;
+
+  /// Phase 1: real-time Gemini Live + function calling (falls back to legacy on failure).
+  bool useGeminiLive;
+  bool _geminiLiveFailed = false;
 
   final AudioRecorder _recorder = AudioRecorder();
 
   HomeVoiceQaPhase phase = HomeVoiceQaPhase.idle;
-  String? lastTranscript;
-  String? lastAnswer;
-  double lastDb = -160;
+  final List<Map<String, String>> _history = [];
+  final List<VoiceConversationTurn> _legacyTurns = [];
+
+  List<VoiceConversationTurn> get turns =>
+      useGeminiLive && !_geminiLiveFailed ? _geminiLive.turns : _legacyTurns;
+
+  String? get lastTranscript => useGeminiLive && !_geminiLiveFailed
+      ? (_geminiLive.lastTranscript ?? _legacyLastTranscript)
+      : _legacyLastTranscript;
+
+  String? get lastAnswer => useGeminiLive && !_geminiLiveFailed
+      ? (_geminiLive.lastAnswer ?? _legacyLastAnswer)
+      : _legacyLastAnswer;
+
+  String? _legacyLastTranscript;
+  String? _legacyLastAnswer;
+
+  double _legacyLastDb = -160;
+  double get lastDb =>
+      _activeGeminiLive ? _geminiLive.lastDb : _legacyLastDb;
+  set lastDb(double v) => _legacyLastDb = v;
+
   List<dynamic>? lastSources;
 
-  // Toggle options for premium Hands-Free Mode
-  bool handsFreeEnabled = false;
+  /// Live mode (continuous Gemini-style conversation) — default ON.
+  bool handsFreeEnabled = true;
   bool silenceDetectionEnabled = true;
 
-  final List<Map<String, String>> _history = [];
+  static const _silenceAutoSubmitMs = 1300;
+  static const _liveLoopDelayMs = 450;
+  // Kept just above the aivyVoiceAsk callable timeout (50s) so the server error
+  // surfaces first; the user should never sit through a two-minute dead wait.
+  static const _processingSafetySeconds = 55;
 
   StreamSubscription<Amplitude>? _ampSub;
   DateTime? _startedAt;
@@ -69,6 +114,17 @@ class HomeVoiceQaSession {
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
   void Function(String message)? onError;
 
+  /// True when Gemini Live session is active (not legacy upload pipeline).
+  bool get isGeminiLiveActive => _activeGeminiLive;
+
+  bool get _activeGeminiLive =>
+      useGeminiLive && !_geminiLiveFailed && _geminiLive.isSessionActive;
+
+  /// Legacy slow pipeline after user opts in or repeated Gemini failures.
+  bool get isLegacyVoiceMode => _geminiLiveFailed || !useGeminiLive;
+
+  int _geminiLiveFailCount = 0;
+
   bool get isRecording => phase == HomeVoiceQaPhase.listening;
   bool get isBusy =>
       phase == HomeVoiceQaPhase.processing || phase == HomeVoiceQaPhase.speaking;
@@ -84,6 +140,10 @@ class HomeVoiceQaSession {
     _safetyTimer?.cancel();
     _safetyTimer = null;
 
+    if (_activeGeminiLive) {
+      return;
+    }
+
     if (currentPhase == HomeVoiceQaPhase.listening) {
       // Auto-submit after 45 seconds of continuous listening
       _safetyTimer = Timer(const Duration(seconds: 45), () async {
@@ -95,8 +155,8 @@ class HomeVoiceQaSession {
         }
       });
     } else if (currentPhase == HomeVoiceQaPhase.processing) {
-      // Force recover to idle if cloud function takes more than 28 seconds
-      _safetyTimer = Timer(const Duration(seconds: 28), () {
+      // Align with aivyVoiceAsk client timeout (50s) plus a small buffer.
+      _safetyTimer = Timer(const Duration(seconds: _processingSafetySeconds), () {
         if (kDebugMode) {
           debugPrint('[Aivy] Safety timeout: processing took too long, resetting.');
         }
@@ -119,22 +179,39 @@ class HomeVoiceQaSession {
   }
 
   void _friendlyReset(String userMessage) {
+    // Bump generation so any in-flight upload/ask/TTS cannot resurrect speaking.
+    _recordGen++;
     _safetyTimer?.cancel();
     _safetyTimer = null;
     _submitting = false;
     _tempPath = null;
     _startedAt = null;
     phase = HomeVoiceQaPhase.idle;
-    
-    // Provide an error vibration cue
+
     unawaited(HapticFeedback.heavyImpact());
-    
+
     onError?.call(userMessage);
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
 
-  /// Mic tap: idle → start recording; listening → stop & send.
+  void _wireGeminiCallbacks() {
+    _geminiLive.onPhaseChanged = (next) {
+      phase = next;
+      onPhaseChanged?.call(next);
+    };
+    _geminiLive.onContentChanged = () {
+      // Transcript / answer streaming — refresh UI without amplitude spam.
+      onPhaseChanged?.call(phase);
+    };
+    _geminiLive.onError = onError;
+  }
+
+  /// Mic tap: idle → start; listening → stop & send (or end Live session).
   Future<void> toggleMic() async {
+    if (useGeminiLive && !_geminiLiveFailed) {
+      await _toggleMicGeminiLive();
+      return;
+    }
     if (_submitting) {
       return;
     }
@@ -142,9 +219,9 @@ class HomeVoiceQaSession {
       await submitRecording();
       return;
     }
-    // If she is speaking, tapping stops the speech
+    // Interrupt: stop speech and immediately listen again in Live mode.
     if (phase == HomeVoiceQaPhase.speaking) {
-      await stopSpeaking();
+      await _interruptSpeaking(andListen: handsFreeEnabled);
       return;
     }
     if (phase == HomeVoiceQaPhase.processing) {
@@ -155,44 +232,134 @@ class HomeVoiceQaSession {
     await startRecording();
   }
 
+  Future<void> _toggleMicGeminiLive() async {
+    _wireGeminiCallbacks();
+
+    if (_geminiLive.isSessionActive) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
+
+    if (phase == HomeVoiceQaPhase.speaking ||
+        phase == HomeVoiceQaPhase.processing) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
+
+    try {
+      await _geminiLive.startSession();
+      _geminiLiveFailCount = 0;
+      phase = _geminiLive.phase;
+      onPhaseChanged?.call(phase);
+    } catch (e) {
+      _geminiLiveFailCount++;
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      if (kDebugMode) {
+        debugPrint('[Aivy] Gemini Live start failed (#$_geminiLiveFailCount): $e');
+      }
+      // Do NOT auto-start legacy recording — it feels like a hang and hides the real issue.
+      // Surface the ACTUAL failure: blaming App Check unconditionally sent us
+      // chasing the wrong cause more than once.
+      final detail = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      onError?.call(
+        _geminiLiveFailCount >= 3
+            ? 'Gemini Live 3 baar fail: $detail\n'
+                'More → "Purana voice mode" se fallback le sakte hain.'
+            : 'Gemini Live start nahi hua: $detail',
+      );
+    }
+  }
+
+  /// Opt into the legacy upload + Cloud Function voice pipeline (slow).
+  void useLegacyVoiceMode() {
+    _geminiLiveFailed = true;
+    useGeminiLive = false;
+    unawaited(_geminiLive.stopSession());
+    phase = HomeVoiceQaPhase.idle;
+    onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+  }
+
   /// Cancel current recording without sending.
   Future<void> cancelRecording() async {
+    if (_activeGeminiLive) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
     if (phase != HomeVoiceQaPhase.listening) {
       return;
     }
     _recordGen++;
     await _stopRecorderOnly();
-    _history.clear();
     _safetyTimer?.cancel();
     _safetyTimer = null;
-    
+
     await HapticFeedback.selectionClick();
     _setPhase(HomeVoiceQaPhase.idle);
   }
 
   /// Full reset: stops all recording/speech, clears screen texts, and resets session history.
   void reset() {
+    if (_geminiLive.isSessionActive) {
+      unawaited(_geminiLive.stopSession());
+    }
+    _geminiLive.reset();
     _recordGen++;
     _safetyTimer?.cancel();
     _safetyTimer = null;
     unawaited(_stopRecorderOnly());
     unawaited(_tts.stop());
     unawaited(AivyChatVoiceCoordinator.instance.stop());
-    lastTranscript = null;
-    lastAnswer = null;
+    _legacyLastTranscript = null;
+    _legacyLastAnswer = null;
     lastSources = null;
     lastDb = -160;
     _history.clear();
+    _legacyTurns.clear();
     phase = HomeVoiceQaPhase.idle;
     onPhaseChanged?.call(HomeVoiceQaPhase.idle);
   }
 
+  Future<void> _interruptSpeaking({required bool andListen}) async {
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    await _tts.stop();
+    await AivyChatVoiceCoordinator.instance.stop();
+    await HapticFeedback.mediumImpact();
+    if (phase != HomeVoiceQaPhase.speaking) {
+      return;
+    }
+    if (andListen) {
+      _setPhase(HomeVoiceQaPhase.idle);
+      await startRecording();
+      return;
+    }
+    _setPhase(HomeVoiceQaPhase.idle);
+  }
+
   Future<void> stopSpeaking() async {
+    if (_activeGeminiLive || (_geminiLive.isSessionActive)) {
+      await _geminiLive.stopSession();
+      phase = HomeVoiceQaPhase.idle;
+      onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      return;
+    }
     _safetyTimer?.cancel();
     _safetyTimer = null;
     await _tts.stop();
     await AivyChatVoiceCoordinator.instance.stop();
     await HapticFeedback.selectionClick();
+    // Stop while processing must cancel the in-flight turn, not only TTS.
+    if (phase == HomeVoiceQaPhase.processing) {
+      _friendlyReset('Process cancel kiya gaya.');
+      return;
+    }
     if (phase == HomeVoiceQaPhase.speaking) {
       _setPhase(HomeVoiceQaPhase.idle);
     }
@@ -282,10 +449,11 @@ class HomeVoiceQaSession {
         }
 
         if (_hasSpoken) {
-          // If amplitude stays quiet (below -38dB) for 2.0 seconds, auto-submit
+          // If amplitude stays quiet (below -38dB) for ~1.3s, auto-submit.
           if (amp.current < -38.0) {
             if (_lastSpeechTime != null &&
-                now.difference(_lastSpeechTime!).inMilliseconds > 2000) {
+                now.difference(_lastSpeechTime!).inMilliseconds >
+                    _silenceAutoSubmitMs) {
               // Ensure we recorded at least 1.5s total to avoid premature triggers
               final totalDurationMs = now.difference(_startedAt!).inMilliseconds;
               if (totalDurationMs >= 1500) {
@@ -376,6 +544,7 @@ class HomeVoiceQaSession {
   }
 
   Future<void> _processRecording(String localPath) async {
+    final gen = _recordGen;
     _setPhase(HomeVoiceQaPhase.processing);
     try {
       if (kDebugMode) {
@@ -387,6 +556,9 @@ class HomeVoiceQaSession {
         entryId: entryId,
         localFilePath: localPath,
       );
+      if (gen != _recordGen) {
+        return;
+      }
 
       if (kDebugMode) {
         debugPrint('[Aivy] home QA calling aivyVoiceAsk…');
@@ -395,14 +567,19 @@ class HomeVoiceQaSession {
         audioUrl: url,
         history: _history.isNotEmpty ? _history : null,
       );
-      lastTranscript = result.transcript;
-      lastAnswer = result.answer;
+      if (gen != _recordGen) {
+        return;
+      }
+      _legacyLastTranscript = result.transcript;
+      _legacyLastAnswer = result.answer;
       lastSources = result.sources;
 
-      if (lastTranscript != null && lastTranscript!.trim().isNotEmpty &&
-          lastAnswer != null && lastAnswer!.trim().isNotEmpty) {
-        _history.add({'role': 'user', 'text': lastTranscript!});
-        _history.add({'role': 'model', 'text': lastAnswer!});
+      if (_legacyLastTranscript != null &&
+          _legacyLastTranscript!.trim().isNotEmpty &&
+          _legacyLastAnswer != null &&
+          _legacyLastAnswer!.trim().isNotEmpty) {
+        _history.add({'role': 'user', 'text': _legacyLastTranscript!});
+        _history.add({'role': 'model', 'text': _legacyLastAnswer!});
         if (_history.length > 6) {
           _history.removeRange(0, _history.length - 6);
         }
@@ -423,6 +600,9 @@ class HomeVoiceQaSession {
 
       _setPhase(HomeVoiceQaPhase.speaking);
       await AivyChatVoiceCoordinator.instance.stop();
+      if (gen != _recordGen) {
+        return;
+      }
       try {
         await _tts.speakAndWait(
           text: result.answer,
@@ -432,23 +612,53 @@ class HomeVoiceQaSession {
         if (kDebugMode) {
           debugPrint('[Aivy] home QA TTS error, client fallback: $e');
         }
+        if (gen != _recordGen) {
+          return;
+        }
         await _tts.speakAndWait(text: result.answer);
+      }
+      if (gen != _recordGen) {
+        return;
       }
 
       _setPhase(HomeVoiceQaPhase.idle);
+
+      if (_legacyLastTranscript != null &&
+          _legacyLastTranscript!.trim().isNotEmpty &&
+          _legacyLastAnswer != null &&
+          _legacyLastAnswer!.trim().isNotEmpty) {
+        _legacyTurns.add(
+          VoiceConversationTurn(
+            userText: _legacyLastTranscript!,
+            assistantText: _legacyLastAnswer!,
+            sources: lastSources,
+          ),
+        );
+        _legacyLastTranscript = null;
+        _legacyLastAnswer = null;
+        lastSources = null;
+        onPhaseChanged?.call(HomeVoiceQaPhase.idle);
+      }
+
       if (kDebugMode) {
         debugPrint('[Aivy] home QA ready — tap mic for next question');
       }
 
-      // Hands-Free Loop Trigger: automatically listen again after a comfortable delay
+      // Live loop: auto-listen again after a short gap (Gemini-style).
       if (handsFreeEnabled) {
-        Timer(const Duration(milliseconds: 1200), () {
+        Timer(const Duration(milliseconds: _liveLoopDelayMs), () {
+          if (gen != _recordGen) {
+            return;
+          }
           if (phase == HomeVoiceQaPhase.idle && handsFreeEnabled) {
             startRecording();
           }
         });
       }
     } catch (e) {
+      if (gen != _recordGen) {
+        return;
+      }
       if (kDebugMode) {
         debugPrint('[Aivy] home QA failed: $e');
       }
@@ -511,7 +721,9 @@ class HomeVoiceQaSession {
     await _stopRecorderOnly();
     await _tts.stop();
     await _tts.dispose();
+    await _geminiLive.dispose();
     _history.clear();
+    _legacyTurns.clear();
     try {
       await _recorder.dispose();
     } catch (_) {}
