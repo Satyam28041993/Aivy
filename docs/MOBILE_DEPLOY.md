@@ -26,8 +26,8 @@ GitHub Actions se web app Firebase Hosting pe jaati hai. Phone se 1-tap.
 1. Repo → **Actions** tab  
 2. Left me **Deploy Web** workflow select karo  
 3. **Run workflow** → branch `main` → Run  
-4. Optional: “Also deploy Cloud Functions” ON rakho agar `aivyVoiceAsk` bhi update karna ho  
-5. Green tick aaye → site live. Phone pe site hard-refresh (cache clear) karke check karo.
+4. **“Also deploy Cloud Functions” checkbox OFF rakho** (sirf web ke liye). ON rakhne pe IAM permission chahiye; Hosting phir bhi succeed hoti hai.  
+5. Green tick / Hosting URL: usually `https://aivy-5c031.web.app` — hard refresh karke check karo.
 
 ## Agar fail ho
 

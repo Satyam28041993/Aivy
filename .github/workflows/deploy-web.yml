@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_functions:
-        description: "Also deploy Cloud Functions (aivyVoiceAsk etc.)"
+        description: "Also deploy Cloud Functions (needs Service Account User IAM — leave OFF for web-only)"
         type: boolean
         default: false
 
@@ -54,10 +54,20 @@ jobs:
       - name: Deploy Hosting
         run: firebase deploy --only hosting --project aivy-5c031 --non-interactive
 
-      - name: Build & deploy Functions
+      # Optional. Functions need iam.serviceAccounts.ActAs on
+      # aivy-5c031@appspot.gserviceaccount.com — without it this step fails.
+      # continue-on-error so a Hosting success is not marked as a red Failure.
+      - name: Build & deploy Functions (optional)
         if: ${{ inputs.deploy_functions }}
+        continue-on-error: true
+        id: functions
         working-directory: functions
         run: |
           npm ci
           npm run build
           firebase deploy --only functions --project aivy-5c031 --non-interactive
+
+      - name: Note functions outcome
+        if: ${{ inputs.deploy_functions && steps.functions.outcome == 'failure' }}
+        run: |
+          echo "::warning::Hosting deployed OK, but Functions deploy failed (usually missing Service Account User / iam.serviceAccounts.ActAs). Web app is still live."
