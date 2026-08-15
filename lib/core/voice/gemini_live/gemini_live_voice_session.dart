@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:permission_handler/permission_handler.dart';
@@ -29,10 +30,12 @@ class GeminiLiveVoiceSession {
   StreamSubscription<Uint8List>? _micSubscription;
   StreamSubscription<Amplitude>? _ampSub;
   Future<void>? _receiveLoop;
+  Completer<void>? _setupCompleter;
   bool _sessionActive = false;
   bool _disposed = false;
   bool _awaitingModel = false;
   bool _userSpoke = false;
+  bool _setupDone = false;
   DateTime? _lastSpeechAt;
   Timer? _silenceForceTurnTimer;
 
@@ -48,6 +51,7 @@ class GeminiLiveVoiceSession {
 
   /// Diagnosable counters for "listens but never replies".
   int micChunksSent = 0;
+  int micChunksSeen = 0;
   int serverMessages = 0;
 
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
@@ -55,7 +59,6 @@ class GeminiLiveVoiceSession {
   void Function(String message)? onError;
 
   static const _modelName = 'gemini-2.5-flash-native-audio-preview-12-2025';
-  // Web VAD is flaky — after the user has spoken, force a model turn if quiet.
   static const _forceTurnAfterQuietMs = 1400;
   static const _speechDbThreshold = -32.0;
 
@@ -101,7 +104,9 @@ class GeminiLiveVoiceSession {
       outputAudioTranscription: AudioTranscriptionConfig(),
     );
 
-    _liveModel = FirebaseAI.googleAI().liveGenerativeModel(
+    _liveModel = FirebaseAI.googleAI(
+      auth: FirebaseAuth.instance,
+    ).liveGenerativeModel(
       model: _modelName,
       liveGenerationConfig: config,
       tools: AivyBusinessTools.tools,
@@ -110,8 +115,6 @@ class GeminiLiveVoiceSession {
   }
 
   Future<void> _ensureMicPermission() async {
-    // permission_handler is unreliable on web; record's getUserMedia prompt is
-    // the real gate there.
     if (kIsWeb) {
       final ok = await _audioInput.hasPermission();
       if (!ok) {
@@ -148,24 +151,46 @@ class GeminiLiveVoiceSession {
       await _audioOutput.init();
 
       stage = 'connect';
+      _setupCompleter = Completer<void>();
+      _setupDone = false;
       _session = await _liveModel!
           .connect()
           .timeout(
             const Duration(seconds: 25),
             onTimeout: () => throw StateError(
-              'Gemini Live connect timeout — Firebase AI Logic / App Check check karein',
+              'Gemini Live connect timeout — Firebase AI Logic enable karein',
             ),
           );
       _sessionActive = true;
       micChunksSent = 0;
+      micChunksSeen = 0;
       serverMessages = 0;
       _awaitingModel = false;
       _userSpoke = false;
       _lastSpeechAt = null;
 
-      // Start receive BEFORE mic so we don't drop early setup / greeting msgs.
-      // firebase_ai's receive() ends after each turnComplete — loop it.
+      // CRITICAL: subscribe to receive BEFORE any client audio/text.
+      // Sending before setupComplete closes the WebSocket on web
+      // (symptoms: mic 0 · server 0 + connection error).
       _receiveLoop = _processMessagesLoop();
+      // Yield so receive() can attach to the broadcast stream.
+      await Future<void>.delayed(Duration.zero);
+
+      stage = 'wait-setup';
+      try {
+        await _setupCompleter!.future.timeout(const Duration(seconds: 12));
+      } on TimeoutException {
+        // Broadcast race can drop setupComplete; if the socket is still up,
+        // continue — otherwise fail clearly.
+        if (!_sessionActive) {
+          throw StateError(
+            'Live socket band ho gaya. Firebase Console → AI Logic enable + '
+            'API key me https://aivy-5c031.web.app/* allow karein.',
+          );
+        }
+        debugPrint('[GeminiLive] setupComplete timeout — continuing');
+        _setupDone = true;
+      }
 
       stage = 'start-playback';
       await _audioOutput.startPlayback();
@@ -175,15 +200,23 @@ class GeminiLiveVoiceSession {
       if (stream == null) {
         throw StateError('Mic stream could not start');
       }
+      try {
+        await _audioInput.resume();
+      } catch (_) {}
 
       _micSubscription = stream.listen(
         (data) {
+          micChunksSeen++;
           final session = _session;
-          if (!_sessionActive || session == null || data.isEmpty) {
+          if (!_sessionActive ||
+              !_setupDone ||
+              session == null ||
+              data.isEmpty) {
+            if (micChunksSeen == 1 || micChunksSeen % 40 == 0) {
+              onContentChanged?.call();
+            }
             return;
           }
-          // Do NOT await — awaiting in the listen callback stalls the mic
-          // stream on slow networks and drops realtime audio.
           unawaited(() async {
             try {
               await session.sendAudioRealtime(
@@ -210,14 +243,15 @@ class GeminiLiveVoiceSession {
       await _ampSub?.cancel();
       _ampSub = _audioInput.amplitudeStream?.listen(_onAmplitude);
 
-      // Kick the model so the user hears Aivy immediately (also proves
-      // playback works). Realtime text + turnComplete starts generation.
       stage = 'greeting';
       try {
-        await _session?.sendTextRealtime(
-          'User just connected on voice. Greet them briefly in warm Hinglish as Aivy (one short sentence).',
+        await _session?.send(
+          input: Content.text(
+            'User just connected on voice. Greet them briefly in warm Hinglish '
+            'as Aivy (one short sentence).',
+          ),
+          turnComplete: true,
         );
-        await _session?.send(turnComplete: true);
         _awaitingModel = true;
       } catch (e) {
         debugPrint('[GeminiLive] greeting kick failed: $e');
@@ -260,7 +294,7 @@ class GeminiLiveVoiceSession {
   }
 
   Future<void> _forceModelTurn() async {
-    if (!_sessionActive || _awaitingModel || !_userSpoke) {
+    if (!_sessionActive || !_setupDone || _awaitingModel || !_userSpoke) {
       return;
     }
     final session = _session;
@@ -279,7 +313,6 @@ class GeminiLiveVoiceSession {
     }
   }
 
-  /// Stop the live session and release audio resources.
   Future<void> stopSession() async {
     await _tearDownSession();
     await HapticFeedback.selectionClick();
@@ -288,6 +321,11 @@ class GeminiLiveVoiceSession {
 
   Future<void> _tearDownSession() async {
     _sessionActive = false;
+    _setupDone = false;
+    if (_setupCompleter != null && !_setupCompleter!.isCompleted) {
+      _setupCompleter!.completeError(StateError('session torn down'));
+    }
+    _setupCompleter = null;
     _silenceForceTurnTimer?.cancel();
     _silenceForceTurnTimer = null;
     await _ampSub?.cancel();
@@ -308,8 +346,6 @@ class GeminiLiveVoiceSession {
     _userSpoke = false;
   }
 
-  /// firebase_ai [LiveSession.receive] stops after each turnComplete.
-  /// Continuous Gemini-style chat needs us to resubscribe every turn.
   Future<void> _processMessagesLoop() async {
     while (_sessionActive && !_disposed) {
       final session = _session;
@@ -325,10 +361,12 @@ class GeminiLiveVoiceSession {
           if (serverMessages <= 5 || serverMessages % 20 == 0) {
             debugPrint(
               '[GeminiLive] server msg #$serverMessages '
-              '(${response.message.runtimeType}), mic=$micChunksSent',
+              '(${response.message.runtimeType}), '
+              'micSeen=$micChunksSeen sent=$micChunksSent',
             );
           }
           await _handleServerMessage(response);
+          onContentChanged?.call();
         }
       } catch (e) {
         if (_sessionActive && !_disposed) {
@@ -342,6 +380,16 @@ class GeminiLiveVoiceSession {
 
   Future<void> _handleServerMessage(LiveServerResponse response) async {
     final message = response.message;
+
+    if (message is LiveServerSetupComplete) {
+      _setupDone = true;
+      final c = _setupCompleter;
+      if (c != null && !c.isCompleted) {
+        c.complete();
+      }
+      debugPrint('[GeminiLive] setupComplete');
+      return;
+    }
 
     if (message is LiveServerContent) {
       if (message.modelTurn != null) {
@@ -409,7 +457,10 @@ class GeminiLiveVoiceSession {
     }
   }
 
-  void _handleTranscription(Transcription? transcription, {required bool isUser}) {
+  void _handleTranscription(
+    Transcription? transcription, {
+    required bool isUser,
+  }) {
     final text = transcription?.text;
     if (text == null || text.isEmpty) {
       return;
@@ -435,7 +486,6 @@ class GeminiLiveVoiceSession {
     if (assistant.isEmpty) {
       return;
     }
-    // Greeting may have no user transcript — still show Aivy's line.
     turns.add(
       VoiceConversationTurn(
         userText: user.isEmpty ? '(connected)' : user,
@@ -501,30 +551,39 @@ class GeminiLiveVoiceSession {
     _pendingUserText = '';
     _pendingAssistantText = '';
     micChunksSent = 0;
+    micChunksSeen = 0;
     serverMessages = 0;
   }
 
   String _friendlyError(Object e) {
-    final s = e.toString().toLowerCase();
-    if (s.contains('permission')) {
+    final s = e.toString();
+    final lower = s.toLowerCase();
+    if (lower.contains('permission')) {
       return 'Microphone permission chahiye. Browser address bar me mic allow karein.';
     }
-    if (s.contains('unauthenticated') || s.contains('permission-denied')) {
+    if (lower.contains('unauthenticated') ||
+        lower.contains('permission-denied')) {
       return 'Please sign in again.';
     }
-    if (s.contains('network') || s.contains('socket') || s.contains('timeout')) {
-      return 'Internet ya Firebase connection issue — dubara try karein.';
+    if (lower.contains('websocket') || lower.contains('socket')) {
+      return 'Live socket band. Firebase → AI Logic ON rakho, aur API key '
+          'HTTP referrer me https://aivy-5c031.web.app/* add karo. ($s)';
     }
-    if (s.contains('app check') ||
-        s.contains('appcheck') ||
-        s.contains('403') ||
-        s.contains('failed-precondition')) {
+    if (lower.contains('network') || lower.contains('timeout')) {
+      return 'Internet / Firebase connection issue — dubara try karein. ($s)';
+    }
+    if (lower.contains('app check') ||
+        lower.contains('appcheck') ||
+        lower.contains('403') ||
+        lower.contains('failed-precondition')) {
       return 'App Check / AI Logic setup check karein (Firebase Console).';
     }
-    if (s.contains('not found') || s.contains('404') || s.contains('ai logic')) {
+    if (lower.contains('not found') ||
+        lower.contains('404') ||
+        lower.contains('ai logic')) {
       return 'Firebase Console → Build → AI Logic → Get started enable karein.';
     }
-    return 'Gemini Live start nahi hua ($e). Setup check karein, phir dubara mic dabayein.';
+    return 'Gemini Live: $s';
   }
 
   Future<void> dispose() async {
