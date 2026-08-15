@@ -97,6 +97,15 @@ class GeminiLivePcmAudioInput {
     isRecording = false;
   }
 
+  /// Mobile browsers often leave AudioContext suspended until resume().
+  Future<void> resume() async {
+    try {
+      await _recorder.resume();
+    } catch (e) {
+      debugPrint('[GeminiLive] recorder resume: $e');
+    }
+  }
+
   Future<void> dispose() async {
     await stopRecording();
     await _recorder.dispose();

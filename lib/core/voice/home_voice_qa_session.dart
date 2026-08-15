@@ -118,6 +118,7 @@ class HomeVoiceQaSession {
   bool get isGeminiLiveActive => _activeGeminiLive;
 
   int get liveMicChunks => _geminiLive.micChunksSent;
+  int get liveMicChunksSeen => _geminiLive.micChunksSeen;
   int get liveServerMessages => _geminiLive.serverMessages;
 
   bool get _activeGeminiLive =>
