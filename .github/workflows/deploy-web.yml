@@ -1,0 +1,63 @@
+# Mobile-friendly: GitHub → Actions → Deploy Web → Run workflow
+name: Deploy Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_functions:
+        description: "Also deploy Cloud Functions (aivyVoiceAsk etc.)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build web (release)
+        run: flutter build web --release --no-wasm-dry-run
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Deploy Hosting
+        run: firebase deploy --only hosting --project aivy-5c031 --non-interactive
+
+      - name: Build & deploy Functions
+        if: ${{ inputs.deploy_functions }}
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
+          firebase deploy --only functions --project aivy-5c031 --non-interactive
