@@ -5,6 +5,7 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart' show Amplitude;
 
 import '../home_voice_qa_session.dart';
 import 'aivy_business_snapshot_service.dart';
@@ -26,9 +27,14 @@ class GeminiLiveVoiceSession {
   LiveGenerativeModel? _liveModel;
   LiveSession? _session;
   StreamSubscription<Uint8List>? _micSubscription;
+  StreamSubscription<Amplitude>? _ampSub;
   Future<void>? _receiveLoop;
   bool _sessionActive = false;
   bool _disposed = false;
+  bool _awaitingModel = false;
+  bool _userSpoke = false;
+  DateTime? _lastSpeechAt;
+  Timer? _silenceForceTurnTimer;
 
   HomeVoiceQaPhase phase = HomeVoiceQaPhase.idle;
   double lastDb = -160;
@@ -40,17 +46,18 @@ class GeminiLiveVoiceSession {
   String _pendingUserText = '';
   String _pendingAssistantText = '';
 
-  // Counters make "she listens but never replies" diagnosable: they separate
-  // "mic audio never left the device" from "the server never answered".
-  int _micChunksSent = 0;
-  int _serverMessages = 0;
+  /// Diagnosable counters for "listens but never replies".
+  int micChunksSent = 0;
+  int serverMessages = 0;
 
   void Function(HomeVoiceQaPhase phase)? onPhaseChanged;
-  /// Fires when transcript / answer / amplitude change without a phase change.
   void Function()? onContentChanged;
   void Function(String message)? onError;
 
   static const _modelName = 'gemini-2.5-flash-native-audio-preview-12-2025';
+  // Web VAD is flaky — after the user has spoken, force a model turn if quiet.
+  static const _forceTurnAfterQuietMs = 1400;
+  static const _speechDbThreshold = -32.0;
 
   bool get isSessionActive => _sessionActive;
   bool get isBusy =>
@@ -63,6 +70,9 @@ class GeminiLiveVoiceSession {
   }
 
   Future<void> _prepareAudioSession() async {
+    if (kIsWeb) {
+      return;
+    }
     try {
       final session = await AudioSession.instance;
       await session.configure(
@@ -99,24 +109,33 @@ class GeminiLiveVoiceSession {
     );
   }
 
+  Future<void> _ensureMicPermission() async {
+    // permission_handler is unreliable on web; record's getUserMedia prompt is
+    // the real gate there.
+    if (kIsWeb) {
+      final ok = await _audioInput.hasPermission();
+      if (!ok) {
+        throw StateError('Microphone permission is required.');
+      }
+      return;
+    }
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      throw StateError('Microphone permission is required.');
+    }
+  }
+
   /// Start Gemini Live session and begin streaming mic audio.
   Future<void> startSession() async {
     if (_sessionActive || _disposed) {
       return;
     }
 
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      onError?.call('Microphone permission is required.');
-      return;
-    }
-
-    // Each step is labelled so a failure names the stage that broke. A bare
-    // "Null check operator used on a null value" from somewhere in here is
-    // impossible to act on — especially on web, where the audio plugins have
-    // different capabilities than on Android.
-    var stage = 'audio-session';
+    var stage = 'mic-permission';
     try {
+      await _ensureMicPermission();
+
+      stage = 'audio-session';
       await _prepareAudioSession();
 
       stage = 'init-model';
@@ -138,7 +157,15 @@ class GeminiLiveVoiceSession {
             ),
           );
       _sessionActive = true;
-      _receiveLoop = _processMessages();
+      micChunksSent = 0;
+      serverMessages = 0;
+      _awaitingModel = false;
+      _userSpoke = false;
+      _lastSpeechAt = null;
+
+      // Start receive BEFORE mic so we don't drop early setup / greeting msgs.
+      // firebase_ai's receive() ends after each turnComplete — loop it.
+      _receiveLoop = _processMessagesLoop();
 
       stage = 'start-playback';
       await _audioOutput.startPlayback();
@@ -150,33 +177,51 @@ class GeminiLiveVoiceSession {
       }
 
       _micSubscription = stream.listen(
-        (data) async {
+        (data) {
           final session = _session;
-          if (!_sessionActive || session == null) {
+          if (!_sessionActive || session == null || data.isEmpty) {
             return;
           }
-          try {
-            // The rate MUST be declared: without it Gemini assumes 16 kHz, so
-            // a mislabelled stream is silently misheard rather than rejected.
-            await session.sendAudioRealtime(
-              InlineDataPart(
-                'audio/pcm;rate=${GeminiLivePcmAudioInput.sampleRate}',
-                data,
-              ),
-            );
-            _micChunksSent++;
-          } catch (e) {
-            debugPrint('[GeminiLive] sendAudioRealtime: $e');
-          }
+          // Do NOT await — awaiting in the listen callback stalls the mic
+          // stream on slow networks and drops realtime audio.
+          unawaited(() async {
+            try {
+              await session.sendAudioRealtime(
+                InlineDataPart(
+                  'audio/pcm;rate=${GeminiLivePcmAudioInput.sampleRate}',
+                  data,
+                ),
+              );
+              micChunksSent++;
+              if (micChunksSent == 1 || micChunksSent % 40 == 0) {
+                onContentChanged?.call();
+              }
+            } catch (e) {
+              debugPrint('[GeminiLive] sendAudioRealtime: $e');
+            }
+          }());
         },
         onError: (Object e) {
           debugPrint('[GeminiLive] mic stream: $e');
+          onError?.call('Mic stream error: $e');
         },
       );
 
-      _audioInput.amplitudeStream?.listen((amp) {
-        lastDb = amp.current;
-      });
+      await _ampSub?.cancel();
+      _ampSub = _audioInput.amplitudeStream?.listen(_onAmplitude);
+
+      // Kick the model so the user hears Aivy immediately (also proves
+      // playback works). Realtime text + turnComplete starts generation.
+      stage = 'greeting';
+      try {
+        await _session?.sendTextRealtime(
+          'User just connected on voice. Greet them briefly in warm Hinglish as Aivy (one short sentence).',
+        );
+        await _session?.send(turnComplete: true);
+        _awaitingModel = true;
+      } catch (e) {
+        debugPrint('[GeminiLive] greeting kick failed: $e');
+      }
 
       await HapticFeedback.mediumImpact();
       _setPhase(HomeVoiceQaPhase.listening);
@@ -185,6 +230,52 @@ class GeminiLiveVoiceSession {
       await _tearDownSession();
       onError?.call('[$stage] ${_friendlyError(e)}');
       rethrow;
+    }
+  }
+
+  void _onAmplitude(Amplitude amp) {
+    lastDb = amp.current;
+    if (!_sessionActive || phase == HomeVoiceQaPhase.speaking) {
+      return;
+    }
+    final now = DateTime.now();
+    if (amp.current > _speechDbThreshold) {
+      _userSpoke = true;
+      _lastSpeechAt = now;
+      _silenceForceTurnTimer?.cancel();
+      _silenceForceTurnTimer = null;
+      return;
+    }
+    if (!_userSpoke || _awaitingModel || _lastSpeechAt == null) {
+      return;
+    }
+    final quietMs = now.difference(_lastSpeechAt!).inMilliseconds;
+    if (quietMs < _forceTurnAfterQuietMs) {
+      return;
+    }
+    _silenceForceTurnTimer?.cancel();
+    _silenceForceTurnTimer = Timer(const Duration(milliseconds: 50), () {
+      unawaited(_forceModelTurn());
+    });
+  }
+
+  Future<void> _forceModelTurn() async {
+    if (!_sessionActive || _awaitingModel || !_userSpoke) {
+      return;
+    }
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+    _awaitingModel = true;
+    _userSpoke = false;
+    try {
+      debugPrint('[GeminiLive] silence → force turnComplete');
+      await session.send(turnComplete: true);
+      onContentChanged?.call();
+    } catch (e) {
+      debugPrint('[GeminiLive] force turn failed: $e');
+      _awaitingModel = false;
     }
   }
 
@@ -197,6 +288,10 @@ class GeminiLiveVoiceSession {
 
   Future<void> _tearDownSession() async {
     _sessionActive = false;
+    _silenceForceTurnTimer?.cancel();
+    _silenceForceTurnTimer = null;
+    await _ampSub?.cancel();
+    _ampSub = null;
     await _micSubscription?.cancel();
     _micSubscription = null;
     await _audioInput.stopRecording();
@@ -209,31 +304,38 @@ class GeminiLiveVoiceSession {
       await _receiveLoop;
     } catch (_) {}
     _receiveLoop = null;
+    _awaitingModel = false;
+    _userSpoke = false;
   }
 
-  Future<void> _processMessages() async {
-    final session = _session;
-    if (session == null) {
-      return;
-    }
-    try {
-      await for (final response in session.receive()) {
-        if (!_sessionActive || _disposed) {
-          break;
-        }
-        _serverMessages++;
-        if (_serverMessages <= 3 || _serverMessages % 25 == 0) {
-          debugPrint(
-            '[GeminiLive] server msg #$_serverMessages '
-            '(${response.message.runtimeType}), mic chunks sent: $_micChunksSent',
-          );
-        }
-        await _handleServerMessage(response);
+  /// firebase_ai [LiveSession.receive] stops after each turnComplete.
+  /// Continuous Gemini-style chat needs us to resubscribe every turn.
+  Future<void> _processMessagesLoop() async {
+    while (_sessionActive && !_disposed) {
+      final session = _session;
+      if (session == null) {
+        break;
       }
-    } catch (e) {
-      if (_sessionActive && !_disposed) {
-        debugPrint('[GeminiLive] receive loop: $e');
-        onError?.call(_friendlyError(e));
+      try {
+        await for (final response in session.receive()) {
+          if (!_sessionActive || _disposed) {
+            break;
+          }
+          serverMessages++;
+          if (serverMessages <= 5 || serverMessages % 20 == 0) {
+            debugPrint(
+              '[GeminiLive] server msg #$serverMessages '
+              '(${response.message.runtimeType}), mic=$micChunksSent',
+            );
+          }
+          await _handleServerMessage(response);
+        }
+      } catch (e) {
+        if (_sessionActive && !_disposed) {
+          debugPrint('[GeminiLive] receive loop: $e');
+          onError?.call(_friendlyError(e));
+        }
+        break;
       }
     }
   }
@@ -258,9 +360,16 @@ class GeminiLiveVoiceSession {
       if (message.interrupted == true) {
         await _audioOutput.stop();
         await _audioOutput.startPlayback();
+        _awaitingModel = false;
         if (phase == HomeVoiceQaPhase.speaking) {
           _setPhase(HomeVoiceQaPhase.listening);
         }
+      }
+
+      if (message.turnComplete == true) {
+        _awaitingModel = false;
+        _userSpoke = false;
+        _lastSpeechAt = null;
       }
     } else if (message is LiveServerToolCall &&
         message.functionCalls != null) {
@@ -293,6 +402,7 @@ class GeminiLiveVoiceSession {
     if (content.turnComplete == true) {
       await _audioOutput.finishStream();
       _commitTurnIfReady();
+      _awaitingModel = false;
       if (_sessionActive) {
         _setPhase(HomeVoiceQaPhase.listening);
       }
@@ -322,10 +432,16 @@ class GeminiLiveVoiceSession {
   void _commitTurnIfReady() {
     final user = _pendingUserText.trim();
     final assistant = _pendingAssistantText.trim();
-    if (user.isEmpty || assistant.isEmpty) {
+    if (assistant.isEmpty) {
       return;
     }
-    turns.add(VoiceConversationTurn(userText: user, assistantText: assistant));
+    // Greeting may have no user transcript — still show Aivy's line.
+    turns.add(
+      VoiceConversationTurn(
+        userText: user.isEmpty ? '(connected)' : user,
+        assistantText: assistant,
+      ),
+    );
     _pendingUserText = '';
     _pendingAssistantText = '';
     lastTranscript = null;
@@ -384,12 +500,14 @@ class GeminiLiveVoiceSession {
     lastDb = -160;
     _pendingUserText = '';
     _pendingAssistantText = '';
+    micChunksSent = 0;
+    serverMessages = 0;
   }
 
   String _friendlyError(Object e) {
     final s = e.toString().toLowerCase();
     if (s.contains('permission')) {
-      return 'Microphone permission chahiye.';
+      return 'Microphone permission chahiye. Browser address bar me mic allow karein.';
     }
     if (s.contains('unauthenticated') || s.contains('permission-denied')) {
       return 'Please sign in again.';
@@ -401,9 +519,7 @@ class GeminiLiveVoiceSession {
         s.contains('appcheck') ||
         s.contains('403') ||
         s.contains('failed-precondition')) {
-      return 'App Check token register karein: Firebase Console → App Check → '
-          'Android app → Manage debug tokens. Pehli baar app kholo, logcat mein '
-          '"debug secret" copy karke add karein. AI Logic bhi enable hona chahiye.';
+      return 'App Check / AI Logic setup check karein (Firebase Console).';
     }
     if (s.contains('not found') || s.contains('404') || s.contains('ai logic')) {
       return 'Firebase Console → Build → AI Logic → Get started enable karein.';

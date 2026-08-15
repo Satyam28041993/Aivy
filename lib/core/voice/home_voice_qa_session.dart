@@ -117,6 +117,9 @@ class HomeVoiceQaSession {
   /// True when Gemini Live session is active (not legacy upload pipeline).
   bool get isGeminiLiveActive => _activeGeminiLive;
 
+  int get liveMicChunks => _geminiLive.micChunksSent;
+  int get liveServerMessages => _geminiLive.serverMessages;
+
   bool get _activeGeminiLive =>
       useGeminiLive && !_geminiLiveFailed && _geminiLive.isSessionActive;
 
