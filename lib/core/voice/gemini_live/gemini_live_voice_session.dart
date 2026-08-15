@@ -381,7 +381,8 @@ class GeminiLiveVoiceSession {
   Future<void> _handleServerMessage(LiveServerResponse response) async {
     final message = response.message;
 
-    if (message is LiveServerSetupComplete) {
+    // LiveServerSetupComplete is not exported by firebase_ai 3.11 — detect by name.
+    if (message.runtimeType.toString() == 'LiveServerSetupComplete') {
       _setupDone = true;
       final c = _setupCompleter;
       if (c != null && !c.isCompleted) {
