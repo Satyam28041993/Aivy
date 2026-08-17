@@ -27,11 +27,25 @@ refusal is therefore business-level, not flavour-level.
 
 **Prime suspects, in the Meta dashboard:**
 
-1. **Tech Provider onboarding is not provisioned.** Under
-   App → Use cases → *Connect on WhatsApp* → Customize, the left nav has a
-   **Tech Provider onboarding** section that renders completely blank. Being
-   verified as a Tech Provider and having Tech Provider onboarding provisioned
-   are different things; the blank panel suggests the latter never happened.
+1. **Tech Provider onboarding is not provisioned — confirmed a Meta-side
+   failure.** Under App → Use cases → *Connect on WhatsApp* → Customize, the
+   **Tech Provider onboarding** panel renders completely blank because Meta's
+   own dashboard request for it fails:
+
+   ```
+   Async request failed with error 1007: Something went wrong.
+   when requesting /ajax/pagelet/generic.php/DeveloperAppDashboardContentPagelet
+     tab: "onboard", use_case_enum: "WHATSAPP_BUSINESS_MESSAGING"
+   ```
+
+   Reproduced in Incognito with no extensions, so this is not an ad-blocker or
+   a local browser problem. Being verified as a Tech Provider and having Tech
+   Provider onboarding provisioned are different things, and this panel is
+   where the latter would be done — it cannot even be opened.
+
+   (The raw console line also carries `fb_dtsg` and `__user` session tokens.
+   Do not paste it verbatim into tickets or forums; quote the error and the
+   pagelet name only.)
 2. **Permissions are approved but not published.** In the same Customize view
    `whatsapp_business_management`, `whatsapp_business_messaging` and
    `public_profile` all show status **"Ready to publish"** rather than live.
