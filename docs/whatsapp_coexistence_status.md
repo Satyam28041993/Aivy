@@ -1,6 +1,55 @@
 # WhatsApp Coexistence Setup Status
 
-## Current state (2026-08-17)
+## Blocked on Meta, not on this repo (2026-08-17, evening)
+
+Everything on our side is deployed and provably correct. Embedded Signup still
+cannot complete because Meta refuses to let this business onboard customers.
+
+**Symptom.** The Embedded Signup popup renders a barrier page reading
+*"Prakruti Graphic Pvt Ltd can't onboard customers at the moment"*, then spins
+forever. It never returns a WABA, a phone number, or an OAuth code, so the
+backend is never even reached.
+
+**What we ruled out, in order:**
+
+| Hypothesis | Verdict |
+| --- | --- |
+| App Review not approved | ❌ Approved 2026-08-13 (3 permissions, table below) |
+| App not in Live mode | ❌ Switched to Live; "Aivy switched to live mode" alert confirms |
+| Business not a Tech Provider | ❌ "Verified as a Tech Provider" alert, 2026-07-22 |
+| Frontend sending wrong launch options | ❌ `[aivy-es]` logs the exact expected payload |
+| Coexistence `featureType` rejected | ❌ `?es=plain` drops it and hits the **same** wall |
+| Backend / functions not deployed | ❌ All 25 functions deployed 2026-08-17 18:19 UTC |
+
+The `?es=plain` result is the decisive one: with `featureType` removed the
+launch options are plain Embedded Signup, and Meta blocks it identically. The
+refusal is therefore business-level, not flavour-level.
+
+**Prime suspects, in the Meta dashboard:**
+
+1. **Tech Provider onboarding is not provisioned.** Under
+   App → Use cases → *Connect on WhatsApp* → Customize, the left nav has a
+   **Tech Provider onboarding** section that renders completely blank. Being
+   verified as a Tech Provider and having Tech Provider onboarding provisioned
+   are different things; the blank panel suggests the latter never happened.
+2. **Permissions are approved but not published.** In the same Customize view
+   `whatsapp_business_management`, `whatsapp_business_messaging` and
+   `public_profile` all show status **"Ready to publish"** rather than live.
+   `manage_app_solution` sits at "Ready for testing" — it was never granted
+   Advanced Access, and Tech Provider flows often require it.
+
+**For a Meta support ticket, quote:** App ID `1138403541782773`, Business ID
+`285078384657633`, Embedded Signup config `1353972743598527`. App is Live,
+`whatsapp_business_management` + `whatsapp_business_messaging` approved,
+business verified as Tech Provider, yet Embedded Signup returns "can't onboard
+customers at the moment" for both the coexistence and plain flows, and the
+Tech Provider onboarding tab is blank.
+
+**Deployment note.** All of the above is live from branch
+`claude/git-pull-aro-fxj5gh`, not from `main` — `main` has none of the WhatsApp
+coexistence work. A deploy run from `main` would remove it from production.
+
+## App Review state (2026-08-17)
 
 **App Review is approved.** Meta approved the submission of 2026-08-13 10:28 IST:
 
