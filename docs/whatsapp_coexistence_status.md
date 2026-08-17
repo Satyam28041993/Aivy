@@ -1,6 +1,45 @@
 # WhatsApp Coexistence Setup Status
 
-## What we did today (2026-07-29)
+## Current state (2026-08-17)
+
+**App Review is approved.** Meta approved the submission of 2026-08-13 10:28 IST:
+
+| Permission | Status |
+| --- | --- |
+| `whatsapp_business_management` | ✅ Approved |
+| `whatsapp_business_messaging` | ✅ Approved |
+| `public_profile` | ✅ Approved |
+
+That clears the blocker recorded in commit `b52a1c1` and in
+`docs/whatsapp-embedded-signup-go-live.md` Part B. Approval alone is **not**
+enough to fix `36008` — the app must also be switched to **Live** mode
+(Part C), which is still pending.
+
+### Remaining steps, in order
+
+1. **Meta dashboard → App Mode → flip to Live.** Approval does not flip it for
+   you. While the app is Unpublished, Meta keeps ignoring
+   `override_default_response_type` and the code exchange keeps failing 36008.
+2. **Confirm `app_config/meta_whatsapp` is seeded** in Firestore —
+   `appId`, `embeddedSignupConfigId`, `graphApiVersion`, and the server-side
+   `appSecret`. Client config can be seeded with
+   `node functions/scripts/seedMetaWhatsappClientConfig.js`
+   (needs `META_EMBEDDED_SIGNUP_CONFIG_ID`).
+3. **Deploy** functions + hosting so the fixes from `b52a1c1` are live
+   (token-derived WABA/phone ids, all three FINISH events, `[aivy-es]` logging).
+4. **Test** Connect WhatsApp Business at `https://aivy-5c031.web.app/`.
+   Keep the browser console open — the flow logs launch options, every raw
+   `postMessage`, and the `FB.login` response under `[aivy-es]`.
+
+### If it still fails after going Live
+
+- `firebase functions:log --only completeWhatsappEmbeddedSignup -n 20` — the
+  function surfaces the real Meta message and subcode, not a bare `INTERNAL`.
+- Still 36008 → A/B against plain Embedded Signup by opening the app with
+  `?es=plain`, which drops the coexistence `featureType`. If plain succeeds and
+  coexistence does not, the gap is Tech Provider provisioning, not this code.
+
+## What we did on 2026-07-29
 
 1. **Investigated Error 36008**
    - The app experienced an issue during the final stage of the Meta Embedded Signup flow: `Error validating verification code (subcode 36008)`.
@@ -18,7 +57,7 @@
    - Completed the "Data handling" section.
    - Added "Reviewer instructions" explaining how to test the app and documenting the current `36008` blockage.
 
-## What you need to do next
+## Plan as it stood on 2026-07-29 (historical — steps 1 and 2 are now done)
 
 1. **Submit the App Review**
    - If you haven't clicked it already, make sure to click the blue **Submit for review** button at the bottom of the Meta App Review submissions page.

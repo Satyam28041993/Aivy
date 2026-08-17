@@ -49,7 +49,12 @@ Meta dashboard → **App settings → Basic**
 4. **App Domains** — confirm `aivy-5c031.web.app` is present (it already is).
 5. Click **Save changes**.
 
-### Part B — Get Advanced Access for the WhatsApp permissions
+### Part B — Get Advanced Access for the WhatsApp permissions ✅ DONE (approved 2026-08-13)
+
+> Approved: `whatsapp_business_management`, `whatsapp_business_messaging`,
+> `public_profile`. Part C (Live mode) is the remaining blocker — see
+> `docs/whatsapp_coexistence_status.md`.
+
 Meta dashboard → **App Review → Permissions and Features**
 (or **Review → App Review**, then the *Allowed usage* section)
 1. Find **`whatsapp_business_management`** → click **Request Advanced Access**.
