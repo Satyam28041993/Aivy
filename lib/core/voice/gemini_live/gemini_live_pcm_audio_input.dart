@@ -20,9 +20,11 @@ class GeminiLivePcmAudioInput {
 
   Stream<Amplitude>? get amplitudeStream => _amplitudeController?.stream;
 
+  Future<bool> hasPermission() => _recorder.hasPermission();
+
   Future<void> init() async {
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
+    final ok = await _recorder.hasPermission();
+    if (!ok) {
       throw StateError('Microphone permission not granted');
     }
   }
@@ -93,6 +95,15 @@ class GeminiLivePcmAudioInput {
     await _audioDataController?.close();
     _audioDataController = null;
     isRecording = false;
+  }
+
+  /// Mobile browsers often leave AudioContext suspended until resume().
+  Future<void> resume() async {
+    try {
+      await _recorder.resume();
+    } catch (e) {
+      debugPrint('[GeminiLive] recorder resume: $e');
+    }
   }
 
   Future<void> dispose() async {

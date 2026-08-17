@@ -19,12 +19,31 @@ import {
   transcribeFromFirebaseStorageUrlWithFallback,
 } from "./googleSpeechCloud";
 import { ROMAN_HINGLISH_WRITING_RULE, romanizeUserFacingText } from "./romanHinglish";
-import { looksLikeReminderSchedulingLine } from "./intentDetection";
+import {
+  isWhoToCallAnalyticsQuestionText,
+  looksLikeReminderSchedulingLine,
+} from "./intentDetection";
 import { runWebSearch, type SearchResultItem } from "./webSearch";
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const geminiEndpoint =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+/** Reject audio URLs that are not under the caller's own Storage prefix. */
+function assertCallerOwnsVoiceAudioUrl(uid: string, audioUrl: string): void {
+  const pathRaw = audioUrl.split("/o/")[1]?.split("?")[0];
+  if (!pathRaw) {
+    throw new HttpsError("invalid-argument", "Invalid audioUrl");
+  }
+  const filePath = decodeURIComponent(pathRaw);
+  const prefix = `users/${uid}/`;
+  if (!filePath.startsWith(prefix)) {
+    throw new HttpsError(
+      "permission-denied",
+      "audioUrl must belong to the authenticated user",
+    );
+  }
+}
 
 type TimeContext = {
   timezone: string;
@@ -431,6 +450,7 @@ export const aivyVoiceAsk = onCall(
     const audioUrl = typeof body.audioUrl === "string" ? body.audioUrl.trim() : "";
     let snapshot: Record<string, unknown>;
     if (audioUrl) {
+      assertCallerOwnsVoiceAudioUrl(uid, audioUrl);
       try {
         const [snap, tr] = await Promise.all([
           buildVoiceReportSnapshot(uid, tc),
@@ -464,7 +484,9 @@ export const aivyVoiceAsk = onCall(
       );
     }
 
-    // Correct common STT mishearings of Aivy's name (e.g. "बेबी", "हैवी", "आईवी", "baby", "heavy")
+    // Correct only clear STT mishearings of "Aivy". Do NOT replace common
+    // Hindi/Hinglish words (अभी = now, रवि/Ravi = a person name, baby/heavy/ivy).
+    // Phrase hints in googleSpeechCloud SPEECH_CONTEXT handle most of this upstream.
     const nameCorrections = [
       { pattern: /बेबी/g, replacement: "Aivy" },
       { pattern: /हैवी/g, replacement: "Aivy" },
@@ -473,49 +495,16 @@ export const aivyVoiceAsk = onCall(
       { pattern: /बेबि/g, replacement: "Aivy" },
       { pattern: /एवी/g, replacement: "Aivy" },
       { pattern: /अइवी/g, replacement: "Aivy" },
-      { pattern: /अभि/g, replacement: "Aivy" },
       { pattern: /रावी/g, replacement: "Aivy" },
-      { pattern: /रवि/g, replacement: "Aivy" },
-      { pattern: /अभी/g, replacement: "Aivy" },
-      
-      // Smart corrections for Ravi/Abhi (when used at the start of queries or following greetings)
-      { pattern: /^(रवि|अभी|ravi|abhi)\b/gi, replacement: "Aivy" },
-      { pattern: /\b(hello|hey|hi|suno|oye|हाय|हेलो|सुनो)\s+(रवि|अभी|ravi|abhi)\b/gi, replacement: "$1 Aivy" },
-      
-      { pattern: /\bbaby\b/gi, replacement: "Aivy" },
-      { pattern: /\bheavy\b/gi, replacement: "Aivy" },
-      { pattern: /\bhevi\b/gi, replacement: "Aivy" },
-      { pattern: /\bivy\b/gi, replacement: "Aivy" },
       { pattern: /\baivi\b/gi, replacement: "Aivy" },
+      { pattern: /\baavi\b/gi, replacement: "Aivy" },
     ];
-    
+
     let correctedQuestion = question;
     for (const correction of nameCorrections) {
       correctedQuestion = correctedQuestion.replace(correction.pattern, correction.replacement);
     }
     question = correctedQuestion;
-
-    // Pass 2: Aggressive Hinglish name corrections
-    const hinglishCorrections = [
-      // Always replace "ravi" or "Ravi" (since they are not standard vocabulary words in Hinglish conversations)
-      { pattern: /\b(ravi|Ravi|rawi|Rawi|raavi|Raavi)\b/gi, replacement: "Aivy" },
-      
-      // Always replace "baby", "heavy", "hevi", "ivy", "aivi", "aavi", "evy"
-      { pattern: /\b(baby|Baby|heavy|Heavy|hevi|Hevi|ivy|Ivy|aivi|Aivi|aavi|Aavi|evy|Evy)\b/gi, replacement: "Aivy" },
-      
-      // Replace "abhi" or "Abhi" at the start of sentence, at the end of sentence, or after/before vocative/greeting words
-      { pattern: /^(abhi|Abhi)\b/gi, replacement: "Aivy" },
-      { pattern: /\b(abhi|Abhi)$/gi, replacement: "Aivy" },
-      { pattern: /\b(hello|hey|hi|suno|oye|hallo|hay|suniye|ji)\s+(abhi|Abhi)\b/gi, replacement: "$1 Aivy" },
-      { pattern: /\b(tum|kaun|kaise|kaisi|kya|kahan|naam|apna|naam)\s+(abhi|Abhi)\b/gi, replacement: "$1 Aivy" },
-      { pattern: /\b(abhi|Abhi)\s+(suno|suniye|tum|kaun|kaise|kaisi|kya|kahan|naam|apna|batao|bataiye)\b/gi, replacement: "Aivy $2" },
-    ];
-
-    let finalQuestion = question;
-    for (const correction of hinglishCorrections) {
-      finalQuestion = finalQuestion.replace(correction.pattern, correction.replacement);
-    }
-    question = finalQuestion;
 
     // Block scheduling/action intents on Voice Home — redirect to Chat
     const qLower = question.toLowerCase();
@@ -546,10 +535,20 @@ export const aivyVoiceAsk = onCall(
       }
     }
 
-    if (looksLikeReminderSchedulingLine(qLower, question)) {
+    if (
+      looksLikeReminderSchedulingLine(qLower, question) &&
+      !isWhoToCallAnalyticsQuestionText(question)
+    ) {
       const blockWritten = "Sir, mai aapko aapke schedule ke baare me bata sakti hu ya aur koi jankari chahiye to de sakti hu. Is kaam ke liye aap chat section me jaaye.";
       const blockSpoken = "सर, मैं आपको आपके शेड्यूल के बारे में बता सकती हूँ या और कोई जानकारी चाहिए तो दे सकती हूँ। इस काम के लिए आप चैट सेक्शन में जाएँ।";
-      const ttsAudioUrl = await synthesizeToFirebaseStorage({ uid, text: blockSpoken });
+      let ttsAudioUrl: string | undefined;
+      try {
+        ttsAudioUrl = await synthesizeToFirebaseStorage({ uid, text: blockSpoken });
+      } catch (e) {
+        logger.warn("aivyVoiceAsk block TTS failed", {
+          err: e instanceof Error ? e.message : String(e),
+        });
+      }
       return {
         answer: blockWritten,
         transcript: question,
@@ -575,13 +574,23 @@ export const aivyVoiceAsk = onCall(
     const answer = result.writtenAnswer;
     const spokenAnswer = result.spokenAnswer;
 
-    const ttsAudioUrl = await synthesizeToFirebaseStorage({ uid, text: spokenAnswer });
+    // Never fail the whole turn if TTS Storage write fails — client can synthesize.
+    let ttsAudioUrl: string | undefined;
+    try {
+      ttsAudioUrl = await synthesizeToFirebaseStorage({ uid, text: spokenAnswer });
+    } catch (e) {
+      logger.warn("aivyVoiceAsk TTS failed; returning text-only answer", {
+        uid,
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
 
     logger.info("aivyVoiceAsk answered", {
       uid,
       questionLen: question.length,
       answerLen: answer.length,
       searched: isSearchRequested,
+      hasTts: Boolean(ttsAudioUrl),
     });
 
     return {

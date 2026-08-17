@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter, lerpDouble;
+import 'dart:ui' show FontFeature, ImageFilter, lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -123,11 +123,11 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
     if (_qa.isLegacyVoiceMode) {
       switch (_qa.phase) {
         case HomeVoiceQaPhase.idle:
-          return 'Purana voice mode (slow) — mic dabayein. Gemini Live ke liye App Check setup karein.';
+          return 'Purana voice mode — mic dabakar boliye. Live ke liye naya session shuru karein.';
         case HomeVoiceQaPhase.listening:
-          return 'Sun rahi hoon — bolne ke baad mic band karein.';
+          return 'Sun rahi hoon — bolne ke baad mic band karein ya 1–2s chup rahein.';
         case HomeVoiceQaPhase.processing:
-          return 'Soch rahi hoon… (server par process ho raha hai)';
+          return 'Soch rahi hoon…';
         case HomeVoiceQaPhase.speaking:
           return 'Jawaab de rahi hoon…';
       }
@@ -147,16 +147,16 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
     switch (_qa.phase) {
       case HomeVoiceQaPhase.idle:
         return _qa.isGeminiLiveActive
-            ? 'Gemini Live — boliye, mai sun rahi hoon.'
+            ? 'Live connected — boliye, mai sun rahi hoon.'
             : (_qa.turns.isEmpty
-                ? 'Mic dabayein — Gemini Live shuru hoga (fast voice).'
+                ? 'Mic dabayein — Gemini Live jaisi continuous baat shuru hogi.'
                 : 'Mic dabayein — conversation continue karein.');
       case HomeVoiceQaPhase.listening:
-        return 'Sun rahi hoon… boliye, rukne par khud samajh lungi.';
+        return 'Sun rahi hoon… boliye; rukne par khud samajh lungi.';
       case HomeVoiceQaPhase.processing:
         return 'Soch rahi hoon…';
       case HomeVoiceQaPhase.speaking:
-        return 'Jawaab de rahi hoon — beech me mic dabakar interrupt kar sakte hain.';
+        return 'Jawaab de rahi hoon — mic dabakar interrupt kar sakte hain.';
     }
   }
 
@@ -422,7 +422,7 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                       ),
                       // Reset Button on the Right (swapped to match user instruction)
                       IconButton(
-                        tooltip: 'Reset Module',
+                        tooltip: 'Clear conversation',
                         icon: const Icon(Icons.refresh_rounded, color: Colors.white38),
                         onPressed: () async {
                           await HapticFeedback.heavyImpact();
@@ -448,6 +448,16 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                   if (_qa.phase != HomeVoiceQaPhase.idle) ...[
                     const SizedBox(height: 12),
                     _PhaseDots(phase: _qa.phase),
+                    if (_qa.isGeminiLiveActive) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'mic ${_qa.liveMicChunksSeen}/${_qa.liveMicChunks} · server ${_qa.liveServerMessages}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Colors.white38,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                      ),
+                    ],
                   ],
 
                   // Running conversation transcript (Gemini-style)
@@ -1155,20 +1165,9 @@ class _TypingTextState extends State<_TypingText> {
 
   void _startTyping() {
     _timer?.cancel();
-    _visibleText = '';
-    int index = 0;
-    _timer = Timer.periodic(const Duration(milliseconds: 22), (timer) {
-      if (index < widget.text.length) {
-        if (mounted) {
-          setState(() {
-            _visibleText += widget.text[index];
-          });
-        }
-        index++;
-      } else {
-        _timer?.cancel();
-      }
-    });
+    // Show full answer immediately so text stays in sync with spoken audio.
+    // (Character typewriter lagged far behind TTS on long replies.)
+    _visibleText = widget.text;
   }
 
   @override
@@ -1331,14 +1330,16 @@ class _VoiceHomeMic extends StatelessWidget {
             ? Icons.stop_circle_rounded
             : busy
             ? Icons.hourglass_top_rounded
+            : speaking
+            ? Icons.mic_rounded
             : Icons.mic_rounded;
         final label = listening
-            ? 'Sun rahi hoon'
+            ? 'End'
             : busy
-            ? 'Soch rahi hoon'
+            ? 'Cancel'
             : speaking
-            ? 'Boliye'
-            : 'Boliye';
+            ? 'Interrupt'
+            : 'Start';
             
         Color micGradientStart;
         Color micGradientEnd;
