@@ -52,7 +52,13 @@ refusal is therefore business-level, not flavour-level.
    `manage_app_solution` sits at "Ready for testing" — it was never granted
    Advanced Access, and Tech Provider flows often require it.
 
-**For a Meta support ticket, quote:** App ID `1138403541782773`, Business ID
+**Support ticket raised 2026-08-18 00:20 IST — case `27429181216782581`**
+(Direct Support → topic *Dev: Onboarding*, request type *App Review
+Questions/Issues*, status Open). It carries everything below plus the error
+1007 evidence. Watch that case for the answer; nothing here moves until Meta
+provisions Tech Provider onboarding.
+
+**Identifiers the ticket quotes:** App ID `1138403541782773`, Business ID
 `285078384657633`, Embedded Signup config `1353972743598527`. App is Live,
 `whatsapp_business_management` + `whatsapp_business_messaging` approved,
 business verified as Tech Provider, yet Embedded Signup returns "can't onboard
