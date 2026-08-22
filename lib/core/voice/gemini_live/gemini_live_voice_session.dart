@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:firebase_ai/firebase_ai.dart';
@@ -6,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart' show Amplitude;
 
 import '../home_voice_qa_session.dart';
 import 'aivy_business_snapshot_service.dart';
@@ -28,7 +29,6 @@ class GeminiLiveVoiceSession {
   LiveGenerativeModel? _liveModel;
   LiveSession? _session;
   StreamSubscription<Uint8List>? _micSubscription;
-  StreamSubscription<Amplitude>? _ampSub;
   Future<void>? _receiveLoop;
   Completer<void>? _setupCompleter;
   bool _sessionActive = false;
@@ -38,6 +38,17 @@ class GeminiLiveVoiceSession {
   bool _setupDone = false;
   DateTime? _lastSpeechAt;
   Timer? _silenceForceTurnTimer;
+
+  /// Rolling estimate of the room's noise floor, in dBFS. Speech is judged
+  /// against this rather than a fixed number, because a laptop mic in a quiet
+  /// room and a phone mic in a shop sit tens of dB apart — a hard-coded
+  /// threshold silently fails on one of them.
+  double _noiseFloorDb = -60;
+
+  /// Clears [_awaitingModel] if the model never answers. Without it a greeting
+  /// that draws no reply leaves the flag stuck true, and every later utterance
+  /// is ignored by the silence detector for the rest of the session.
+  Timer? _awaitingModelWatchdog;
 
   HomeVoiceQaPhase phase = HomeVoiceQaPhase.idle;
   double lastDb = -160;
@@ -60,7 +71,15 @@ class GeminiLiveVoiceSession {
 
   static const _modelName = 'gemini-2.5-flash-native-audio-preview-12-2025';
   static const _forceTurnAfterQuietMs = 1400;
-  static const _speechDbThreshold = -32.0;
+
+  /// How far above the measured noise floor a chunk must sit to count as
+  /// speech, and the absolute floor below which nothing counts however quiet
+  /// the room is.
+  static const _speechMarginDb = 12.0;
+  static const _speechAbsoluteFloorDb = -50.0;
+
+  /// Give up waiting for the model after this long and let the user talk again.
+  static const _awaitingModelTimeoutSeconds = 15;
 
   bool get isSessionActive => _sessionActive;
   bool get isBusy =>
@@ -165,9 +184,11 @@ class GeminiLiveVoiceSession {
       micChunksSent = 0;
       micChunksSeen = 0;
       serverMessages = 0;
-      _awaitingModel = false;
+      _setAwaitingModel(false);
       _userSpoke = false;
       _lastSpeechAt = null;
+      // Recalibrate per session — the previous room is no guide to this one.
+      _noiseFloorDb = -60;
 
       // CRITICAL: subscribe to receive BEFORE any client audio/text.
       // Sending before setupComplete closes the WebSocket on web
@@ -207,12 +228,16 @@ class GeminiLiveVoiceSession {
       _micSubscription = stream.listen(
         (data) {
           micChunksSeen++;
+          // Turn-taking is driven from the PCM we already hold. The recorder's
+          // own amplitude stream is not dependable on the web, and when it
+          // stays silent the session listens forever without ever replying.
+          _onMicLevel(_chunkDb(data));
           final session = _session;
           if (!_sessionActive ||
               !_setupDone ||
               session == null ||
               data.isEmpty) {
-            if (micChunksSeen == 1 || micChunksSeen % 40 == 0) {
+            if (micChunksSeen == 1 || micChunksSeen % 10 == 0) {
               onContentChanged?.call();
             }
             return;
@@ -226,7 +251,7 @@ class GeminiLiveVoiceSession {
                 ),
               );
               micChunksSent++;
-              if (micChunksSent == 1 || micChunksSent % 40 == 0) {
+              if (micChunksSent == 1 || micChunksSent % 10 == 0) {
                 onContentChanged?.call();
               }
             } catch (e) {
@@ -240,9 +265,6 @@ class GeminiLiveVoiceSession {
         },
       );
 
-      await _ampSub?.cancel();
-      _ampSub = _audioInput.amplitudeStream?.listen(_onAmplitude);
-
       stage = 'greeting';
       try {
         await _session?.send(
@@ -252,7 +274,7 @@ class GeminiLiveVoiceSession {
           ),
           turnComplete: true,
         );
-        _awaitingModel = true;
+        _setAwaitingModel(true);
       } catch (e) {
         debugPrint('[GeminiLive] greeting kick failed: $e');
       }
@@ -267,13 +289,66 @@ class GeminiLiveVoiceSession {
     }
   }
 
-  void _onAmplitude(Amplitude amp) {
-    lastDb = amp.current;
+  /// Single owner of [_awaitingModel], so the flag can never be left stuck.
+  void _setAwaitingModel(bool value) {
+    _awaitingModel = value;
+    _awaitingModelWatchdog?.cancel();
+    _awaitingModelWatchdog = null;
+    if (!value) {
+      return;
+    }
+    _awaitingModelWatchdog = Timer(
+      const Duration(seconds: _awaitingModelTimeoutSeconds),
+      () {
+        if (!_awaitingModel) {
+          return;
+        }
+        debugPrint('[GeminiLive] model never answered — releasing turn lock');
+        _awaitingModel = false;
+        _userSpoke = false;
+        _lastSpeechAt = null;
+      },
+    );
+  }
+
+  /// dBFS of one PCM16 mono chunk, from its RMS.
+  double _chunkDb(Uint8List data) {
+    final frames = data.lengthInBytes ~/ 2;
+    if (frames == 0) {
+      return -160;
+    }
+    final pcm = ByteData.sublistView(data);
+    var sumSquares = 0.0;
+    for (var i = 0; i < frames; i++) {
+      final sample = pcm.getInt16(i * 2, Endian.little) / 32768.0;
+      sumSquares += sample * sample;
+    }
+    final rms = math.sqrt(sumSquares / frames);
+    if (rms <= 0) {
+      return -160;
+    }
+    return 20 * (math.log(rms) / math.ln10);
+  }
+
+  void _onMicLevel(double db) {
+    lastDb = db;
     if (!_sessionActive || phase == HomeVoiceQaPhase.speaking) {
       return;
     }
+
+    // Track the quietest recent level as the noise floor: drop to it at once,
+    // drift back up slowly so a long pause does not re-learn speech as silence.
+    if (db < _noiseFloorDb) {
+      _noiseFloorDb = db;
+    } else {
+      _noiseFloorDb = math.min(_noiseFloorDb + 0.05, db);
+    }
+
+    final speaking = db > _noiseFloorDb + _speechMarginDb &&
+        db > _speechAbsoluteFloorDb;
+
     final now = DateTime.now();
-    if (amp.current > _speechDbThreshold) {
+    if (speaking) {
       _userSpoke = true;
       _lastSpeechAt = now;
       _silenceForceTurnTimer?.cancel();
@@ -301,7 +376,7 @@ class GeminiLiveVoiceSession {
     if (session == null) {
       return;
     }
-    _awaitingModel = true;
+    _setAwaitingModel(true);
     _userSpoke = false;
     try {
       debugPrint('[GeminiLive] silence → force turnComplete');
@@ -309,7 +384,7 @@ class GeminiLiveVoiceSession {
       onContentChanged?.call();
     } catch (e) {
       debugPrint('[GeminiLive] force turn failed: $e');
-      _awaitingModel = false;
+      _setAwaitingModel(false);
     }
   }
 
@@ -328,8 +403,6 @@ class GeminiLiveVoiceSession {
     _setupCompleter = null;
     _silenceForceTurnTimer?.cancel();
     _silenceForceTurnTimer = null;
-    await _ampSub?.cancel();
-    _ampSub = null;
     await _micSubscription?.cancel();
     _micSubscription = null;
     await _audioInput.stopRecording();
@@ -342,7 +415,7 @@ class GeminiLiveVoiceSession {
       await _receiveLoop;
     } catch (_) {}
     _receiveLoop = null;
-    _awaitingModel = false;
+    _setAwaitingModel(false);
     _userSpoke = false;
   }
 
@@ -409,14 +482,14 @@ class GeminiLiveVoiceSession {
       if (message.interrupted == true) {
         await _audioOutput.stop();
         await _audioOutput.startPlayback();
-        _awaitingModel = false;
+        _setAwaitingModel(false);
         if (phase == HomeVoiceQaPhase.speaking) {
           _setPhase(HomeVoiceQaPhase.listening);
         }
       }
 
       if (message.turnComplete == true) {
-        _awaitingModel = false;
+        _setAwaitingModel(false);
         _userSpoke = false;
         _lastSpeechAt = null;
       }
@@ -451,7 +524,7 @@ class GeminiLiveVoiceSession {
     if (content.turnComplete == true) {
       await _audioOutput.finishStream();
       _commitTurnIfReady();
-      _awaitingModel = false;
+      _setAwaitingModel(false);
       if (_sessionActive) {
         _setPhase(HomeVoiceQaPhase.listening);
       }
