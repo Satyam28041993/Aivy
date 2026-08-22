@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -126,6 +127,13 @@ class GeminiLiveVoiceSession {
 
     _liveModel = FirebaseAI.googleAI(
       auth: FirebaseAuth.instance,
+      appCheck: FirebaseAppCheck.instance,
+      // AI Logic has replay protection enforced, which only accepts a token
+      // that is spent once. The default here is a standard, reusable token, and
+      // the backend rejects it outright -- the Live socket closes with 1008
+      // 'App Check token is invalid' even though App Check minted the token
+      // perfectly well.
+      useLimitedUseAppCheckTokens: true,
     ).liveGenerativeModel(
       model: _modelName,
       liveGenerationConfig: config,
