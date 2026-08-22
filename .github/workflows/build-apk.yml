@@ -9,10 +9,13 @@ on:
         type: boolean
         default: true
   # workflow_dispatch only appears once this file is on the default branch, so
-  # pushing an `apk-*` tag is the way to build from a branch before then.
+  # until then a build is kicked off by pushing an `apk-*` tag, or a branch
+  # under `apk/` where tag pushes are not available.
   push:
     tags:
       - "apk-*"
+    branches:
+      - "apk/**"
 
 concurrency:
   group: build-apk
