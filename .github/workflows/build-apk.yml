@@ -8,6 +8,11 @@ on:
         description: "Also attach the APK to a GitHub Release (easiest to install from a phone)"
         type: boolean
         default: true
+  # workflow_dispatch only appears once this file is on the default branch, so
+  # pushing an `apk-*` tag is the way to build from a branch before then.
+  push:
+    tags:
+      - "apk-*"
 
 concurrency:
   group: build-apk
@@ -63,7 +68,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: ${{ inputs.publish_release }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_release }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
