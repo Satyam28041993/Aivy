@@ -451,7 +451,9 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                     if (_qa.isGeminiLiveActive) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'mic ${_qa.liveMicChunksSeen}/${_qa.liveMicChunks} · server ${_qa.liveServerMessages}',
+                        'mic ${_qa.liveMicChunksSeen}/${_qa.liveMicChunks}'
+                        ' · server ${_qa.liveServerMessages}'
+                        ' · ${_qa.lastDb.toStringAsFixed(0)}dB',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: Colors.white38,
                               fontFeatures: const [FontFeature.tabularFigures()],

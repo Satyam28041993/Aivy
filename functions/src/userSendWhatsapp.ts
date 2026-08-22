@@ -7,7 +7,7 @@ const { sendWhatsAppMessageOrTemplate } = require("../services/whatsappService.j
   sendWhatsAppMessageOrTemplate: (
     to: string,
     message: string,
-    opts?: { contactName?: string },
+    opts?: { contactName?: string; ownerUid?: string | null },
   ) => Promise<{ messageId: string; raw: unknown; usedTemplate?: boolean }>;
 };
 
@@ -213,6 +213,7 @@ export const userSendWhatsapp = onCall(
         text,
         {
           contactName: profileNameResolved ?? "",
+          ownerUid: uid,
         },
       );
       await persistOutboundCopy({

@@ -46,6 +46,10 @@ export { aivyVoiceAsk } from "./aivyVoiceAsk";
 export { translateWaPreview } from "./translateWaPreview";
 export { checkWhatsappHealth } from "./checkWhatsappHealth";
 export {
+  getMetaWhatsappClientConfig,
+  completeWhatsappEmbeddedSignup,
+} from "./whatsapp/onboarding/callables";
+export {
   whatsappWebhook,
   onWhatsAppInboundMessageCreated,
   onWhatsAppMessageIndexCreated,

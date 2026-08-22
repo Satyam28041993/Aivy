@@ -1,9 +1,60 @@
 "use strict";
 
-const { getFirestore } = require("firebase-admin/firestore");
-
 const GRAPH_VERSION = "v18.0";
 const RETRY_DELAY_MS = 2000;
+
+function getCredentialResolver() {
+  return require("../lib/whatsapp/credentials/resolver.js");
+}
+
+/**
+ * @param {string | null | undefined} ownerUid
+ */
+async function loadSendConfig(ownerUid) {
+  const { resolveWhatsAppCredentials } = getCredentialResolver();
+  const resolved = await resolveWhatsAppCredentials({
+    ownerUid: ownerUid ?? null,
+    operation: "send",
+  });
+  return {
+    token: resolved.token,
+    phoneId: resolved.phoneNumberId,
+    outboundTemplateName: resolved.outboundTemplateName,
+    outboundTemplateLanguage: resolved.outboundTemplateLanguage,
+    outboundTemplateBodyParamCount: resolved.outboundTemplateBodyParamCount,
+    _credentialMeta: {
+      credentialSource: resolved.credentialSource,
+      connectionStatus: resolved.connectionStatus,
+      wabaId: resolved.wabaId,
+      ownerUid: resolved.ownerUid,
+    },
+    templateSource: resolved.templateSource,
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} config
+ * @param {string | null | undefined} messageId
+ */
+async function recordSendSuccess(config, messageId) {
+  const meta = config._credentialMeta;
+  if (!meta || !messageId) {
+    return;
+  }
+  const { recordSuccessfulWhatsAppSend } = getCredentialResolver();
+  try {
+    await recordSuccessfulWhatsAppSend({
+      credentialSource: meta.credentialSource,
+      phoneNumberId: String(config.phoneId ?? ""),
+      wabaId: meta.wabaId,
+      connectionStatus: meta.connectionStatus,
+      ownerUid: meta.ownerUid,
+      messageId,
+    });
+  } catch (e) {
+    console.warn("[WhatsApp] migration dashboard update failed", e);
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,29 +125,29 @@ function needsTemplateFallback(err) {
 }
 
 /**
+ * @param {string | null | undefined} [ownerUid]
  * @returns {Promise<Record<string, unknown>>}
  */
-async function getWhatsAppConfig() {
-  const doc = await getFirestore()
-    .collection("app_config")
-    .doc("whatsapp")
-    .get();
-
-  if (!doc.exists) {
-    const err = new Error("WhatsApp config not found");
-    err.status = 400;
-    throw err;
-  }
-
-  return doc.data() || {};
+async function getWhatsAppConfig(ownerUid) {
+  const config = await loadSendConfig(ownerUid ?? null);
+  return {
+    token: config.token,
+    phoneId: config.phoneId,
+    outboundTemplateName: config.outboundTemplateName,
+    outboundTemplateLanguage: config.outboundTemplateLanguage,
+    outboundTemplateBodyParamCount: config.outboundTemplateBodyParamCount,
+    credentialSource: config._credentialMeta?.credentialSource ?? "LEGACY",
+    templateSource: config.templateSource ?? "LEGACY",
+  };
 }
 
 /**
  * @param {string} to
  * @param {string} message
+ * @param {string | null | undefined} [ownerUid]
  */
-async function sendOnce(to, message) {
-  const config = await getWhatsAppConfig();
+async function sendOnce(to, message, ownerUid) {
+  const config = await loadSendConfig(ownerUid);
   const token = config.token;
   const phoneId = config.phoneId;
 
@@ -106,7 +157,11 @@ async function sendOnce(to, message) {
     throw err;
   }
 
-  console.log("WA CONFIG LOADED:", !!token, phoneId);
+  console.log("WA CONFIG LOADED:", {
+    hasToken: !!token,
+    phoneId,
+    credentialSource: config._credentialMeta?.credentialSource ?? "LEGACY",
+  });
   console.log("TO:", to);
 
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`;
@@ -158,6 +213,7 @@ async function sendOnce(to, message) {
   }
 
   const messageId = data?.messages?.[0]?.id;
+  await recordSendSuccess(config, messageId);
   return { messageId: messageId ?? null, raw: data };
 }
 
@@ -184,7 +240,7 @@ async function sendTemplateOnce(to, config, ctx) {
   const name = String(config.outboundTemplateName ?? "").trim();
   if (!name) {
     const err = new Error(
-      "outboundTemplateName missing in app_config/whatsapp — add approved template name in WhatsApp settings.",
+      "outboundTemplateName missing in WhatsApp outbound template settings.",
     );
     err.status = 400;
     throw err;
@@ -273,6 +329,7 @@ async function sendTemplateOnce(to, config, ctx) {
   }
 
   const messageId = data?.messages?.[0]?.id;
+  await recordSendSuccess(config, messageId);
   return { messageId: messageId ?? null, raw: data };
 }
 
@@ -280,12 +337,13 @@ async function sendTemplateOnce(to, config, ctx) {
  * Try session text first; on Meta “template / re-engagement” errors, send approved template if configured.
  * @param {string} to
  * @param {string} message
- * @param {{ contactName?: string }} [opts]
+ * @param {{ contactName?: string, ownerUid?: string | null }} [opts]
  */
 async function sendWhatsAppMessageOrTemplate(to, message, opts = {}) {
   const cleanTo = validatePhone(to);
   const cleanMsg = validateMessage(message);
   const contactName = String(opts.contactName || "").trim() || "Customer";
+  const ownerUid = opts.ownerUid ?? null;
 
   let lastErr;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -296,7 +354,7 @@ async function sendWhatsAppMessageOrTemplate(to, message, opts = {}) {
         );
         await sleep(RETRY_DELAY_MS);
       }
-      const result = await sendOnce(cleanTo, cleanMsg);
+      const result = await sendOnce(cleanTo, cleanMsg, ownerUid);
       if (!result.messageId) {
         console.error(
           "[WhatsApp] Meta response missing messages[0].id",
@@ -317,7 +375,7 @@ async function sendWhatsAppMessageOrTemplate(to, message, opts = {}) {
   }
 
   if (needsTemplateFallback(lastErr)) {
-    const config = await getWhatsAppConfig();
+    const config = await loadSendConfig(ownerUid);
     const tn = String(config.outboundTemplateName ?? "").trim();
     if (tn) {
       try {
@@ -344,7 +402,7 @@ async function sendWhatsAppMessageOrTemplate(to, message, opts = {}) {
       }
     } else {
       console.warn(
-        "[WhatsApp] Template fallback needed but outboundTemplateName not set in app_config/whatsapp",
+        "[WhatsApp] Template fallback needed but outboundTemplateName not configured",
       );
     }
   }
@@ -357,11 +415,13 @@ async function sendWhatsAppMessageOrTemplate(to, message, opts = {}) {
  * Retries once after 2s on failure.
  * @param {string} to
  * @param {string} message
+ * @param {{ ownerUid?: string | null }} [opts]
  * @returns {Promise<{ messageId: string, raw: object }>}
  */
-async function sendWhatsAppMessage(to, message) {
+async function sendWhatsAppMessage(to, message, opts = {}) {
   const cleanTo = validatePhone(to);
   const cleanMsg = validateMessage(message);
+  const ownerUid = opts.ownerUid ?? null;
 
   let lastErr;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -372,7 +432,7 @@ async function sendWhatsAppMessage(to, message) {
         );
         await sleep(RETRY_DELAY_MS);
       }
-      const result = await sendOnce(cleanTo, cleanMsg);
+      const result = await sendOnce(cleanTo, cleanMsg, ownerUid);
       if (!result.messageId) {
         console.error(
           "[WhatsApp] Meta response missing messages[0].id",

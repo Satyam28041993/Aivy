@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../config/aivy_identity.dart';
@@ -33,10 +34,32 @@ class FirebaseSession {
     }
     return GoogleSignIn(
       scopes: const <String>['email', 'profile'],
+      serverClientId: kFirebaseWebGoogleClientId,
     );
   }
 
   static String describeAuthFailure(Object error) {
+    if (error is PlatformException) {
+      final code = error.code;
+      final message = '${error.message ?? ''} ${error.details ?? ''}';
+      if (code == 'sign_in_failed' ||
+          message.contains('ApiException: 10') ||
+          message.contains('DEVELOPER_ERROR') ||
+          message.contains('10:')) {
+        return 'Google sign-in is not configured for this APK build. '
+            'Add this APK signing SHA-1 in Firebase Console → Project settings '
+            '→ Your apps → Android → Add fingerprint, then download a fresh '
+            'google-services.json.';
+      }
+      if (code == 'network_error' || message.toLowerCase().contains('network')) {
+        return 'Network error. Check your connection and try again.';
+      }
+      final msg = error.message?.trim();
+      if (msg != null && msg.isNotEmpty) {
+        return msg;
+      }
+      return 'Google sign-in failed ($code).';
+    }
     if (error is FirebaseAuthException) {
       switch (error.code) {
         case 'network-request-failed':

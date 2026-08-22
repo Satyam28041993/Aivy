@@ -13,12 +13,8 @@ class GeminiLivePcmAudioInput {
   AudioRecorder _recorder = AudioRecorder();
   StreamController<Uint8List>? _audioDataController;
   StreamSubscription<Uint8List>? _recorderStreamSub;
-  StreamController<Amplitude>? _amplitudeController;
-  StreamSubscription<Amplitude>? _amplitudeSubscription;
 
   bool isRecording = false;
-
-  Stream<Amplitude>? get amplitudeStream => _amplitudeController?.stream;
 
   Future<bool> hasPermission() => _recorder.hasPermission();
 
@@ -30,8 +26,6 @@ class GeminiLivePcmAudioInput {
   }
 
   Future<Stream<Uint8List>?> startRecordingStream() async {
-    await _amplitudeSubscription?.cancel();
-    await _amplitudeController?.close();
     await _recorderStreamSub?.cancel();
     await _audioDataController?.close();
 
@@ -71,11 +65,6 @@ class GeminiLivePcmAudioInput {
       },
     );
 
-    _amplitudeController = StreamController<Amplitude>.broadcast();
-    _amplitudeSubscription = _recorder
-        .onAmplitudeChanged(const Duration(milliseconds: 100))
-        .listen(_amplitudeController!.add);
-
     isRecording = true;
     return _audioDataController!.stream;
   }
@@ -88,9 +77,6 @@ class GeminiLivePcmAudioInput {
     } catch (e) {
       debugPrint('[GeminiLive] stop recorder: $e');
     }
-    await _amplitudeSubscription?.cancel();
-    await _amplitudeController?.close();
-    _amplitudeController = null;
     await _recorderStreamSub?.cancel();
     await _audioDataController?.close();
     _audioDataController = null;

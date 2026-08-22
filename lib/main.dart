@@ -13,9 +13,10 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  if (!kIsWeb) {
-    await activateAivyAppCheck();
-  }
+  // Web is handled inside: it activates only when a reCAPTCHA site key was
+  // supplied, because the plugin's presence alone makes the JS SDK send a
+  // dummy App Check token that AI Logic rejects outright.
+  await activateAivyAppCheck();
   if (kIsWeb) {
     await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
   }

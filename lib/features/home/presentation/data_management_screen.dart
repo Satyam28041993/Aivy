@@ -2,7 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../app/settings/whatsapp_settings_screen.dart';
+import '../../whatsapp/presentation/whatsapp_connect_screen.dart';
 import '../../../core/firebase/clear_user_data_service.dart';
 
 /// Lets the signed-in user delete Firestore data under their account
@@ -442,7 +442,7 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
                   : () {
                       Navigator.of(context).push<void>(
                         MaterialPageRoute<void>(
-                          builder: (context) => const WhatsappSettingsScreen(),
+                          builder: (context) => const WhatsAppConnectScreen(),
                         ),
                       );
                     },

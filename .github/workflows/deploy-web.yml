@@ -33,8 +33,15 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      # AIVY_RECAPTCHA_SITE_KEY turns on App Check for the web build. Without
+      # it the app deliberately leaves App Check alone, because a half-set-up
+      # App Check sends a dummy token and AI Logic closes the Live socket.
+      # The site key is public (it ships in the page), so a repo variable is
+      # the right home for it -- not a secret.
       - name: Build web (release)
-        run: flutter build web --release --no-wasm-dry-run
+        run: |
+          flutter build web --release --no-wasm-dry-run \
+            --dart-define=AIVY_RECAPTCHA_SITE_KEY="${{ vars.AIVY_RECAPTCHA_SITE_KEY }}"
 
       - name: Set up Node
         uses: actions/setup-node@v4
