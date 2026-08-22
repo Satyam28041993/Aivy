@@ -1,0 +1,78 @@
+# Mobile-friendly: GitHub → Actions → Build APK → Run workflow
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Also attach the APK to a GitHub Release (easiest to install from a phone)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # The release build signs with the debug keys (android/app/build.gradle.kts),
+      # so no keystore secret is needed. Play Store upload would need a real one.
+      - name: Build APK (release)
+        run: flutter build apk --release
+
+      - name: Name the APK
+        id: name
+        run: |
+          version=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          tag="v${version%%+*}-build${GITHUB_RUN_NUMBER}"
+          apk="aivy-${version%%+*}-build${GITHUB_RUN_NUMBER}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          ls -lh "$apk"
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.apk }}
+          path: ${{ steps.name.outputs.apk }}
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.name.outputs.tag }}" \
+            "${{ steps.name.outputs.apk }}" \
+            --title "${{ steps.name.outputs.tag }}" \
+            --notes "APK built from \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA}\`.
+
+          Signed with debug keys, so Android will ask you to allow install from
+          unknown sources. Uninstall any older Aivy build first if the signature
+          differs." \
+            --target "${GITHUB_SHA}"
