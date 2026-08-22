@@ -7,6 +7,13 @@ import 'package:flutter/foundation.dart';
 /// Register it in Firebase Console → App Check → the web app.
 const _webRecaptchaSiteKey = String.fromEnvironment('AIVY_RECAPTCHA_SITE_KEY');
 
+/// What activation actually did, shown in the Live error banner.
+///
+/// Every failure mode here looks identical from the outside -- the socket just
+/// closes with 1008 -- so without this it is impossible to tell a missing site
+/// key from a key reCAPTCHA refused to mint a token for.
+String aivyAppCheckStatus = 'not started';
+
 /// Activates Firebase App Check for Gemini Live / AI Logic.
 ///
 /// GitHub / sideload APKs cannot use Play Integrity — we use the debug provider
@@ -20,16 +27,23 @@ Future<void> activateAivyAppCheck() async {
       // accepted while enforcement is in monitoring mode, so stay out of the
       // way until a real site key exists.
       if (_webRecaptchaSiteKey.isEmpty) {
+        aivyAppCheckStatus = 'web: no site key in build';
         debugPrint(
           '[AppCheck] Web: no site key, skipping activation. '
           'Pass --dart-define=AIVY_RECAPTCHA_SITE_KEY=... to enable it.',
         );
         return;
       }
+      final keyTail =
+          _webRecaptchaSiteKey.substring(_webRecaptchaSiteKey.length - 6);
       await FirebaseAppCheck.instance.activate(
         providerWeb: ReCaptchaV3Provider(_webRecaptchaSiteKey),
       );
-      await FirebaseAppCheck.instance.getToken();
+      final token = await FirebaseAppCheck.instance.getToken();
+      aivyAppCheckStatus = (token == null || token.isEmpty)
+          ? 'web: reCAPTCHA gave no token (key ...$keyTail)'
+          : 'web: token ok (key ...$keyTail)';
+      debugPrint('[AppCheck] $aivyAppCheckStatus');
       return;
     }
 
@@ -39,7 +53,10 @@ Future<void> activateAivyAppCheck() async {
       providerAndroid: const AndroidDebugProvider(),
     );
     // Warm token so the debug secret is emitted to logcat on first launch.
-    await FirebaseAppCheck.instance.getToken();
+    final token = await FirebaseAppCheck.instance.getToken();
+    aivyAppCheckStatus = (token == null || token.isEmpty)
+        ? 'android: debug provider gave no token'
+        : 'android: debug token ok (register it in Firebase Console)';
     if (kDebugMode) {
       debugPrint(
         '[AppCheck] Activated (debug provider). '
@@ -48,6 +65,7 @@ Future<void> activateAivyAppCheck() async {
       );
     }
   } catch (e, st) {
+    aivyAppCheckStatus = 'failed: $e';
     debugPrint('[AppCheck] activate failed (non-fatal): $e\n$st');
   }
 }

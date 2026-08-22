@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../firebase/aivy_app_check_setup.dart';
 import '../home_voice_qa_session.dart';
 import 'aivy_business_snapshot_service.dart';
 import 'aivy_business_tools.dart';
@@ -640,8 +641,7 @@ class GeminiLiveVoiceSession {
       return 'Please sign in again.';
     }
     if (lower.contains('websocket') || lower.contains('socket')) {
-      return 'Live socket band. Firebase → AI Logic ON rakho, aur API key '
-          'HTTP referrer me https://aivy-5c031.web.app/* add karo. ($s)';
+      return 'Live socket band. App Check: $aivyAppCheckStatus. ($s)';
     }
     if (lower.contains('network') || lower.contains('timeout')) {
       return 'Internet / Firebase connection issue — dubara try karein. ($s)';
