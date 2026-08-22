@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/aivy_build_id.dart';
 import '../../../core/voice/home_voice_qa_session.dart';
 
 /// Voice-first home: listen → report/memory Q&A → spoken answer (loop until stop).
@@ -453,7 +454,8 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                       Text(
                         'mic ${_qa.liveMicChunksSeen}/${_qa.liveMicChunks}'
                         ' · server ${_qa.liveServerMessages}'
-                        ' · ${_qa.lastDb.toStringAsFixed(0)}dB',
+                        ' · ${_qa.lastDb.toStringAsFixed(0)}dB'
+                        ' · $kAivyBuildId',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: Colors.white38,
                               fontFeatures: const [FontFeature.tabularFigures()],

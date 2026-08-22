@@ -41,7 +41,8 @@ jobs:
       - name: Build web (release)
         run: |
           flutter build web --release --no-wasm-dry-run \
-            --dart-define=AIVY_RECAPTCHA_SITE_KEY="${{ vars.AIVY_RECAPTCHA_SITE_KEY }}"
+            --dart-define=AIVY_RECAPTCHA_SITE_KEY="${{ vars.AIVY_RECAPTCHA_SITE_KEY }}" \
+            --dart-define=AIVY_BUILD_ID="${GITHUB_SHA:0:7}"
 
       - name: Set up Node
         uses: actions/setup-node@v4

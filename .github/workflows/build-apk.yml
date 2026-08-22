@@ -52,7 +52,9 @@ jobs:
       # run and can be registered in Firebase once. Play Store upload would need
       # a real, secret keystore instead.
       - name: Build APK (release)
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=AIVY_BUILD_ID="${GITHUB_SHA:0:7}"
 
       - name: Show signing SHA-1
         id: sha
