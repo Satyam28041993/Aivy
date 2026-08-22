@@ -47,10 +47,22 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # The release build signs with the debug keys (android/app/build.gradle.kts),
-      # so no keystore secret is needed. Play Store upload would need a real one.
+      # The release build signs with the committed QA key
+      # (android/app/aivy-qa.keystore), so the fingerprint is the same on every
+      # run and can be registered in Firebase once. Play Store upload would need
+      # a real, secret keystore instead.
       - name: Build APK (release)
         run: flutter build apk --release
+
+      - name: Show signing SHA-1
+        id: sha
+        run: |
+          sha1=$(keytool -list -v \
+            -keystore android/app/aivy-qa.keystore \
+            -storepass aivyqa123 -alias aivyqa \
+            | grep -oE 'SHA1: [0-9A-F:]+' | cut -d' ' -f2)
+          echo "Register this in Firebase Console -> Project settings -> Android app: $sha1"
+          echo "sha1=$sha1" >> "$GITHUB_OUTPUT"
 
       - name: Name the APK
         id: name
@@ -80,7 +92,10 @@ jobs:
             --title "${{ steps.name.outputs.tag }}" \
             --notes "APK built from \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA}\`.
 
-          Signed with debug keys, so Android will ask you to allow install from
+          Signing SHA-1: \`${{ steps.sha.outputs.sha1 }}\` — this must be registered in
+          Firebase Console → Project settings → Android app, or Google sign-in fails.
+
+          Signed with a QA key, so Android will ask you to allow install from
           unknown sources. Uninstall any older Aivy build first if the signature
           differs." \
             --target "${GITHUB_SHA}"

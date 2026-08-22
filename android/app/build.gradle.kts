@@ -33,11 +33,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // A checked-in throwaway key, used only for sideloaded QA APKs.
+        //
+        // CI used to sign releases with the local debug keystore, but that file is
+        // generated fresh on every runner, so the APK's SHA-1 changed each build and
+        // could never be registered in Firebase -- Google sign-in failed with
+        // DEVELOPER_ERROR every time. A fixed key gives a stable fingerprint:
+        //   SHA-1 CF:1C:F9:09:41:A5:C2:45:A9:4E:50:C8:AA:B2:FF:E9:52:44:A6:90
+        // Register that once in Firebase Console -> Project settings -> Android app.
+        //
+        // Play Store releases must use a real, secret upload key instead.
+        create("qa") {
+            storeFile = file("aivy-qa.keystore")
+            storePassword = "aivyqa123"
+            keyAlias = "aivyqa"
+            keyPassword = "aivyqa123"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("qa")
         }
     }
 }

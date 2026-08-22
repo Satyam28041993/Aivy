@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Exception: a throwaway key for sideloaded QA APKs, deliberately committed so
+# every CI build signs with the same SHA-1 and Google sign-in keeps working.
+# Its password is in app/build.gradle.kts. Never use it for a Play Store release.
+!app/aivy-qa.keystore
