@@ -161,6 +161,17 @@ class GeminiLiveVoiceSession {
     if (_sessionActive || _disposed) {
       return;
     }
+    if (kIsWeb) {
+      // firebase_ai sends the App Check and Auth tokens as WebSocket headers,
+      // which a browser cannot set, so on web the request always arrives
+      // unverified and enforcement closes the socket with 1008. Say so, rather
+      // than letting it read as a token that is somehow wrong.
+      throw StateError(
+        'Live voice browser me nahi chalti — App Check token WebSocket header '
+        'me jata hai aur browser headers bhej nahi sakta. App (APK) me chalti '
+        'hai; web par purana voice mode use karein.',
+      );
+    }
 
     var stage = 'mic-permission';
     try {

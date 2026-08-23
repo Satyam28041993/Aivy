@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, debugPrint;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -45,7 +45,17 @@ class HomeVoiceQaSession {
     AivyVoiceAskService? ask,
     GoogleHomeVoiceService? tts,
     GeminiLiveVoiceSession? geminiLive,
-    this.useGeminiLive = true,
+    // Live is native-only. firebase_ai carries the App Check and Auth tokens in
+    // WebSocket headers, and browsers cannot set headers on a WebSocket, so the
+    // SDK drops them on web:
+    //   final ws = kIsWeb
+    //       ? WebSocketChannel.connect(uri)
+    //       : IOWebSocketChannel.connect(uri, headers: headers);
+    // AI Logic then sees an unverified request and, with App Check enforced,
+    // closes the socket with 1008 'App Check token is invalid'. Nothing on our
+    // side can attach that token, so the web build uses the legacy pipeline
+    // rather than failing on every attempt.
+    this.useGeminiLive = !kIsWeb,
   }) : _repository = repository ?? ChatRepository(),
        _ask = ask ?? AivyVoiceAskService(),
        _tts = tts ?? GoogleHomeVoiceService(),
