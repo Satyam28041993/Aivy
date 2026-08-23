@@ -3,11 +3,12 @@ import 'dart:math' as math;
 import 'dart:ui' show FontFeature, ImageFilter, lerpDouble;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, HapticFeedback;
 
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/config/aivy_build_id.dart';
+import '../../../core/firebase/aivy_app_check_debug_token.dart';
 import '../../../core/voice/home_voice_qa_session.dart';
 
 /// Voice-first home: listen → report/memory Q&A → spoken answer (loop until stop).
@@ -33,9 +34,13 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
 
   late final HomeVoiceQaSession _qa;
 
+  /// Shown so a sideloaded build can be registered without a computer.
+  String? _appCheckDebugToken;
+
   @override
   void initState() {
     super.initState();
+    unawaited(_loadAppCheckDebugToken());
     for (var i = 0; i < 260; i++) {
       _stars.add(
         _Star(
@@ -162,6 +167,22 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   }
 
   Future<void> _onMicTap() => _qa.toggleMic();
+
+  Future<void> _loadAppCheckDebugToken() async {
+    // The provider logs the secret while App Check activates, so the buffer may
+    // not hold it yet on the very first frame.
+    for (final wait in const [Duration.zero, Duration(seconds: 3)]) {
+      await Future<void>.delayed(wait);
+      final token = await AivyAppCheckDebugToken.read();
+      if (!mounted) {
+        return;
+      }
+      if (token != null) {
+        setState(() => _appCheckDebugToken = token);
+        return;
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -462,6 +483,13 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
                             ),
                       ),
                     ],
+                  ],
+
+                  // Registering this in Firebase Console is what lets a
+                  // sideloaded build past App Check enforcement.
+                  if (_appCheckDebugToken != null) ...[
+                    const SizedBox(height: 8),
+                    _AppCheckDebugTokenRow(token: _appCheckDebugToken!),
                   ],
 
                   // Running conversation transcript (Gemini-style)
@@ -1524,6 +1552,57 @@ class _PhaseDotsState extends State<_PhaseDots>
           }),
         );
       },
+    );
+  }
+}
+
+/// The App Check debug secret, with a copy button.
+///
+/// A sideloaded APK cannot use Play Integrity, so App Check accepts it only
+/// once this secret is on the allow list in Firebase Console -> App Check ->
+/// Apps -> Manage debug tokens. It is normally reachable only over adb.
+class _AppCheckDebugTokenRow extends StatelessWidget {
+  const _AppCheckDebugTokenRow({required this.token});
+
+  final String token;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Colors.white38,
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          Text('App Check debug token', style: style),
+          const SizedBox(height: 2),
+          SelectableText(
+            token,
+            textAlign: TextAlign.center,
+            style: style?.copyWith(color: Colors.white60),
+          ),
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: token));
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Copied — Firebase Console → App Check → Apps → '
+                    'Manage debug tokens me paste karein.',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 14),
+            label: const Text('Copy'),
+            style: TextButton.styleFrom(foregroundColor: Colors.white54),
+          ),
+        ],
+      ),
     );
   }
 }
