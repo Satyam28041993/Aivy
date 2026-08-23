@@ -3,6 +3,7 @@
 /// These mirror the shapes `functions/src/agent/` returns. Parsing is
 /// deliberately forgiving — a field the backend adds later should not blank out
 /// a conversation on an older build.
+library;
 
 /// One row on a confirm card, e.g. "Kab" / "Ravivar, 24 August, 11:00 AM".
 class AgentCardLine {

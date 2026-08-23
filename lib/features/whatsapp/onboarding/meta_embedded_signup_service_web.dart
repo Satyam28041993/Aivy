@@ -5,6 +5,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
+// `flutter analyze` resolves this file against a non-web platform, where
+// dart:js_util does not exist, so it reports the URI as missing. The web build
+// compiles it fine — this file is only ever reached through a conditional
+// import from `meta_embedded_signup_service.dart`.
+// ignore: uri_does_not_exist
 import 'dart:js_util' as js_util;
 
 import '../../../../core/config/meta_whatsapp_config_resolver.dart';
