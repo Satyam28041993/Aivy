@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../chat/data/chat_repository.dart';
@@ -31,7 +32,16 @@ class _HomeShellState extends State<HomeShell> {
   late final WhatsAppInboxRepository _whatsAppInboxRepository;
   StreamSubscription<int>? _unreadWhatsAppSub;
   int _unreadWhatsAppCount = 0;
-  int _currentIndex = 0;
+  int _currentIndex = _visibleTabs.first;
+
+  /// Screen indices offered on this platform, in tab order.
+  ///
+  /// The voice home is native-only -- neither voice pipeline works in a
+  /// browser -- so the web build drops that tab and opens on Chat. Indices
+  /// stay canonical, so the rest of the shell keeps addressing screens by
+  /// the same number on both platforms.
+  static const List<int> _visibleTabs =
+      kIsWeb ? <int>[1, 2, 3, 4, 5] : <int>[0, 1, 2, 3, 4, 5];
   int _reportsResyncTick = 0;
   AgentInsights? _launchInsights;
   String? _activeChatId;
@@ -195,6 +205,51 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+
+  /// Every tab the shell can show, indexed by screen index.
+  List<NavigationDestination> get _allDestinations => [
+    NavigationDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home_rounded),
+      label: 'Home',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.chat_bubble_outline),
+      selectedIcon: Icon(Icons.chat_bubble),
+      label: 'Chat',
+    ),
+    NavigationDestination(
+      icon: _unreadWhatsAppCount > 0
+          ? Badge(
+              label: Text('$_unreadWhatsAppCount'),
+              child: const Icon(Icons.mark_chat_unread_outlined),
+            )
+          : const Icon(Icons.mark_chat_read_outlined),
+      selectedIcon: _unreadWhatsAppCount > 0
+          ? Badge(
+              label: Text('$_unreadWhatsAppCount'),
+              child: const Icon(Icons.mark_chat_unread_rounded),
+            )
+          : const Icon(Icons.mark_chat_read_rounded),
+      label: 'WhatsApp',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.dashboard_outlined),
+      selectedIcon: Icon(Icons.dashboard_rounded),
+      label: 'Dashboard',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.bar_chart_outlined),
+      selectedIcon: Icon(Icons.bar_chart_rounded),
+      label: 'Reports',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.more_horiz),
+      selectedIcon: Icon(Icons.more_horiz),
+      label: 'More',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -202,8 +257,9 @@ class _HomeShellState extends State<HomeShell> {
     final isChat = _currentIndex == 1;
     final isJarvisNav = isVoiceHome || isChat;
 
+    final destinations = _allDestinations;
     final screens = [
-      AivyVoiceHomeScreen(userId: widget.userId),
+      if (kIsWeb) const SizedBox.shrink() else AivyVoiceHomeScreen(userId: widget.userId),
       ChatScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
@@ -279,54 +335,15 @@ class _HomeShellState extends State<HomeShell> {
           }),
         ),
         child: NavigationBar(
-          selectedIndex: _currentIndex,
+          selectedIndex: _visibleTabs.indexOf(_currentIndex),
           surfaceTintColor: Colors.transparent,
           onDestinationSelected: (index) {
             setState(() {
-              _currentIndex = index;
+              _currentIndex = _visibleTabs[index];
             });
           },
           destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              selectedIcon: Icon(Icons.chat_bubble),
-              label: 'Chat',
-            ),
-            NavigationDestination(
-              icon: _unreadWhatsAppCount > 0
-                  ? Badge(
-                      label: Text('$_unreadWhatsAppCount'),
-                      child: const Icon(Icons.mark_chat_unread_outlined),
-                    )
-                  : const Icon(Icons.mark_chat_read_outlined),
-              selectedIcon: _unreadWhatsAppCount > 0
-                  ? Badge(
-                      label: Text('$_unreadWhatsAppCount'),
-                      child: const Icon(Icons.mark_chat_unread_rounded),
-                    )
-                  : const Icon(Icons.mark_chat_read_rounded),
-              label: 'WhatsApp',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.bar_chart_outlined),
-              selectedIcon: Icon(Icons.bar_chart_rounded),
-              label: 'Reports',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.more_horiz),
-              selectedIcon: Icon(Icons.more_horiz),
-              label: 'More',
-            ),
+            for (final tab in _visibleTabs) destinations[tab],
           ],
         ),
       ),
