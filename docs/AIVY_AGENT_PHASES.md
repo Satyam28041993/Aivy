@@ -34,7 +34,7 @@ Flutter code run kiya.
 | 3 | Write tools | 8 tools → drafts + `commit.ts` | vitest — Firestore mocked | ✅ 23/23 |
 | 4 | Read tools | 7 tools + `timeWindow.ts` | vitest | ✅ 12/12 |
 | 5 | Agent loop | registry + system prompt + loop | vitest — scripted model | ✅ 13/13 |
-| 6 | Callables | `aivyAgent`, `aivyAgentCommit` + index wiring | `npm run build` + vitest | ⬜ |
+| 6 | Callables | `chatStore.ts`, 3 callables, indexes | `npm run build` + vitest | ✅ 162/162 |
 | 7 | Flutter data | models, repository, service | analyzer-safe code (run locally) | ⬜ |
 | 8 | Flutter UI | screen, bubbles, action card, history drawer | as above | ⬜ |
 | 9 | Wiring | HomeShell tab | as above | ⬜ |
@@ -144,3 +144,19 @@ overdue tasks + aaj ka kaam + overdue payments + risky clients, ek call me.
 2. `hops` off-by-one — budget khatam hone par `maxHops + 1` return karta tha
 
 `npm run build` ✅ · poora suite ✅ **158/158**
+
+### Phase 6 — Callables ✅
+
+- `chatStore.ts` — chats `users/{uid}/agent_chats/{chatId}` + `/messages`.
+  History model ke liye `modelParts` se rebuild hoti hai (display text se nahi), warna
+  tool calls aur unke responses history me se gayab ho jaate.
+- `aivyAgent` — ek turn: memory + history + pending cards → system prompt → loop →
+  dono messages Firestore me. Client sirf stream padhta hai.
+- `aivyAgentCommit` — "Sahi hai" par asli write; `noteSaved` se agla turn jaanta hai ki
+  abhi kya save hua (isse "usko" bind hota hai).
+- `aivyAgentChats` — list / new / rename / delete.
+- `index.ts` me export, `firestore.indexes.json` me `agent_drafts` ke 2 composite index.
+
+Firestore rules pehle se recursive hain (`users/{userId}/{document=**}`) — naya rule nahi chahiye.
+
+`npm run build` ✅ · poora suite ✅ **162/162**
