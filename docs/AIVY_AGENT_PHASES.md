@@ -32,8 +32,8 @@ Flutter code run kiya.
 | 1 | Foundations | `nameNormalize.ts`, `dateResolve.ts` | vitest — normalize parity + date cases incl. 3 bug fixes | ✅ 41/41 |
 | 2 | Store layer | `draftStore.ts`, `clientResolve.ts`, `draftTypes.ts`, `toolTypes.ts` | vitest | ✅ 5/5 |
 | 3 | Write tools | 8 tools → drafts + `commit.ts` | vitest — Firestore mocked | ✅ 23/23 |
-| 4 | Read tools | 6 tools | vitest — window math, row shaping | ⬜ |
-| 5 | Agent loop | tool registry + Gemini function-calling loop | vitest — loop with a fake model | ⬜ |
+| 4 | Read tools | 7 tools + `timeWindow.ts` | vitest | ✅ 12/12 |
+| 5 | Agent loop | registry + system prompt + loop | vitest — scripted model | ✅ 13/13 |
 | 6 | Callables | `aivyAgent`, `aivyAgentCommit` + index wiring | `npm run build` + vitest | ⬜ |
 | 7 | Flutter data | models, repository, service | analyzer-safe code (run locally) | ⬜ |
 | 8 | Flutter UI | screen, bubbles, action card, history drawer | as above | ⬜ |
@@ -100,3 +100,47 @@ Test (23) me pinned:
 | "cancel" client slot me | reject |
 
 `npm run build` ✅ · poora suite ✅ **133/133**
+
+### Phase 4 — Read tools ✅
+
+`timeWindow.ts` — 10 named windows (`today`…`overdue`/`all`). Test me pinned:
+`this_week` **Monday–Sunday** hai (rolling 7 din nahi), month windows calendar month hain.
+
+`tools/readTools.ts` — 7 tools: `get_agenda` · `get_important` · `find_records` ·
+`get_pending_payments` · `get_client_summary` · `search_clients` · `web_search`
+
+`get_important` wahi sawaal hai jiska aaj koi jawaab nahi tha ("koi important cheez hai kya") —
+overdue tasks + aaj ka kaam + overdue payments + risky clients, ek call me.
+
+`vitest` ✅ 12/12
+
+### Phase 5 — Agent loop ✅
+
+- `toolRegistry.ts` — 15 tool declarations. Description model ke liye instruction ki tarah
+  likhi hai ("the words the user actually said, do not convert them") — yahi model ko date
+  banane se rokta hai.
+- `systemPrompt.ts` — persona. Teen kaam saaf: **baat-cheet**, **sawaal** (web search),
+  **kaam** (tools). Isme likha hai ki har message par tool mat chalao, aur bore ho rahe user
+  se dhang se baat karo.
+- `agentLoop.ts` — model → tool → model loop, bounded hops, transport injectable.
+
+**Koi intent classifier nahi, koi keyword gate nahi, koi routing table nahi.**
+
+13 tests (scripted model se, bina network):
+
+| Case | Expect |
+| --- | --- |
+| "bore ho raha hu" | koi tool nahi chalta, seedha jawaab |
+| "aaj kisko call karna hai" | `get_agenda` → result → reply |
+| quotation + meeting ek message me | **do** tool call ek turn me |
+| ambiguous client | failure model ko jaati hai, wo poochhta hai |
+| unknown tool | dispatch nahi hota |
+| write tool | model ko `saved: false` dikhta hai |
+| hop budget | maxHops par rukta hai |
+
+**Do asli bug mile aur theek kiye** (test likhne se hi pakde gaye):
+1. `contents` array transport ko live reference milta tha aur baad me mutate hota tha —
+   ab snapshot jaata hai
+2. `hops` off-by-one — budget khatam hone par `maxHops + 1` return karta tha
+
+`npm run build` ✅ · poora suite ✅ **158/158**
