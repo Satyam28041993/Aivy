@@ -35,10 +35,10 @@ Flutter code run kiya.
 | 4 | Read tools | 7 tools + `timeWindow.ts` | vitest | ✅ 12/12 |
 | 5 | Agent loop | registry + system prompt + loop | vitest — scripted model | ✅ 13/13 |
 | 6 | Callables | `chatStore.ts`, 3 callables, indexes | `npm run build` + vitest | ✅ 162/162 |
-| 7 | Flutter data | models, repository, service | analyzer-safe code (run locally) | ⬜ |
-| 8 | Flutter UI | screen, bubbles, action card, history drawer | as above | ⬜ |
-| 9 | Wiring | HomeShell tab | as above | ⬜ |
-| 10 | Final pass | poora build + test + Q&A walkthrough | sab | ⬜ |
+| 7 | Flutter data | `agent_models.dart`, `agent_service.dart` | Dart test likha — **aapki machine par chalega** | ✅ code |
+| 8 | Flutter UI | screen + 3 widgets | static review (analyzer nahi hai) | ✅ code |
+| 9 | Wiring | HomeShell me 'Aivy' tab | screens/destinations count match | ✅ |
+| 10 | Final pass | scenario walkthrough | vitest | ✅ 11/11 |
 
 ---
 
@@ -160,3 +160,49 @@ overdue tasks + aaj ka kaam + overdue payments + risky clients, ek call me.
 Firestore rules pehle se recursive hain (`users/{userId}/{document=**}`) — naya rule nahi chahiye.
 
 `npm run build` ✅ · poora suite ✅ **162/162**
+
+### Phase 7–9 — Flutter side ✅ (code likha, run nahi kar paya)
+
+- `models/agent_models.dart` — draft, message, chat, turn, commit result.
+  Parsing jaan-boojh kar forgiving hai (backend baad me field jode to purani build
+  conversation blank na kare).
+- `data/agent_service.dart` — callables + Firestore streams. Reply **stream se** aati hai,
+  return value se nahi — isliye UI khud update hoti hai.
+- `presentation/aivy_agent_screen.dart` — ek input, koi menu nahi, koi number nahi.
+- `widgets/agent_action_card.dart` — confirm card. "save nahi hua" badge saaf dikhta hai.
+  **"Badlo" me koi field picker nahi** — cursor wapas composer me jaata hai, kyunki
+  "12 baje kar do" bol kar theek karna hi is screen ka point hai.
+- `widgets/agent_message_bubble.dart` — bubble + typing indicator
+- `widgets/agent_history_drawer.dart` — history, rename, delete, nayi baat
+- `home_shell.dart` — naya **"Aivy"** tab index 1 par. Purana Chat 2 par shift hua,
+  saare index-based conditions (appBar switch, `_openChatTab`, `extendBodyBehindAppBar`)
+  update kiye. **Purani chat screen chhui nahi** — jab naya theek chale, tab hategi.
+
+⚠️ **Imandari se:** is machine par Flutter/Dart SDK nahi hai. Maine `flutter analyze` ya
+`flutter test` **nahi** chalaya. Jo kiya: bracket-balance check, unused/missing import scan,
+aur har cross-file symbol manually verify kiya. `test/agent_models_test.dart` likha hai —
+aap `flutter test` chala kar confirm kar lijiye.
+
+### Phase 10 — Scenario walkthrough ✅
+
+`scenarios.test.ts` — scripted model, par neeche sab asli: asli tool registry, asli write
+tools, asli date resolver, asli client resolution. Sirf Firestore stub hai.
+
+| Scenario | Result |
+| --- | --- |
+| "kal mera meeting hai 11 baje rohan ke sath new labels ke regarding" | ✅ **11:00 AM** (11 PM nahi), client + agenda + auto-reminder |
+| "rohan ko 50000 ka quotation diya" | ✅ draft, ₹50,000 |
+| "kisko quotation diya?" | ✅ jawaab milta hai, **kuch record nahi hota** |
+| Dono ek message me | ✅ **do card**, ek turn me |
+| "kal karan se 30000 payment aaya tha" | ✅ **22 August** (past tense), sahi due par |
+| "aaj kisko call karna hai?" | ✅ sirf aaj ka, kal ka leak nahi hota |
+| "koi important cheez hai kya?" | ✅ overdue + aaj + overdue paisa |
+| "aivy yaar main bore ho raha hu" | ✅ **koi tool nahi chalta**, baat karti hai |
+| "printing pe GST kitna?" | ✅ web search |
+| Do "Rohan" | ✅ poochhti hai, **kuch nahi likhti** |
+| Amount missing | ✅ poochhti hai, guess nahi karti |
+
+Ek bug is test ne pakda: mera Firestore stub har collection ko same docs de raha tha,
+jisse payment row `reminders` me gin raha tha. Stub ko collection-aware kiya.
+
+`npm run build` ✅ · poora backend suite ✅ **173/173**

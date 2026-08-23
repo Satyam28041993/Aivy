@@ -12,6 +12,7 @@ import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../dashboard/presentation/reports_screen.dart';
 import '../../whatsapp/data/whatsapp_inbox_repository.dart';
 import '../../whatsapp/presentation/whatsapp_conversations_screen.dart';
+import '../../agent/presentation/aivy_agent_screen.dart';
 import 'aivy_voice_home_screen.dart';
 import 'more_screen.dart';
 
@@ -141,7 +142,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openChatTab() {
     setState(() {
-      _currentIndex = 1;
+      _currentIndex = 2;
     });
   }
 
@@ -163,16 +164,18 @@ class _HomeShellState extends State<HomeShell> {
   PreferredSizeWidget? _buildAppBar(BuildContext context) {
     final theme = Theme.of(context);
     switch (_currentIndex) {
+      // Home, Aivy, Chat and Dashboard all draw their own headers.
       case 0:
       case 1:
-      case 3:
-        return null;
       case 2:
+      case 4:
+        return null;
+      case 3:
         return AppBar(
           title: const Text('WhatsApp Inbox'),
           backgroundColor: theme.colorScheme.surface,
         );
-      case 4:
+      case 5:
         return AppBar(
           title: const Text('Reports'),
           backgroundColor: theme.colorScheme.surface,
@@ -186,7 +189,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         );
-      case 5:
+      case 6:
       default:
         return AppBar(
           title: const Text('More'),
@@ -199,11 +202,15 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isVoiceHome = _currentIndex == 0;
-    final isChat = _currentIndex == 1;
-    final isJarvisNav = isVoiceHome || isChat;
+    // Tab 1 is the new agent screen; the old Chat tab moved to 2 and will be
+    // retired once the agent screen has replaced it.
+    final isAgent = _currentIndex == 1;
+    final isChat = _currentIndex == 2;
+    final isJarvisNav = isVoiceHome || isAgent || isChat;
 
     final screens = [
       AivyVoiceHomeScreen(userId: widget.userId),
+      AivyAgentScreen(userId: widget.userId),
       ChatScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
@@ -230,8 +237,8 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: isVoiceHome || _currentIndex == 3,
-      backgroundColor: (isChat || isVoiceHome)
+      extendBodyBehindAppBar: isVoiceHome || _currentIndex == 4,
+      backgroundColor: (isChat || isVoiceHome || isAgent)
           ? const Color(0xFF030712)
           : theme.scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
@@ -291,6 +298,11 @@ class _HomeShellState extends State<HomeShell> {
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home_rounded),
               label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.auto_awesome_outlined),
+              selectedIcon: Icon(Icons.auto_awesome),
+              label: 'Aivy',
             ),
             NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline),
