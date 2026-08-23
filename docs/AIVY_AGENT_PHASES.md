@@ -30,8 +30,8 @@ Flutter code run kiya.
 | # | Phase | Deliverable | Test | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Foundations | `nameNormalize.ts`, `dateResolve.ts` | vitest — normalize parity + date cases incl. 3 bug fixes | ✅ 41/41 |
-| 2 | Store layer | `draftStore.ts`, `clientResolve.ts` | vitest (pure logic) | ⬜ |
-| 3 | Write tools | 7 tools → drafts | vitest — draft shape == existing Firestore shape | ⬜ |
+| 2 | Store layer | `draftStore.ts`, `clientResolve.ts`, `draftTypes.ts`, `toolTypes.ts` | vitest | ✅ 5/5 |
+| 3 | Write tools | 8 tools → drafts + `commit.ts` | vitest — Firestore mocked | ✅ 23/23 |
 | 4 | Read tools | 6 tools | vitest — window math, row shaping | ⬜ |
 | 5 | Agent loop | tool registry + Gemini function-calling loop | vitest — loop with a fake model | ⬜ |
 | 6 | Callables | `aivyAgent`, `aivyAgentCommit` + index wiring | `npm run build` + vitest | ⬜ |
@@ -64,3 +64,39 @@ Naya support jo pehle nahi tha: Hindi weekdays (`somvar`…`ravivar`), `is/agle/
 `agle/pichhle mahine`, `15 tarikh`, `agle mahine ki 5 tarikh`, `N din pehle`.
 
 `npm run build` ✅ · poora suite ✅ **105/105** (baseline 64 + naye 41)
+
+### Phase 2 — Store layer ✅
+
+- `clientResolve.ts` — exact/prefix/particle-key matching, ported from
+  `ClientRepository.resolveForPaymentName`. Teen outcome: `single` / `ambiguous` /
+  `not_found` — model **kabhi guess nahi karta**, tool poochhta hai.
+- `looksLikeNoiseClientName` — "cancel", "1", "hello" jaise words client naam nahi ban sakte
+- `draftTypes.ts` + `draftStore.ts` — two-phase write ki neev
+- `toolTypes.ts` — tool ↔ model contract (failure bhi ek jawaab hai, error nahi)
+
+`vitest` ✅ 5/5
+
+### Phase 3 — Write tools ✅
+
+`tools/writeTools.ts` — 8 tools, har ek draft banata hai, **kuch save nahi karta**:
+`create_meeting` · `create_reminder` · `record_quotation` · `record_order` ·
+`record_payment_due` · `record_payment_received` · `remember_fact` · `cancel_draft`
+
+`commit.ts` — confirm hone par asli Firestore write. Har shape purane repository se
+mirror ki hai (reminders / quotations / orders / payments), warna 21 purane analytics
+queries naya data dekh hi nahi paate. Payment settlement transaction me hai.
+
+Test (23) me pinned:
+
+| Case | Expect |
+| --- | --- |
+| "kal 11 baje rohan ke saath meeting, new labels" | `Ravivar, 24 August, **11:00 AM**` + client + agenda + auto-reminder |
+| Date na ho | `needs_date` — draft **nahi** banta |
+| Do "Rohan" hon | `needs_client_choice` + dono options |
+| Naya client | `createNew: true`, commit par banega |
+| "kal payment aaya" | past tense → **22 August** |
+| Exact-amount due | wahi due target hota hai |
+| Kai dues | purane se adjust, oldest-first |
+| "cancel" client slot me | reject |
+
+`npm run build` ✅ · poora suite ✅ **133/133**
