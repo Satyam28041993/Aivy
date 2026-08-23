@@ -137,6 +137,15 @@ class HomeVoiceQaSession {
   /// Legacy slow pipeline after user opts in or repeated Gemini failures.
   bool get isLegacyVoiceMode => _geminiLiveFailed || !useGeminiLive;
 
+  /// Whether voice can run at all on this platform.
+  ///
+  /// Neither pipeline reaches the web. Live carries its App Check token in
+  /// WebSocket headers, which a browser cannot set, so AI Logic closes the
+  /// socket; and the legacy pipeline records to a local file and uploads it,
+  /// which [uploadVoiceToStorage] refuses on web by design. Offering a mic
+  /// button there only produces a different error each time.
+  static const bool isSupportedOnThisPlatform = !kIsWeb;
+
   int _geminiLiveFailCount = 0;
 
   bool get isRecording => phase == HomeVoiceQaPhase.listening;
@@ -222,6 +231,13 @@ class HomeVoiceQaSession {
 
   /// Mic tap: idle → start; listening → stop & send (or end Live session).
   Future<void> toggleMic() async {
+    if (!isSupportedOnThisPlatform) {
+      onError?.call(
+        'Voice sirf mobile app me chalti hai — browser me mic recording '
+        'support nahi hai. Web par Chat use karein.',
+      );
+      return;
+    }
     if (useGeminiLive && !_geminiLiveFailed) {
       await _toggleMicGeminiLive();
       return;

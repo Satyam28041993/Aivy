@@ -126,6 +126,9 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   }
 
   String get _subtitle {
+    if (!HomeVoiceQaSession.isSupportedOnThisPlatform) {
+      return 'Voice sirf mobile app me chalti hai. Web par Chat use karein.';
+    }
     if (_qa.isLegacyVoiceMode) {
       switch (_qa.phase) {
         case HomeVoiceQaPhase.idle:
