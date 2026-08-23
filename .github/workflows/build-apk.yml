@@ -53,8 +53,7 @@ jobs:
       # a real, secret keystore instead.
       - name: Build APK (release)
         run: |
-          flutter build apk --release \
-            --dart-define=AIVY_BUILD_ID="${GITHUB_SHA:0:7}"
+          flutter build apk --release
 
       - name: Show signing SHA-1
         id: sha

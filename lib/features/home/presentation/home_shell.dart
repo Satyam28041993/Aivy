@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../chat/data/chat_repository.dart';
@@ -13,7 +12,6 @@ import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../dashboard/presentation/reports_screen.dart';
 import '../../whatsapp/data/whatsapp_inbox_repository.dart';
 import '../../whatsapp/presentation/whatsapp_conversations_screen.dart';
-import 'aivy_voice_home_screen.dart';
 import 'more_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -32,16 +30,7 @@ class _HomeShellState extends State<HomeShell> {
   late final WhatsAppInboxRepository _whatsAppInboxRepository;
   StreamSubscription<int>? _unreadWhatsAppSub;
   int _unreadWhatsAppCount = 0;
-  int _currentIndex = _visibleTabs.first;
-
-  /// Screen indices offered on this platform, in tab order.
-  ///
-  /// The voice home is native-only -- neither voice pipeline works in a
-  /// browser -- so the web build drops that tab and opens on Chat. Indices
-  /// stay canonical, so the rest of the shell keeps addressing screens by
-  /// the same number on both platforms.
-  static const List<int> _visibleTabs =
-      kIsWeb ? <int>[1, 2, 3, 4, 5] : <int>[0, 1, 2, 3, 4, 5];
+  int _currentIndex = 0;
   int _reportsResyncTick = 0;
   AgentInsights? _launchInsights;
   String? _activeChatId;
@@ -151,7 +140,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openChatTab() {
     setState(() {
-      _currentIndex = 1;
+      _currentIndex = 0;
     });
   }
 
@@ -173,16 +162,16 @@ class _HomeShellState extends State<HomeShell> {
   PreferredSizeWidget? _buildAppBar(BuildContext context) {
     final theme = Theme.of(context);
     switch (_currentIndex) {
+      // Chat and Dashboard draw their own headers.
       case 0:
-      case 1:
-      case 3:
-        return null;
       case 2:
+        return null;
+      case 1:
         return AppBar(
           title: const Text('WhatsApp Inbox'),
           backgroundColor: theme.colorScheme.surface,
         );
-      case 4:
+      case 3:
         return AppBar(
           title: const Text('Reports'),
           backgroundColor: theme.colorScheme.surface,
@@ -196,7 +185,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         );
-      case 5:
+      case 4:
       default:
         return AppBar(
           title: const Text('More'),
@@ -208,11 +197,6 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Every tab the shell can show, indexed by screen index.
   List<NavigationDestination> get _allDestinations => [
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home_rounded),
-      label: 'Home',
-    ),
     NavigationDestination(
       icon: Icon(Icons.chat_bubble_outline),
       selectedIcon: Icon(Icons.chat_bubble),
@@ -253,13 +237,10 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isVoiceHome = _currentIndex == 0;
-    final isChat = _currentIndex == 1;
-    final isJarvisNav = isVoiceHome || isChat;
+    final isChat = _currentIndex == 0;
 
     final destinations = _allDestinations;
     final screens = [
-      if (kIsWeb) const SizedBox.shrink() else AivyVoiceHomeScreen(userId: widget.userId),
       ChatScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
@@ -286,10 +267,9 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: isVoiceHome || _currentIndex == 3,
-      backgroundColor: (isChat || isVoiceHome)
-          ? const Color(0xFF030712)
-          : theme.scaffoldBackgroundColor,
+      extendBodyBehindAppBar: isChat || _currentIndex == 2,
+      backgroundColor:
+          isChat ? const Color(0xFF030712) : theme.scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
       body: IndexedStack(
         index: _currentIndex,
@@ -303,14 +283,14 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor: isJarvisNav
+          backgroundColor: isChat
               ? const Color(0xFF0E0E14)
               : theme.colorScheme.surface,
-          indicatorColor: isJarvisNav
+          indicatorColor: isChat
               ? const Color(0xFF6366F1).withValues(alpha: 0.35)
               : theme.colorScheme.secondaryContainer,
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (!isJarvisNav) {
+            if (!isChat) {
               return theme.textTheme.labelMedium;
             }
             if (states.contains(WidgetState.selected)) {
@@ -325,7 +305,7 @@ class _HomeShellState extends State<HomeShell> {
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final base = theme.iconTheme;
-            if (!isJarvisNav) {
+            if (!isChat) {
               return base.copyWith(color: theme.colorScheme.onSurfaceVariant);
             }
             if (states.contains(WidgetState.selected)) {
@@ -335,15 +315,15 @@ class _HomeShellState extends State<HomeShell> {
           }),
         ),
         child: NavigationBar(
-          selectedIndex: _visibleTabs.indexOf(_currentIndex),
+          selectedIndex: _currentIndex,
           surfaceTintColor: Colors.transparent,
           onDestinationSelected: (index) {
             setState(() {
-              _currentIndex = _visibleTabs[index];
+              _currentIndex = index;
             });
           },
           destinations: [
-            for (final tab in _visibleTabs) destinations[tab],
+            ...destinations,
           ],
         ),
       ),
