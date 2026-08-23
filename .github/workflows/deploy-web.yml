@@ -61,6 +61,15 @@ jobs:
       - name: Deploy Hosting
         run: firebase deploy --only hosting --project aivy-5c031 --non-interactive
 
+      # Rules and indexes ship with the functions, not on their own switch: the
+      # agent's pending-draft lookup is a composite query, so deploying the
+      # functions without the index would leave it failing at runtime.
+      - name: Deploy Firestore rules & indexes
+        if: ${{ inputs.deploy_functions }}
+        run: |
+          firebase deploy --only firestore:rules,firestore:indexes \
+            --project aivy-5c031 --non-interactive
+
       - name: Build & deploy Functions
         if: ${{ inputs.deploy_functions }}
         working-directory: functions

@@ -1,0 +1,60 @@
+# Runs on every push so the analyzer and both test suites can be read from a
+# phone, without needing a laptop to find out whether a change compiles.
+name: Checks
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analyze + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # `main` already carries pre-existing info/warning lint, so this reports
+      # everything but only fails the job on actual errors.
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+  functions:
+    name: Functions build + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install
+        working-directory: functions
+        run: npm ci
+
+      - name: Build
+        working-directory: functions
+        run: npm run build
+
+      - name: Test
+        working-directory: functions
+        run: npm test
