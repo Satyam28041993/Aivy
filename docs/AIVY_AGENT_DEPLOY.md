@@ -35,6 +35,43 @@ Bas. Function agli call par utha lega — redeploy ki zaroorat nahi.
 
 ---
 
+## 1b. ⛔ Ek baar ka IAM kaam — pehle deploy par ye zaroori nikla
+
+Pehla deploy (run #18) me **hosting, Firestore rules/indexes aur saare purane
+functions successfully chale gaye**. Sirf teen naye function fail hue — aur wo bhi
+code par nahi, **IAM policy** par:
+
+```
+Failed to set the IAM Policy on the Service .../services/aivyagentcommit
+Unable to set the invoker for the IAM policy on:
+  aivyAgent, aivyAgentChats, aivyAgentCommit
+- You may not have the roles/functions.admin IAM role.
+```
+
+**Kyun:** har **naye** callable function ko Firebase publicly-invokable banata hai
+(callable khud auth check karta hai — `aivyProcess.ts` me isi ka comment likha hai).
+Ye IAM policy set karni padti hai. **Purane** functions ki policy pehle se lagi hai,
+isliye unka update bina permission ke ho gaya. Deploy karne wale service account ke
+paas naye function par policy lagane ka haq nahi hai.
+
+**Fix — ek baar ka, 2 minute:**
+
+1. [Google Cloud Console → IAM](https://console.cloud.google.com/iam-admin/iam?project=aivy-5c031)
+2. Jo service account GitHub Actions use karta hai use dhoondein
+   (GitHub secret `FIREBASE_SERVICE_ACCOUNT` wala — IAM list me `...iam.gserviceaccount.com`)
+3. Uspar pencil (Edit) → **+ ADD ANOTHER ROLE**
+4. **Cloud Run Admin** (`roles/run.admin`) add karein → Save
+
+> Gen2 functions asal me Cloud Run services hain, isliye role `run.admin` hai.
+> Agar phir bhi fail ho to **Cloud Functions Admin** (`roles/cloudfunctions.admin`)
+> bhi add kar dein.
+
+Uske baad deploy dobara chala dein (neeche wala tareeka) — teenon function chale
+jaayenge. Ye sirf **pehli baar** chahiye; aage ke deploys me ye function pehle se
+maujood honge.
+
+---
+
 ## 2. Deploy kaise karein (phone se)
 
 GitHub app ya browser me:
