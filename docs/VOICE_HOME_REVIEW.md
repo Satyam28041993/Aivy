@@ -2,6 +2,12 @@
 
 Scope of this review: the voice chat on the app's **first tab** (`HomeShell` index 0).
 
+> **Status note (added later):** §0 below is now out of date. Gemini Live *was*
+> subsequently built — see `lib/core/voice/gemini_live/` (commit `e3f95e8`) and
+> `VOICE_HOME_STATUS.md`. The rest of this review still describes the legacy
+> `aivyVoiceAsk` batch path. For the **Chat** tab (a separate screen on a separate
+> backend, `aivyProcess`), see `CHAT_PAGE_REVIEW.md`.
+
 Files reviewed:
 
 | Layer | File |
