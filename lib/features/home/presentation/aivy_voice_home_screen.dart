@@ -174,7 +174,11 @@ class _AivyVoiceHomeScreenState extends State<AivyVoiceHomeScreen>
   Future<void> _loadAppCheckDebugToken() async {
     // The provider logs the secret while App Check activates, so the buffer may
     // not hold it yet on the very first frame.
-    for (final wait in const [Duration.zero, Duration(seconds: 3)]) {
+    for (final wait in const [
+      Duration.zero,
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+    ]) {
       await Future<void>.delayed(wait);
       final token = await AivyAppCheckDebugToken.read();
       if (!mounted) {
