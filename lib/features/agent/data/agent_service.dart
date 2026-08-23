@@ -99,12 +99,28 @@ class AgentService {
   Future<AgentCommitResult> commit({
     required String draftId,
     String? chatId,
+  }) {
+    return _draftAction(draftId: draftId, chatId: chatId);
+  }
+
+  /// Dismisses a card. Deliberately not routed through the model — throwing a
+  /// full conversational turn at "rehne do" would cost a round trip to do
+  /// nothing.
+  Future<AgentCommitResult> cancelDraft({required String draftId}) {
+    return _draftAction(draftId: draftId, action: 'cancel');
+  }
+
+  Future<AgentCommitResult> _draftAction({
+    required String draftId,
+    String? chatId,
+    String? action,
   }) async {
     await _ensureAuth();
     final callable = _functions.httpsCallable('aivyAgentCommit');
     final res = await callable.call<Map<String, dynamic>>(<String, dynamic>{
       'draftId': draftId,
       if (chatId != null && chatId.isNotEmpty) 'chatId': chatId,
+      if (action != null) 'action': action,
     });
     return AgentCommitResult.fromMap(Map<String, dynamic>.from(res.data));
   }

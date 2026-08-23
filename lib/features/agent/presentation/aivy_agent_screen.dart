@@ -212,14 +212,15 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
 
   void _cancelDraft(AgentDraft draft) {
     setState(() => _draftStatus[draft.id] = 'cancelled');
-    unawaited(_sendSilently('rehne do, wo cancel kar do'));
+    unawaited(_dismissDraft(draft.id));
   }
 
-  Future<void> _sendSilently(String text) async {
+  Future<void> _dismissDraft(String draftId) async {
     try {
-      await _service.send(text: text, chatId: _chatId);
+      await _service.cancelDraft(draftId: draftId);
     } catch (_) {
-      // The card already shows cancelled; a failed note is not worth a banner.
+      // The card already reads cancelled; a failed dismissal is not worth a
+      // banner, and the draft simply stays pending server-side.
     }
   }
 

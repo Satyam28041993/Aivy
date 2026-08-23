@@ -18,7 +18,7 @@ import { runAgentTurn } from "./agentLoop";
 import { buildSystemPrompt } from "./systemPrompt";
 import { commitDraft } from "./commit";
 import { getUserMemory } from "../aivyProcess";
-import { listPendingDrafts } from "./draftStore";
+import { listPendingDrafts, markDraftStatus } from "./draftStore";
 import {
   appendMessage,
   createChat,
@@ -169,6 +169,13 @@ export const aivyAgentCommit = onCall(
     const draftId = str(payload.draftId);
     if (!draftId) {
       throw new HttpsError("invalid-argument", "draftId is required");
+    }
+
+    // Dismissing a card is a local decision, not a conversation — routing it
+    // through the model would cost a full turn to accomplish nothing.
+    if (str(payload.action) === "cancel") {
+      await markDraftStatus(uid, draftId, "cancelled");
+      return { ok: true, message: "Theek hai, rehne diya.", createdIds: [] };
     }
 
     const result = await commitDraft(uid, draftId);
