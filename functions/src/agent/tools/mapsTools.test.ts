@@ -5,6 +5,10 @@ import type { ToolContext } from "../toolTypes";
 const placesMock = vi.fn();
 const routeMock = vi.fn();
 const geocodeMock = vi.fn();
+const findSavedMock = vi.fn();
+const listSavedMock = vi.fn();
+const deleteSavedMock = vi.fn();
+const createDraftMock = vi.fn();
 
 vi.mock("../google/maps", async () => {
   const actual = await vi.importActual<typeof import("../google/maps")>("../google/maps");
@@ -16,7 +20,32 @@ vi.mock("../google/maps", async () => {
   };
 });
 
-const { findPlacesTool, getDirectionsTool, whereAmITool } = await import("./mapsTools");
+vi.mock("../placesStore", async () => {
+  const actual = await vi.importActual<typeof import("../placesStore")>("../placesStore");
+  return {
+    ...actual,
+    findSavedPlace: (...a: unknown[]) => findSavedMock(...a),
+    listSavedPlaces: (...a: unknown[]) => listSavedMock(...a),
+    deleteSavedPlace: (...a: unknown[]) => deleteSavedMock(...a),
+  };
+});
+
+vi.mock("../draftStore", () => ({
+  createDraft: (input: Record<string, unknown>) => {
+    createDraftMock(input);
+    return Promise.resolve({ id: "draft_1", status: "pending", ...input });
+  },
+}));
+
+const {
+  findPlacesTool,
+  forgetPlaceTool,
+  getDirectionsTool,
+  getSavedPlaceTool,
+  listSavedPlacesTool,
+  savePlaceTool,
+  whereAmITool,
+} = await import("./mapsTools");
 const { MapsApiError } = await import("../google/maps");
 
 const CTX: ToolContext = {
@@ -34,6 +63,10 @@ beforeEach(() => {
   placesMock.mockReset();
   routeMock.mockReset();
   geocodeMock.mockReset();
+  findSavedMock.mockReset().mockResolvedValue(null);
+  listSavedMock.mockReset().mockResolvedValue([]);
+  deleteSavedMock.mockReset();
+  createDraftMock.mockReset();
 });
 
 describe("find_places", () => {
@@ -169,5 +202,107 @@ describe("where_am_i", () => {
   it("says what to check when there is no fix", async () => {
     const res = await whereAmITool(CTX);
     expect(res.ok === false && res.message).toContain("permission");
+  });
+});
+
+describe("saved places", () => {
+  const ROHAN = {
+    id: "p1",
+    name: "Rohan Office",
+    nameKey: "rohan office",
+    lat: 19.39,
+    lng: 72.84,
+    address: "Vasai East",
+    mapsLink: "https://maps/x",
+    createdAtMs: 0,
+  };
+
+  it("saves where they are standing, as a card first", async () => {
+    geocodeMock.mockResolvedValue("Vasai East, Maharashtra");
+    const res = await savePlaceTool(LOCATED, { name: "Rohan Office" });
+    expect(res.ok && res.kind).toBe("draft");
+
+    const draft = createDraftMock.mock.calls.at(-1)![0];
+    expect(draft.data).toMatchObject({
+      kind: "saved_place",
+      name: "Rohan Office",
+      lat: 19.3919,
+      address: "Vasai East, Maharashtra",
+      replacing: false,
+    });
+  });
+
+  it("warns on the card when it will move an existing place", async () => {
+    geocodeMock.mockResolvedValue(null);
+    findSavedMock.mockResolvedValue(ROHAN);
+    await savePlaceTool(LOCATED, { name: "Rohan Office" });
+    const draft = createDraftMock.mock.calls.at(-1)![0];
+    expect(draft.data.replacing).toBe(true);
+    expect(JSON.stringify(draft.lines)).toContain("purani jagah badal jaayegi");
+  });
+
+  it("saves without an address rather than failing", async () => {
+    geocodeMock.mockRejectedValue(new Error("geocoding off"));
+    const res = await savePlaceTool(LOCATED, { name: "Godown" });
+    expect(res.ok).toBe(true);
+    expect(createDraftMock.mock.calls.at(-1)![0].data.address).toBe("");
+  });
+
+  it("asks for a fix instead of saving a place it cannot locate", async () => {
+    const res = await savePlaceTool(CTX, { name: "Godown" });
+    expect(res.ok === false && res.reason).toBe("needs_detail");
+    expect(createDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("hands back the link, and the distance from here", async () => {
+    findSavedMock.mockResolvedValue(ROHAN);
+    routeMock.mockResolvedValue({ distanceKm: 4.2, durationMinutes: 11, mode: "DRIVE", mapsUri: "u" });
+    const res = await getSavedPlaceTool(LOCATED, { name: "rohan office" });
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.maps_link).toBe("https://maps/x");
+    expect(data.distance_km).toBe(4.2);
+  });
+
+  it("still gives the link when the route lookup fails", async () => {
+    findSavedMock.mockResolvedValue(ROHAN);
+    routeMock.mockRejectedValue(new Error("routes down"));
+    const res = await getSavedPlaceTool(LOCATED, { name: "rohan office" });
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.maps_link).toBe("https://maps/x");
+    expect(data.distance_km).toBeUndefined();
+  });
+
+  it("names what is saved when the name does not match", async () => {
+    listSavedMock.mockResolvedValue([ROHAN]);
+    const res = await getSavedPlaceTool(LOCATED, { name: "godown" });
+    expect(res.ok === false && res.message).toContain("Rohan Office");
+  });
+
+  it("routes to a saved place by name instead of asking Google", async () => {
+    findSavedMock.mockImplementation((_uid: string, n: string) =>
+      Promise.resolve(n.toLowerCase().includes("rohan") ? ROHAN : null),
+    );
+    routeMock.mockResolvedValue({ distanceKm: 4.2, durationMinutes: 11, mode: "DRIVE", mapsUri: "u" });
+    const res = await getDirectionsTool(LOCATED, { destination: "Rohan Office" });
+
+    expect(routeMock.mock.calls[0]![0]).toMatchObject({
+      destination: { lat: 19.39, lng: 72.84 },
+    });
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.to).toBe("Rohan Office");
+    expect(data.from).toBe("aapki current location");
+  });
+
+  it("lists and forgets", async () => {
+    listSavedMock.mockResolvedValue([ROHAN]);
+    const list = await listSavedPlacesTool(CTX);
+    expect(list.ok).toBe(true);
+
+    deleteSavedMock.mockResolvedValue(true);
+    expect((await forgetPlaceTool(CTX, { name: "Rohan Office" })).ok).toBe(true);
+
+    deleteSavedMock.mockResolvedValue(false);
+    const miss = await forgetPlaceTool(CTX, { name: "nope" });
+    expect(miss.ok === false && miss.reason).toBe("nothing_found");
   });
 });

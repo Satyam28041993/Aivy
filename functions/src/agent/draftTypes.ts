@@ -19,7 +19,8 @@ export type DraftKind =
   | "remember_fact"
   | "calendar_event"
   | "email"
-  | "sheet_row";
+  | "sheet_row"
+  | "saved_place";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -136,6 +137,16 @@ export interface SheetRowDraftData {
   cells: string[];
 }
 
+export interface SavedPlaceDraftData {
+  kind: "saved_place";
+  name: string;
+  lat: number;
+  lng: number;
+  address: string;
+  /** True when a place of this name already exists and will be moved. */
+  replacing: boolean;
+}
+
 export interface RememberFactDraftData {
   kind: "remember_fact";
   category: string;
@@ -152,7 +163,8 @@ export type DraftData =
   | RememberFactDraftData
   | CalendarEventDraftData
   | EmailDraftData
-  | SheetRowDraftData;
+  | SheetRowDraftData
+  | SavedPlaceDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {

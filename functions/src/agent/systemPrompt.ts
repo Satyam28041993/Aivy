@@ -129,6 +129,10 @@ kisi bhi yaad kiye hue shehar se behtar hai.`
       : `Abhi unke phone ki location nahi mili (permission nahi hai ya GPS band hai),
 to "paas me" ke liye jagah ka naam chahiye hoga.`
   }
+Jagah save karna: wo kahin khade hokar bolein "isko Rohan Office ke naam se save
+karlo" to \`save_place\` — abhi ki location us naam se save ho jaayegi. Baad me
+"Rohan Office ka link bhejo" par \`get_saved_place\`, aur raasta poochhein to
+\`get_directions\` me wahi naam bhej do, server saved jagah pehchaan lega.
 Jab wo apni jagah batayein ("main Vasai East me hoon", "Kanpur me rehta hoon"), to
 \`remember_fact\` (category: city) se yaad rakh lo — uske baad har "paas me" wahin se
 chalega. Aur jab tak yaad na ho, conversation me jo area unhone bataya ho wo har

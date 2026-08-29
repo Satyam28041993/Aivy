@@ -22,6 +22,7 @@ import { DateTime } from "luxon";
 
 import { createClient } from "./clientResolve";
 import { getDraft, markDraftStatus } from "./draftStore";
+import { savePlace } from "./placesStore";
 import { normalizeName } from "./nameNormalize";
 import {
   effectiveRemainingAmount,
@@ -46,6 +47,7 @@ import type {
   QuotationDraftData,
   ReminderDraftData,
   RememberFactDraftData,
+  SavedPlaceDraftData,
   SheetRowDraftData,
 } from "./draftTypes";
 
@@ -542,6 +544,25 @@ async function commitSheetRow(
   }
 }
 
+async function commitSavedPlace(
+  uid: string,
+  d: SavedPlaceDraftData,
+): Promise<CommitResult> {
+  const place = await savePlace(uid, {
+    name: d.name,
+    lat: d.lat,
+    lng: d.lng,
+    address: d.address,
+  });
+  const where = place.address ? ` — ${place.address}` : "";
+  return {
+    ok: true,
+    message: `"${place.name}" save ho gayi${where}. Jab bhi maangenge, link de dungi.`,
+    createdIds: [place.id],
+    summary: `saved place ${place.name}`,
+  };
+}
+
 /** Replays one confirmed draft. Idempotent: a committed draft is not redone. */
 export async function commitDraft(
   uid: string,
@@ -595,6 +616,9 @@ export async function commitDraft(
       break;
     case "sheet_row":
       result = await commitSheetRow(uid, draft.data, opts);
+      break;
+    case "saved_place":
+      result = await commitSavedPlace(uid, draft.data);
       break;
     default:
       return { ok: false, message: "Is draft ka type samajh nahi aaya.", createdIds: [], summary: "" };

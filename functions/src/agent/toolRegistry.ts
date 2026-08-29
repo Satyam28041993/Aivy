@@ -34,7 +34,15 @@ import {
   listRecentEmailsTool,
   sendEmailTool,
 } from "./tools/googleTools";
-import { findPlacesTool, getDirectionsTool, whereAmITool } from "./tools/mapsTools";
+import {
+  findPlacesTool,
+  forgetPlaceTool,
+  getDirectionsTool,
+  getSavedPlaceTool,
+  listSavedPlacesTool,
+  savePlaceTool,
+  whereAmITool,
+} from "./tools/mapsTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -492,6 +500,49 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "save_place",
+    description:
+      "Save where the user is standing right now under a name they choose — " +
+      "'is location ko Rohan Office ke naam se save karlo', 'ye godown save kar " +
+      "lo'. Uses their phone's live position. Creates a draft for confirmation.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "The name they gave it, e.g. 'Rohan Office', 'godown'.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "get_saved_place",
+    description:
+      "Give back a place they saved earlier — its map link, address, and how " +
+      "far it is from here. Use for 'Rohan Office ka link bhejo', 'godown kahan " +
+      "hai', 'Rohan Office kitni door hai'.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "list_saved_places",
+    description: "All the places they have saved. Use for 'kaun kaun si jagah save hai'.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "forget_place",
+    description: "Remove a saved place. Use for 'Rohan Office hata do'.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
     name: "where_am_i",
     description:
       "Where the user is right now, from their phone's location — address plus a " +
@@ -508,7 +559,12 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     parameters: {
       type: "object",
       properties: {
-        destination: { type: "string", description: "Where they are going." },
+        destination: {
+          type: "string",
+          description:
+            "Where they are going. A saved place name works here too — the " +
+            "server checks their saved places before asking Google.",
+        },
         origin: {
           type: "string",
           description:
@@ -563,6 +619,10 @@ const HANDLERS: Record<string, ToolHandler> = {
   find_places: findPlacesTool,
   get_directions: getDirectionsTool,
   where_am_i: (ctx) => whereAmITool(ctx),
+  save_place: savePlaceTool,
+  get_saved_place: getSavedPlaceTool,
+  list_saved_places: (ctx) => listSavedPlacesTool(ctx),
+  forget_place: forgetPlaceTool,
 };
 
 /** Tools that create a draft, so the loop knows to surface a card. */
@@ -577,6 +637,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "create_calendar_event",
   "send_email",
   "append_sheet_row",
+  "save_place",
 ]);
 
 export function isKnownTool(name: string): boolean {

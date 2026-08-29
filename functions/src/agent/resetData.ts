@@ -59,6 +59,7 @@ const USER_COLLECTIONS = [
   "notifications",
   "daily_summary",
   "contacts",
+  "places",
   "memory_logs",
 ] as const;
 

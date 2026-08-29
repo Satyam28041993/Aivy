@@ -15,7 +15,14 @@ import {
   type Coords,
   type TravelMode,
 } from "../google/maps";
-import { dataResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
+import { createDraft } from "../draftStore";
+import {
+  deleteSavedPlace,
+  findSavedPlace,
+  listSavedPlaces,
+  mapsPointLink,
+} from "../placesStore";
+import { draftResult, dataResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
 
 function str(raw: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
@@ -126,16 +133,31 @@ export async function getDirectionsTool(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const destination = str(args.destination);
-  if (!destination) {
+  const rawDestination = str(args.destination);
+  if (!rawDestination) {
     return fail("needs_detail", "Jaana kahan hai?");
   }
+
+  // A saved name beats free text: "Rohan Office" is a point the user pinned,
+  // not something for Google to guess at.
+  const savedTo = await findSavedPlace(ctx.uid, rawDestination);
+  const destination: string | Coords = savedTo
+    ? { lat: savedTo.lat, lng: savedTo.lng }
+    : rawDestination;
+  const destinationLabel = savedTo ? savedTo.name : rawDestination;
+
   const namedOrigin = str(args.origin);
+  const savedFrom = namedOrigin ? await findSavedPlace(ctx.uid, namedOrigin) : null;
   const coords = namedOrigin ? null : coordsOf(ctx);
-  const origin: string | Coords = namedOrigin || coords || str(ctx.userCity);
+  const origin: string | Coords = savedFrom
+    ? { lat: savedFrom.lat, lng: savedFrom.lng }
+    : namedOrigin || coords || str(ctx.userCity);
   if (!origin) {
     return fail("needs_detail", "Kahan se chalna hai? (shehar ya jagah bata dijiye)");
   }
+  const originLabel = savedFrom
+    ? savedFrom.name
+    : namedOrigin || (coords ? "aapki current location" : str(ctx.userCity));
   const mode = modeOf(args.travel_mode);
 
   let route;
@@ -145,12 +167,12 @@ export async function getDirectionsTool(
     return mapsFailure(e);
   }
   if (!route) {
-    return fail("nothing_found", `${destination} tak ka raasta nahi mila.`);
+    return fail("nothing_found", `${destinationLabel} tak ka raasta nahi mila.`);
   }
 
   return dataResult({
-    from: typeof origin === "string" ? origin : "aapki current location",
-    to: destination,
+    from: originLabel,
+    to: destinationLabel,
     mode: route.mode,
     distance_km: route.distanceKm,
     // Live traffic is baked in, which is what makes this worth asking for.
@@ -185,4 +207,153 @@ export async function whereAmITool(ctx: ToolContext): Promise<ToolResult> {
     maps_link: `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`,
     ...(address ? {} : { note: "Address nahi nikal paaya (Geocoding API enable nahi hai)." }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// save_place / get_saved_place / list_saved_places / forget_place
+// ---------------------------------------------------------------------------
+
+/**
+ * "Yahan ka location Rohan Office ke naam se save karlo."
+ *
+ * A draft, like every other write — the card shows the address the coordinates
+ * resolved to, which is the only way to catch a bad GPS fix before it becomes
+ * the place you navigate to for the next year.
+ */
+export async function savePlaceTool(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const name = str(args.name);
+  if (!name) {
+    return fail("needs_detail", "Is jagah ko kis naam se save karun?");
+  }
+
+  const coords = coordsOf(ctx);
+  if (!coords) {
+    return fail(
+      "needs_detail",
+      "Abhi location nahi mil rahi — phone me location on kijiye aur app ko " +
+        "permission dijiye, phir dobara boliye.",
+    );
+  }
+
+  // Best-effort: a place with no address is still a usable place.
+  let address = "";
+  try {
+    address = (await reverseGeocode(coords)) ?? "";
+  } catch {
+    address = "";
+  }
+
+  const existing = await findSavedPlace(ctx.uid, name);
+  const replacing = existing != null;
+
+  const lines = [
+    { label: "Naam", value: name },
+    { label: "Jagah", value: address || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` },
+  ];
+  if (replacing) {
+    lines.push({ label: "Dhyaan", value: "Isi naam ki purani jagah badal jaayegi" });
+  }
+
+  const draft = await createDraft({
+    uid: ctx.uid,
+    kind: "saved_place",
+    title: "Jagah save karun",
+    icon: "📍",
+    lines,
+    chatId: ctx.chatId,
+    data: {
+      kind: "saved_place",
+      name,
+      lat: coords.lat,
+      lng: coords.lng,
+      address,
+      replacing,
+    },
+  });
+
+  return draftResult(
+    draft,
+    "Jagah ka draft taiyaar hai — confirm hone par save hogi.",
+  );
+}
+
+export async function getSavedPlaceTool(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const name = str(args.name);
+  if (!name) {
+    return fail("needs_detail", "Kaunsi jagah ka link chahiye?");
+  }
+  const place = await findSavedPlace(ctx.uid, name);
+  if (!place) {
+    const all = await listSavedPlaces(ctx.uid, 20);
+    return fail(
+      "nothing_found",
+      all.length === 0
+        ? `"${name}" naam se koi jagah save nahi hai. Wahan pahunchkar boliye — main save kar lungi.`
+        : `"${name}" nahi mila. Save ki hui jagahein: ${all.map((p) => p.name).join(", ")}.`,
+    );
+  }
+
+  const out: Record<string, unknown> = {
+    name: place.name,
+    maps_link: place.mapsLink || mapsPointLink(place.lat, place.lng),
+    lat: place.lat,
+    lng: place.lng,
+  };
+  if (place.address) {
+    out.address = place.address;
+  }
+
+  // Distance from here is what they usually want next, so save them the ask.
+  const here = coordsOf(ctx);
+  if (here) {
+    try {
+      const route = await computeRoute({
+        origin: here,
+        destination: { lat: place.lat, lng: place.lng },
+      });
+      if (route) {
+        out.distance_km = route.distanceKm;
+        out.duration_minutes = route.durationMinutes;
+      }
+    } catch {
+      // The link is the answer; the ETA was a bonus.
+    }
+  }
+  return dataResult(out);
+}
+
+export async function listSavedPlacesTool(ctx: ToolContext): Promise<ToolResult> {
+  const rows = await listSavedPlaces(ctx.uid);
+  if (rows.length === 0) {
+    return fail("nothing_found", "Abhi koi jagah save nahi hai.");
+  }
+  return dataResult({
+    count: rows.length,
+    places: rows.map((p) => ({
+      name: p.name,
+      ...(p.address ? { address: p.address } : {}),
+      maps_link: p.mapsLink || mapsPointLink(p.lat, p.lng),
+    })),
+  });
+}
+
+export async function forgetPlaceTool(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const name = str(args.name);
+  if (!name) {
+    return fail("needs_detail", "Kaunsi jagah hataani hai?");
+  }
+  const removed = await deleteSavedPlace(ctx.uid, name);
+  if (!removed) {
+    return fail("nothing_found", `"${name}" naam se koi jagah save nahi hai.`);
+  }
+  return dataResult({ removed: name });
 }

@@ -319,3 +319,31 @@ Kharch: ~$5 per 1000 — free credit me kuch nahi lagega.
 
 Location app ke andar se aati hai, isliye iske liye **naya APK chahiye** (functions
 deploy kaafi nahi).
+
+
+---
+
+## 9. Apni jagahein save karna (naya)
+
+Kahin bhi khade hokar boliye — **"is location ko Rohan Office ke naam se save karlo"**.
+Card aayega jisme naam aur address dikhega; confirm kijiye, save ho gaya.
+
+Uske baad:
+
+| Boliye | Milega |
+| --- | --- |
+| "Rohan Office ka link bhejo" | Maps ka link + address + **yahan se kitni door** |
+| "Rohan Office kitni door hai?" | km + traffic ke saath ETA |
+| "kaun kaun si jagah save hai?" | poori list |
+| "Rohan Office hata do" | hat jaayegi |
+
+Kuch baatein:
+
+- Naam kaise bhi likhiye — "rohan office", "Rohan Office", "ROHAN  OFFICE" — ek hi
+  jagah milegi. Aadha naam bhi chalega ("mehta") jab tak sirf ek jagah us naam se
+  match kare; do match hue to Aivy poochh legi, apne se andaaza nahi lagayegi.
+- Wahi naam dobara save karenge to **jagah badal jaayegi**, dusri nahi banegi.
+  Card par pehle hi likha aayega ki purani jagah badlegi.
+- Address ke liye Geocoding API chahiye. Na ho to bhi jagah save hoti hai — bas
+  card par address ki jagah coordinates dikhenge.
+- Ye jagahein "Fresh start" me mit jaati hain, kyunki ye aapka business data hai.
