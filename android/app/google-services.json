@@ -14,6 +14,38 @@
       },
       "oauth_client": [
         {
+          "client_id": "55587279577-0g0b4a0jhk1fsmveie93tfjaa24fjtbl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aivy",
+            "certificate_hash": "b6ed8740d7bd51b4cec22fdd3f2f6e16749e1b53"
+          }
+        },
+        {
+          "client_id": "55587279577-apqnp08b7hf11ds3v28155kngshtr4u6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aivy",
+            "certificate_hash": "399a014c6fdd34b2ef352c9c2d62c649c4690ed2"
+          }
+        },
+        {
+          "client_id": "55587279577-u10vsi0v755nabnsi2urdmk81e2mr6ql.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aivy",
+            "certificate_hash": "b065e857c945330cbeff9edef6d82517878550e2"
+          }
+        },
+        {
+          "client_id": "55587279577-vknv2a9snab9im1ukbosgfo39fioti4g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aivy",
+            "certificate_hash": "cf1cf90941a5c245a94e50c8aab2ffe95244a690"
+          }
+        },
+        {
           "client_id": "55587279577-p6cutrosk8emt9qjalq404l2mm7el0u8.apps.googleusercontent.com",
           "client_type": 3
         }
