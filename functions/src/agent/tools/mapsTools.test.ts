@@ -54,10 +54,18 @@ describe("find_places", () => {
     expect(placesMock.mock.calls[0]![0]).toMatchObject({ near: null });
   });
 
-  it("says nothing was found rather than returning an empty list", async () => {
+  it("says nothing was found when it knew where to look", async () => {
     placesMock.mockResolvedValue([]);
     const res = await findPlacesTool(CTX, { query: "unicorn dealer" });
     expect(res.ok === false && res.reason).toBe("nothing_found");
+    expect(res.ok === false && res.message).toContain("Kanpur");
+  });
+
+  it("asks where to look rather than claiming nothing exists", async () => {
+    placesMock.mockResolvedValue([]);
+    const res = await findPlacesTool({ ...CTX, userCity: null }, { query: "printing press" });
+    expect(res.ok === false && res.reason).toBe("needs_detail");
+    expect(res.ok === false && res.message).toContain("Kahan");
   });
 
   it("passes a configuration problem through in plain words", async () => {

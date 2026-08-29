@@ -73,7 +73,17 @@ export async function findPlacesTool(
   }
 
   if (rows.length === 0) {
-    return fail("nothing_found", `"${query}" ke liye kuch nahi mila${near ? ` ${near} ke aas-paas` : ""}.`);
+    // Without a location this was a search of the whole country, so "kuch nahi
+    // mila" would be misleading — the honest answer is that we do not know
+    // where to look. Asking once is also what makes the next search work, since
+    // the answer can then be remembered.
+    if (!near) {
+      return fail(
+        "needs_detail",
+        `Kahan ke aas-paas dhoondhun? (shehar ya area bata dijiye — main yaad rakh lungi)`,
+      );
+    }
+    return fail("nothing_found", `"${query}" ke liye ${near} ke aas-paas kuch nahi mila.`);
   }
 
   return dataResult({

@@ -23,7 +23,6 @@ import { DateTime } from "luxon";
 import { createClient } from "./clientResolve";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { normalizeName } from "./nameNormalize";
-import { saveUserMemory } from "../aivyProcess";
 import {
   effectiveRemainingAmount,
   effectivePaidAmount,
@@ -396,11 +395,26 @@ async function commitPaymentReceived(
   };
 }
 
+/**
+ * Writes into `users/{uid}/memory/profile` — the same document `getUserMemory`
+ * reads, so the next turn's system prompt carries it.
+ *
+ * It does NOT go through `saveUserMemory`: that helper is a deliberate no-op
+ * for the old chat pipeline ("no server-side memory writes"), which meant this
+ * tool answered "yaad rakh liya" and then remembered nothing. A confirmed card
+ * must actually save.
+ */
 async function commitRememberFact(
   uid: string,
   d: RememberFactDraftData,
 ): Promise<CommitResult> {
-  await saveUserMemory(uid, { [d.category]: d.fact });
+  await userRef(uid)
+    .collection("memory")
+    .doc("profile")
+    .set(
+      { [d.category]: d.fact, updatedAtMs: Date.now() },
+      { merge: true },
+    );
   return {
     ok: true,
     message: "Yaad rakh liya.",
