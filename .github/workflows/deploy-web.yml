@@ -77,3 +77,22 @@ jobs:
           npm ci
           npm run build
           firebase deploy --only functions --project aivy-5c031 --non-interactive
+
+      # The Firebase CLI only sets a callable's invoker policy when it *creates*
+      # the function. These three were created by a deploy that could not set it,
+      # so every later deploy is an update and silently leaves them private —
+      # which the browser reports as a CORS failure, because the preflight is
+      # rejected before it ever reaches the function. Applying the binding
+      # directly is idempotent and fixes it without recreating anything.
+      - name: Ensure agent callables are publicly invokable
+        if: ${{ inputs.deploy_functions }}
+        run: |
+          for svc in aivyagent aivyagentcommit aivyagentchats; do
+            echo "--- $svc"
+            gcloud run services add-iam-policy-binding "$svc" \
+              --region=us-central1 \
+              --project=aivy-5c031 \
+              --member=allUsers \
+              --role=roles/run.invoker \
+              --quiet
+          done
