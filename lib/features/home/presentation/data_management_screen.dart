@@ -2,7 +2,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../whatsapp/presentation/whatsapp_connect_screen.dart';
 import '../../../core/firebase/clear_user_data_service.dart';
 
 /// Lets the signed-in user delete Firestore data under their account
@@ -17,7 +16,6 @@ class DataManagementScreen extends StatefulWidget {
 class _DataManagementScreenState extends State<DataManagementScreen> {
   final _clear = ClearUserDataService();
   final _confirmWipe = TextEditingController();
-  final _testWhatsappPhone = TextEditingController();
   final _dateFormat = DateFormat.yMMMd();
 
   _DeleteMode _mode = _DeleteMode.freshStart;
@@ -26,7 +24,6 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
   @override
   void dispose() {
     _confirmWipe.dispose();
-    _testWhatsappPhone.dispose();
     super.dispose();
   }
 
@@ -216,53 +213,7 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
     ).showSnackBar(SnackBar(content: Text(m)));
   }
 
-  Future<void> _runTestWhatsapp() async {
-    final phone = _testWhatsappPhone.text.trim();
-    if (!RegExp(r'^91\d{10}$').hasMatch(phone)) {
-      _toast('Phone must be 91XXXXXXXXXX (12 digits, no +).');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      final callable = FirebaseFunctions.instanceFor(
-        region: 'us-central1',
-      ).httpsCallable('testWhatsapp');
-      final result = await callable.call(<String, String>{
-          'phone': phone,
-          'message': 'Test from Aivy',
-        });
-      if (!mounted) {
-        return;
-      }
-      final data = (result.data is Map)
-          ? Map<String, dynamic>.from(result.data as Map)
-          : const <String, dynamic>{};
-      if (data['success'] == true) {
-        _toast('WhatsApp sent: ${data['messageId'] ?? 'ok'}');
-        return;
-      }
-      _toast('WhatsApp send failed.');
-    } on FirebaseFunctionsException catch (e) {
-      if (mounted) {
-        final code = e.code.toLowerCase();
-        if (code == 'permission-denied') {
-          _toast('Only admins can run WhatsApp test sends.');
-        } else {
-          _toast(e.message ?? e.code);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        _toast(e.toString());
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _working = false);
-      }
-    }
-  }
-
-  Future<bool> _confirmDialog({
+Future<bool> _confirmDialog({
     required String title,
     required String body,
   }) async {
@@ -515,53 +466,6 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
               padding: EdgeInsets.only(top: 8),
               child: Center(child: CircularProgressIndicator()),
             ),
-          const SizedBox(height: 32),
-          Divider(color: theme.colorScheme.outlineVariant),
-          const SizedBox(height: 12),
-          Text(
-            'WhatsApp Cloud API',
-            style: theme.textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Credentials live in Firestore (app_config/whatsapp). The test '
-            'endpoint uses the saved token and phone number ID.',
-            style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _working
-                  ? null
-                  : () {
-                      Navigator.of(context).push<void>(
-                        MaterialPageRoute<void>(
-                          builder: (context) => const WhatsAppConnectScreen(),
-                        ),
-                      );
-                    },
-              icon: const Icon(Icons.settings_outlined, size: 20),
-              label: const Text('Configure WhatsApp'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _testWhatsappPhone,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: 'Test recipient (91XXXXXXXXXX)',
-            ),
-            enabled: !_working,
-            keyboardType: TextInputType.phone,
-            autocorrect: false,
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _working ? null : _runTestWhatsapp,
-            icon: const Icon(Icons.sms_outlined, size: 20),
-            label: const Text('Send test WhatsApp'),
-          ),
         ],
       ),
     );

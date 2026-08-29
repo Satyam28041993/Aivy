@@ -5,15 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/aivy_theme.dart';
-import '../../../core/voice/google_voice_service.dart';
-import '../../chat/application/controlled_chat_flow.dart';
-import '../../chat/application/user_text_pipeline.dart';
-import '../../chat/presentation/controlled_flow_coordinator.dart';
 import '../../chat/data/aivy_process_service.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/models/chat_message.dart';
-import '../../chat/models/entry_quick_outcome.dart';
-import '../../chat/utils/aivy_response_formatter.dart';
 import '../../clients/data/client_repository.dart';
 import '../../clients/models/client.dart';
 import '../../payments/data/payment_repository.dart';
@@ -22,12 +16,9 @@ import '../../reminders/models/reminder_item.dart';
 import '../models/client_insights_summary.dart';
 import '../models/order_record.dart';
 import '../models/quotation_record.dart';
-import '../../chat/presentation/widgets/aivy_chat_quick_actions.dart';
 import '../../../services/audio_service.dart';
-import 'widgets/ai_input_bar.dart';
 import 'widgets/client_insights_strip.dart';
 import 'widgets/header_widget.dart';
-import 'widgets/quick_response_card.dart';
 import 'widgets/summary_card.dart';
 import 'widgets/today_list.dart';
 
@@ -53,20 +44,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin {
   late final ChatRepository _repository;
   late final AivyProcessService _aivyProcess;
-  late final GoogleVoiceService _googleVoice;
-  late final ControlledChatFlow _controlledFlow;
   late final ClientRepository _clients;
   late final PaymentRepository _payments;
   late final ReminderRepository _reminders;
-  late UserTextPipeline _textPipeline;
-  late final TextEditingController _inputController;
-  late final FocusNode _inputFocus;
   late final AnimationController _orbPulse;
 
-  bool _isHomeCommandBusy = false;
-  Key _quickResponseAnimKey = UniqueKey();
-  String _quickReplyText = '';
-  String? _quickActionLine;
   String? _dispatchingOrderId;
 
   final NumberFormat _currency = NumberFormat.currency(
@@ -82,11 +64,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     _repository = ChatRepository();
     _aivyProcess = AivyProcessService();
-    _googleVoice = GoogleVoiceService();
-    _controlledFlow = ControlledChatFlow(
-      ledgerRepository: _repository,
-      waLineTranslator: (line) => _aivyProcess.translateForWhatsappPreview(line),
-    );
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
     _reminders = ReminderRepository();
@@ -97,16 +74,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Action Required modal disabled for now (IndexedStack mounts Dashboard off-tab).
       // Re-enable via fetchImportantRemindersAndShowIfNeeded when product wants it back.
     });
-    final cid = widget.activeChatId;
-    _textPipeline = UserTextPipeline(
-      userId: widget.userId,
-      chatId: cid ?? '',
-      repository: _repository,
-      aivyProcessService: _aivyProcess,
-      googleVoice: _googleVoice,
-    );
-    _inputController = TextEditingController();
-    _inputFocus = FocusNode();
     _orbPulse = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -115,39 +82,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void dispose() {
-    _inputController.dispose();
-    _inputFocus.dispose();
     _orbPulse.dispose();
     _aivyProcess.dispose();
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant DashboardScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final n = widget.activeChatId;
-    if (n != null && n != oldWidget.activeChatId) {
-      _textPipeline = UserTextPipeline(
-        userId: widget.userId,
-        chatId: n,
-        repository: _repository,
-        aivyProcessService: _aivyProcess,
-        googleVoice: _googleVoice,
-      );
-    }
-  }
-
-  void _goChat() {
-    _inputFocus.unfocus();
-    widget.onOpenChat?.call();
-  }
-
-  Future<void> _runQuickQuery(String sendText) async {
-    if (sendText.isEmpty) {
-      return;
-    }
-    _inputController.text = sendText;
-    await _submitHomeCommand();
   }
 
   Future<void> _markOneOrderDispatched(OrderRecord order) async {
@@ -399,144 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return result;
   }
 
-  Future<void> _submitHomeCommand() async {
-    if (_isHomeCommandBusy) {
-      return;
-    }
-    final chatId = widget.activeChatId;
-    if (chatId == null || chatId.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Preparing your chat session… try again in a moment.'),
-          ),
-        );
-      }
-      return;
-    }
-    final text = _inputController.text.trim();
-    if (text.isEmpty) {
-      return;
-    }
-    _inputFocus.unfocus();
-    _inputController.clear();
-
-    setState(() {
-      _isHomeCommandBusy = true;
-      _quickResponseAnimKey = UniqueKey();
-      _quickReplyText = '';
-      _quickActionLine = null;
-    });
-
-    String? entryId;
-    try {
-      entryId = await _repository.createEntry(
-        userId: widget.userId,
-        rawInput: text,
-      );
-      await _repository.addMessage(
-        userId: widget.userId,
-        chatId: chatId,
-        role: ChatRole.user,
-        text: text,
-        entryId: entryId,
-      );
-
-      await _repository.trySetChatTitleIfDefault(
-        userId: widget.userId,
-        chatId: chatId,
-        userText: text,
-      );
-      final r = await _controlledFlow.process(
-        userId: widget.userId,
-        text: text,
-      );
-      if (kDebugMode) {
-        debugPrint(
-          '[AIVY_TRACE_CONFIRM] Dashboard._submitHomeCommand after process '
-          'kind=${r.kind} handled=${r.handled} mounted=$mounted '
-          'confirmDraftSet=${r.confirmDraft != null}',
-        );
-      }
-      if (r.handled) {
-        if (!mounted) {
-          if (kDebugMode) {
-            debugPrint(
-              '[AIVY_TRACE_CONFIRM] Dashboard SKIPPED apply (!mounted) kind=${r.kind}',
-            );
-          }
-          return;
-        }
-        await ControlledFlowCoordinator.apply(
-          context: context,
-          result: r,
-          userId: widget.userId,
-          chatId: chatId,
-          entryId: entryId,
-          repository: _repository,
-          flow: _controlledFlow,
-          aivy: _aivyProcess,
-          googleVoice: _googleVoice,
-        );
-      } else {
-        if (kDebugMode) {
-          debugPrint(
-            '[AIVY_TRACE_CONFIRM] Dashboard FALLBACK UserTextPipeline '
-            'handled=false kind=${r.kind}',
-          );
-        }
-        await _textPipeline.processUserMessage(text, entryId);
-      }
-      final outcome = await _repository.readEntryQuickOutcome(
-        widget.userId,
-        entryId,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _quickResponseAnimKey = UniqueKey();
-        if (outcome != null && outcome.assistantReply.isNotEmpty) {
-          _quickReplyText =
-              EntryQuickOutcome.shortenReply(outcome.assistantReply);
-          _quickActionLine = EntryQuickOutcome.actionLine(outcome);
-        } else {
-          _quickReplyText = 'Done.';
-          _quickActionLine = null;
-        }
-      });
-    } catch (e) {
-      if (entryId != null) {
-        await _repository.failEntry(
-          userId: widget.userId,
-          entryId: entryId,
-          reason: e.toString(),
-        );
-        await _repository.addMessage(
-          userId: widget.userId,
-          chatId: chatId,
-          role: ChatRole.assistant,
-          text: generateAivyResponse('error', const {}),
-          entryId: entryId,
-        );
-      }
-      if (mounted) {
-        setState(() {
-          _quickResponseAnimKey = UniqueKey();
-          _quickReplyText = generateAivyResponse('error', const {});
-          _quickActionLine = 'Could not complete';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isHomeCommandBusy = false;
-        });
-      }
-    }
-  }
-
-  int _quotationCount(List<QuotationRecord> quotes) => quotes.length;
+int _quotationCount(List<QuotationRecord> quotes) => quotes.length;
 
   double _totalValue(List<QuotationRecord> quotes) {
     var sum = 0.0;
@@ -1162,65 +962,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                           },
                         ),
                         const SizedBox(height: 16),
+                        // The command bar that used to sit here ran the old
+                        // chat flow. Typing now belongs to the Aivy tab, which
+                        // understands plain speech instead of set commands.
                         _fadeSlide(
                           index: 6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              AivyChatQuickActions(
-                                enabled: !_isHomeCommandBusy,
-                                onSend: (t) {
-                                  unawaited(_runQuickQuery(t));
-                                },
-                              ),
-                              AiInputBar(
-                                controller: _inputController,
-                                focusNode: _inputFocus,
-                                enabled: !_isHomeCommandBusy,
-                                onMic: _goChat,
-                                onSend: _submitHomeCommand,
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: ElevatedButton(
-                                  onPressed: () async {
-                                    await AudioService.playReminder();
-                                  },
-                                  child: const Text('Test Ringtone'),
-                                ),
-                              ),
-                              if (_isHomeCommandBusy ||
-                                  _quickReplyText.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                TweenAnimationBuilder<double>(
-                                  key: _quickResponseAnimKey,
-                                  tween: Tween<double>(begin: 0, end: 1),
-                                  duration: const Duration(milliseconds: 380),
-                                  curve: Curves.easeOutCubic,
-                                  builder: (context, t, child) {
-                                    final v = t.clamp(0.0, 1.0);
-                                    return Opacity(
-                                      opacity: v,
-                                      child: Transform.translate(
-                                        offset: Offset(0, (1 - v) * 10),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: QuickResponseCard(
-                                    replyText: _isHomeCommandBusy
-                                        ? ''
-                                        : _quickReplyText,
-                                    actionLine: _isHomeCommandBusy
-                                        ? null
-                                        : _quickActionLine,
-                                    isBusy: _isHomeCommandBusy,
-                                    onViewDetails: _goChat,
-                                  ),
-                                ),
-                              ],
-                            ],
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                await AudioService.playReminder();
+                              },
+                              child: const Text('Test Ringtone'),
+                            ),
                           ),
                         ),
                       ],

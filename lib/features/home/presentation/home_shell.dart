@@ -3,19 +3,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chat/data/chat_repository.dart';
-import '../../chat/presentation/chat_screen.dart';
-import '../../chat/presentation/meeting_recorder_screen.dart';
 import '../../dashboard/data/agent_nudge_service.dart';
 import '../../dashboard/data/passive_nudge_coordinator.dart';
 import '../../dashboard/models/agent_insights.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../dashboard/presentation/reports_screen.dart';
-import '../../whatsapp/data/whatsapp_inbox_repository.dart';
-import '../../whatsapp/presentation/whatsapp_conversations_screen.dart';
 import '../../agent/presentation/aivy_agent_screen.dart';
-import 'aivy_voice_home_screen.dart';
 import 'more_screen.dart';
 
+/// The four tabs the app is now: Aivy, Dashboard, Reports, More.
+///
+/// The voice home, the old command-driven Chat screen and the WhatsApp inbox
+/// were removed once the agent screen replaced what they did — one place to
+/// speak plainly instead of three places with different rules.
+///
+/// `ChatRepository` survives that removal: it is the data layer the dashboard
+/// and reports read from, not the old screen's own code.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.userId});
 
@@ -26,13 +29,15 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  static const int _tabAgent = 0;
+  static const int _tabDashboard = 1;
+  static const int _tabReports = 2;
+  static const int _tabMore = 3;
+
   late final ChatRepository _repository;
   late final AgentNudgeService _nudgeService;
   late final PassiveNudgeCoordinator _passiveNudges;
-  late final WhatsAppInboxRepository _whatsAppInboxRepository;
-  StreamSubscription<int>? _unreadWhatsAppSub;
-  int _unreadWhatsAppCount = 0;
-  int _currentIndex = 0;
+  int _currentIndex = _tabAgent;
   int _reportsResyncTick = 0;
   AgentInsights? _launchInsights;
   String? _activeChatId;
@@ -44,7 +49,6 @@ class _HomeShellState extends State<HomeShell> {
     _repository = ChatRepository();
     _nudgeService = AgentNudgeService(repository: _repository);
     _passiveNudges = PassiveNudgeCoordinator(repository: _repository);
-    _whatsAppInboxRepository = WhatsAppInboxRepository();
     unawaited(_bootstrapChatSession());
     _activeChatSub = _repository.watchActiveChatId(widget.userId).listen(
       (id) {
@@ -58,14 +62,6 @@ class _HomeShellState extends State<HomeShell> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runLaunchPipeline();
-    });
-    _unreadWhatsAppSub = _whatsAppInboxRepository.watchUnreadBadgeCount().listen((
-      count,
-    ) {
-      if (!mounted || count == _unreadWhatsAppCount) {
-        return;
-      }
-      setState(() => _unreadWhatsAppCount = count);
     });
   }
 
@@ -81,30 +77,9 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  Future<void> _onNewChat() async {
-    final id = await _repository.createChat(widget.userId);
-    if (!mounted) {
-      return;
-    }
-    setState(() => _activeChatId = id);
-  }
-
-  Future<void> _onSelectChat(String chatId) async {
-    await _repository.setActiveChatId(widget.userId, chatId);
-    if (!mounted) {
-      return;
-    }
-    setState(() => _activeChatId = chatId);
-  }
-
-  Future<void> _onDeleteChat(String chatId) async {
-    await _repository.deleteChat(widget.userId, chatId);
-  }
-
   @override
   void dispose() {
     unawaited(_activeChatSub?.cancel());
-    unawaited(_unreadWhatsAppSub?.cancel());
     super.dispose();
   }
 
@@ -140,42 +115,21 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  void _openChatTab() {
+  /// The dashboard's "talk to Aivy" affordance now lands on the agent.
+  void _openAgentTab() {
     setState(() {
-      _currentIndex = 2;
+      _currentIndex = _tabAgent;
     });
-  }
-
-  void _openMeetings() {
-    final chatId = _activeChatId;
-    if (chatId == null) {
-      return;
-    }
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (context) => MeetingRecorderScreen(
-          userId: widget.userId,
-          activeChatId: chatId,
-        ),
-      ),
-    );
   }
 
   PreferredSizeWidget? _buildAppBar(BuildContext context) {
     final theme = Theme.of(context);
     switch (_currentIndex) {
-      // Home, Aivy, Chat and Dashboard all draw their own headers.
-      case 0:
-      case 1:
-      case 2:
-      case 4:
+      // Aivy and Dashboard draw their own headers.
+      case _tabAgent:
+      case _tabDashboard:
         return null;
-      case 3:
-        return AppBar(
-          title: const Text('WhatsApp Inbox'),
-          backgroundColor: theme.colorScheme.surface,
-        );
-      case 5:
+      case _tabReports:
         return AppBar(
           title: const Text('Reports'),
           backgroundColor: theme.colorScheme.surface,
@@ -189,7 +143,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         );
-      case 6:
+      case _tabMore:
       default:
         return AppBar(
           title: const Text('More'),
@@ -201,32 +155,14 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isVoiceHome = _currentIndex == 0;
-    // Tab 1 is the new agent screen; the old Chat tab moved to 2 and will be
-    // retired once the agent screen has replaced it.
-    final isAgent = _currentIndex == 1;
-    final isChat = _currentIndex == 2;
-    final isJarvisNav = isVoiceHome || isAgent || isChat;
+    final isAgent = _currentIndex == _tabAgent;
 
     final screens = [
-      AivyVoiceHomeScreen(userId: widget.userId),
       AivyAgentScreen(userId: widget.userId),
-      ChatScreen(
-        userId: widget.userId,
-        activeChatId: _activeChatId,
-        onNewChat: _onNewChat,
-        onSelectChat: _onSelectChat,
-        onDeleteChat: _onDeleteChat,
-      ),
-      WhatsAppConversationsScreen(
-        ownerUid: widget.userId,
-        repository: _whatsAppInboxRepository,
-      ),
       DashboardScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
-        onOpenChat: _openChatTab,
-        onOpenMeetings: _openMeetings,
+        onOpenChat: _openAgentTab,
       ),
       ReportsScreen(
         key: ValueKey<int>(_reportsResyncTick),
@@ -237,10 +173,9 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: isVoiceHome || _currentIndex == 4,
-      backgroundColor: (isChat || isVoiceHome || isAgent)
-          ? const Color(0xFF030712)
-          : theme.scaffoldBackgroundColor,
+      extendBodyBehindAppBar: _currentIndex == _tabDashboard,
+      backgroundColor:
+          isAgent ? const Color(0xFF030712) : theme.scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
       body: IndexedStack(
         index: _currentIndex,
@@ -254,14 +189,13 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor: isJarvisNav
-              ? const Color(0xFF0E0E14)
-              : theme.colorScheme.surface,
-          indicatorColor: isJarvisNav
+          backgroundColor:
+              isAgent ? const Color(0xFF0E0E14) : theme.colorScheme.surface,
+          indicatorColor: isAgent
               ? const Color(0xFF6366F1).withValues(alpha: 0.35)
               : theme.colorScheme.secondaryContainer,
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (!isJarvisNav) {
+            if (!isAgent) {
               return theme.textTheme.labelMedium;
             }
             if (states.contains(WidgetState.selected)) {
@@ -276,7 +210,7 @@ class _HomeShellState extends State<HomeShell> {
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final base = theme.iconTheme;
-            if (!isJarvisNav) {
+            if (!isAgent) {
               return base.copyWith(color: theme.colorScheme.onSurfaceVariant);
             }
             if (states.contains(WidgetState.selected)) {
@@ -293,36 +227,11 @@ class _HomeShellState extends State<HomeShell> {
               _currentIndex = index;
             });
           },
-          destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
+          destinations: const [
             NavigationDestination(
               icon: Icon(Icons.auto_awesome_outlined),
               selectedIcon: Icon(Icons.auto_awesome),
               label: 'Aivy',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              selectedIcon: Icon(Icons.chat_bubble),
-              label: 'Chat',
-            ),
-            NavigationDestination(
-              icon: _unreadWhatsAppCount > 0
-                  ? Badge(
-                      label: Text('$_unreadWhatsAppCount'),
-                      child: const Icon(Icons.mark_chat_unread_outlined),
-                    )
-                  : const Icon(Icons.mark_chat_read_outlined),
-              selectedIcon: _unreadWhatsAppCount > 0
-                  ? Badge(
-                      label: Text('$_unreadWhatsAppCount'),
-                      child: const Icon(Icons.mark_chat_unread_rounded),
-                    )
-                  : const Icon(Icons.mark_chat_read_rounded),
-              label: 'WhatsApp',
             ),
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
