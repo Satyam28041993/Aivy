@@ -36,6 +36,19 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 const REGION = "us-central1";
 
+/**
+ * Bumped whenever these functions need to redeploy for a reason the source
+ * hash would not otherwise notice.
+ *
+ * The Firebase CLI skips a function whose code is unchanged, and skipping also
+ * skips setting its invoker IAM policy. The first deploy of these three
+ * uploaded their code but failed that IAM step, so every later deploy reported
+ * "Skipped (No changes detected)" and never retried it — leaving them
+ * unreachable from the browser, which surfaces as a CORS error because the
+ * preflight is rejected before it reaches the function.
+ */
+const AGENT_BUILD = "v2";
+
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
     throw new HttpsError("unauthenticated", "Sign in required");
@@ -143,6 +156,7 @@ export const aivyAgent = onCall(
     });
 
     logger.info("aivyAgent turn", {
+      build: AGENT_BUILD,
       uid,
       chatId,
       hops: turn.hops,
