@@ -47,7 +47,7 @@ const REGION = "us-central1";
  * unreachable from the browser, which surfaces as a CORS error because the
  * preflight is rejected before it reaches the function.
  */
-const AGENT_BUILD = "v5";
+const AGENT_BUILD = "v6-location";
 
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
@@ -87,6 +87,24 @@ function cityFrom(memory: Record<string, unknown>): string | null {
   return null;
 }
 
+/** Device coordinates off the payload, or null if they are absent or nonsense. */
+function coordsFrom(payload: Record<string, unknown>): { lat: number; lng: number } | null {
+  const lat = Number(payload.lat);
+  const lng = Number(payload.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return null;
+  }
+  // 0,0 is in the Atlantic; it is what a broken fix looks like, not a place
+  // anyone reading this is standing.
+  if (lat === 0 && lng === 0) {
+    return null;
+  }
+  return { lat, lng };
+}
+
 export const aivyAgent = onCall(
   {
     region: REGION,
@@ -110,6 +128,10 @@ export const aivyAgent = onCall(
     // Firestore or logged — it lives in memory for the length of the call and
     // Google expires it in about an hour anyway. See agent/google/workspace.ts.
     const googleToken = str(payload.googleAccessToken) || null;
+
+    // Device position for this turn only, same as the Google token: used while
+    // the model thinks, never written down.
+    const coords = coordsFrom(payload);
 
     const timezone = str(payload.timezone) || "Asia/Kolkata";
     const nowIso = str(payload.nowIso) || DateTime.now().setZone(timezone).toISO()!;
@@ -139,6 +161,7 @@ export const aivyAgent = onCall(
         summary: d.lines.map((l) => `${l.label}: ${l.value}`).join(", "),
       })),
       googleConnected: googleToken != null,
+      hasLiveLocation: coords != null,
     });
 
     await appendMessage(uid, chatId, { role: "user", text: userText });
@@ -146,7 +169,15 @@ export const aivyAgent = onCall(
     let turn;
     try {
       turn = await runAgentTurn({
-        ctx: { uid, timezone, nowIso, chatId, googleToken, userCity: cityFrom(memory) },
+        ctx: {
+          uid,
+          timezone,
+          nowIso,
+          chatId,
+          googleToken,
+          userCity: cityFrom(memory),
+          coords,
+        },
         systemPrompt,
         history,
         userText,
@@ -199,6 +230,7 @@ export const aivyAgent = onCall(
       chatId,
       hops: turn.hops,
       google: googleToken != null,
+      located: coords != null,
       tools: turn.trace.map((t) => `${t.name}:${t.ok ? "ok" : t.reason}`),
       drafts: turn.drafts.length,
     });

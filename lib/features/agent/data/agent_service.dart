@@ -3,8 +3,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../core/firebase/firebase_session.dart';
+import '../../../core/location/device_location.dart';
 import '../models/agent_models.dart';
 
 /// Client for the agent backend.
@@ -86,13 +88,23 @@ class AgentService {
       'aivyAgent',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
     );
-    final googleToken = await FirebaseSession.googleAccessTokenOrNull();
+    // Both are best-effort and both are fetched together, so a slow GPS does
+    // not add to a slow token refresh.
+    final results = await Future.wait<Object?>(<Future<Object?>>[
+      FirebaseSession.googleAccessTokenOrNull(),
+      DeviceLocation.current(),
+    ]);
+    final googleToken = results[0] as String?;
+    final position = results[1] as Position?;
+
     final res = await callable.call<Map<String, dynamic>>(<String, dynamic>{
       'text': trimmed,
       if (chatId != null && chatId.isNotEmpty) 'chatId': chatId,
       'timezone': await _timezone(),
       'nowIso': _nowIso(),
       if (googleToken != null) 'googleAccessToken': googleToken,
+      if (position != null) 'lat': position.latitude,
+      if (position != null) 'lng': position.longitude,
     });
     return AgentTurnResponse.fromMap(Map<String, dynamic>.from(res.data));
   }

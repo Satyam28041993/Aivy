@@ -146,3 +146,42 @@ describe("routes", () => {
     expect((err as MapsApiError).hindiMessage).toContain("Routes API");
   });
 });
+
+describe("location bias", () => {
+  it("biases a search to the device fix instead of a place name", async () => {
+    const calls = stubFetch([{ json: { places: [] } }]);
+    await placesTextSearch({
+      query: "printing press",
+      near: "Kanpur",
+      coords: { lat: 19.3919, lng: 72.8397 },
+    });
+    // The name must not also go into the text, or the two fight each other.
+    expect(calls[0]!.body.textQuery).toBe("printing press");
+    expect(calls[0]!.body.locationBias).toEqual({
+      circle: { center: { latitude: 19.3919, longitude: 72.8397 }, radius: 8000 },
+    });
+  });
+
+  it("keeps the radius inside what Places accepts", async () => {
+    const calls = stubFetch([{ json: { places: [] } }, { json: { places: [] } }]);
+    await placesTextSearch({ query: "a", coords: { lat: 1, lng: 1 }, radiusM: 1 });
+    await placesTextSearch({ query: "a", coords: { lat: 1, lng: 1 }, radiusM: 9_999_999 });
+    const radii = calls.map(
+      (c) => (c.body.locationBias as { circle: { radius: number } }).circle.radius,
+    );
+    expect(radii).toEqual([500, 50_000]);
+  });
+
+  it("routes from coordinates as a waypoint, not as text", async () => {
+    const calls = stubFetch([{ json: { routes: [{ duration: "600s", distanceMeters: 5000 }] } }]);
+    const route = await computeRoute({
+      origin: { lat: 19.3919, lng: 72.8397 },
+      destination: "Saphale railway station",
+    });
+    expect(calls[0]!.body.origin).toEqual({
+      location: { latLng: { latitude: 19.3919, longitude: 72.8397 } },
+    });
+    expect(calls[0]!.body.destination).toEqual({ address: "Saphale railway station" });
+    expect(route!.mapsUri).toContain("origin=19.3919%2C72.8397");
+  });
+});

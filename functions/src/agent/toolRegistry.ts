@@ -34,7 +34,7 @@ import {
   listRecentEmailsTool,
   sendEmailTool,
 } from "./tools/googleTools";
-import { findPlacesTool, getDirectionsTool } from "./tools/mapsTools";
+import { findPlacesTool, getDirectionsTool, whereAmITool } from "./tools/mapsTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -481,14 +481,23 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         near: {
           type: "string",
           description:
-            "Area or city to look around. Omit and their own city is used, so " +
-            "pass this only when they name somewhere else.",
+            "Area or city to look around. OMIT for 'paas me' / 'yahan' — the " +
+            "server then uses their phone's live location, which is better than " +
+            "any name. Pass this only when they name somewhere else.",
         },
         open_now: { type: "boolean", description: "Only places open right now." },
         limit: { type: "number", description: "How many. Default 5, max 10." },
       },
       required: ["query"],
     },
+  },
+  {
+    name: "where_am_i",
+    description:
+      "Where the user is right now, from their phone's location — address plus a " +
+      "map link. Use for 'main kahan hoon', or when you need their exact spot " +
+      "rather than their city.",
+    parameters: { type: "object", properties: {} },
   },
   {
     name: "get_directions",
@@ -502,7 +511,9 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         destination: { type: "string", description: "Where they are going." },
         origin: {
           type: "string",
-          description: "Starting point. Omit to start from their own city.",
+          description:
+            "Starting point. OMIT for 'yahan se' — the server starts from their " +
+            "phone's live location. Pass this only when they name a starting point.",
         },
         travel_mode: {
           type: "string",
@@ -551,6 +562,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   find_contact: findContactTool,
   find_places: findPlacesTool,
   get_directions: getDirectionsTool,
+  where_am_i: (ctx) => whereAmITool(ctx),
 };
 
 /** Tools that create a draft, so the loop knows to surface a card. */

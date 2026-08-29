@@ -279,3 +279,43 @@ banega, app se nahi.
 
 Kuch toota nahi — Aivy saaf-saaf keh degi ki "Maps abhi set nahi hai", aur baaki sab
 kaam waise hi chalta rahega.
+
+---
+
+## 8. Live location (naya)
+
+Ab har message ke saath app phone ki location bhejti hai (agar permission ho).
+Isse:
+
+| Boliye | Pehle | Ab |
+| --- | --- | --- |
+| "paas me koi printing press hai?" | shehar poochhti thi | jahan aap khade hain, wahin se |
+| "yahan se Saphale station kitni door hai?" | "kahan se?" | seedha jawaab |
+| "main abhi kahan hoon?" | "pata nahi" | address + Maps link |
+
+**Permission:** Aivy tab pehli baar kholne par Android khud poochhega. Mana kar dein
+to kuch tootega nahi — bas jagah ka naam poochhna padega, jaisa pehle tha. Baad me
+dena ho: Settings → Apps → Aivy → Permissions → Location.
+
+**Location store nahi hoti.** Google token ki tarah, sirf usi turn me use hoti hai —
+Firestore me nahi likhi jaati, log me nahi jaati.
+
+Agar aap khud jagah ka naam bol dein ("Lucknow me kya hai"), to wo naam jeetega —
+live location tabhi use hoti hai jab aap koi jagah na batayein.
+
+### "Main kahan hoon" ka address — ek aur API (optional)
+
+Coordinates se address banane ke liye **Geocoding API** chahiye. Uske bina bhi
+sab kuch chalta hai — "paas me", doori, ETA — sirf `main kahan hoon` ka jawaab
+address ki jagah coordinates + Maps link me aayega.
+
+Chahein to:
+1. [Geocoding API enable karein](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=aivy-5c031)
+2. [Credentials](https://console.cloud.google.com/apis/credentials?project=aivy-5c031) → apni Maps key → Edit → **API restrictions** me **Geocoding API** bhi tick → Save
+
+Kharch: ~$5 per 1000 — free credit me kuch nahi lagega.
+
+### Ye APK ka change hai
+
+Location app ke andar se aati hai, isliye iske liye **naya APK chahiye** (functions
+deploy kaafi nahi).

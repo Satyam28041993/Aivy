@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Location is what makes "paas me kya hai" and "yahan se kitni door" work
+         without being told where you are. Coarse is enough for both; fine only
+         sharpens the same answers. Foreground only - nothing is read while the
+         app is closed, and nothing is stored. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <application
         android:label="aivy"
         android:name="${applicationName}"

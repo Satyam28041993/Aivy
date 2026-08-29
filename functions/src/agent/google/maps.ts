@@ -96,6 +96,12 @@ async function callMaps<T>(
 // Places
 // ---------------------------------------------------------------------------
 
+/** A point from the user's device. */
+export interface Coords {
+  lat: number;
+  lng: number;
+}
+
 export interface PlaceRow {
   name: string;
   address: string;
@@ -124,6 +130,10 @@ const PLACES_FIELDS = [
 export async function placesTextSearch(opts: {
   query: string;
   near?: string | null;
+  /** Device coordinates, when the app had them — beats any place name. */
+  coords?: Coords | null;
+  /** Metres around `coords` to favour. */
+  radiusM?: number;
   openNow?: boolean;
   limit?: number;
 }): Promise<PlaceRow[]> {
@@ -131,13 +141,25 @@ export async function placesTextSearch(opts: {
   if (!q) {
     return [];
   }
-  const textQuery = opts.near && opts.near.trim() ? `${q} near ${opts.near.trim()}` : q;
+  // Real coordinates say "near here" far better than a place name can, so when
+  // the device gave them, they replace the "near <area>" text entirely.
+  const useCoords = opts.coords != null;
+  const textQuery =
+    !useCoords && opts.near && opts.near.trim() ? `${q} near ${opts.near.trim()}` : q;
   const body: Record<string, unknown> = {
     textQuery,
     maxResultCount: Math.min(10, Math.max(1, opts.limit ?? 5)),
     languageCode: "en",
     regionCode: "IN",
   };
+  if (useCoords) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: opts.coords!.lat, longitude: opts.coords!.lng },
+        radius: Math.min(50_000, Math.max(500, opts.radiusM ?? 8_000)),
+      },
+    };
+  }
   if (opts.openNow) {
     body.openNow = true;
   }
@@ -186,7 +208,11 @@ function secondsFrom(raw: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function mapsDirectionsLink(origin: string, destination: string, mode: TravelMode): string {
+function mapsDirectionsLink(
+  origin: string | Coords,
+  destination: string | Coords,
+  mode: TravelMode,
+): string {
   const travel =
     mode === "WALK"
       ? "walking"
@@ -197,8 +223,8 @@ function mapsDirectionsLink(origin: string, destination: string, mode: TravelMod
           : "driving";
   return (
     "https://www.google.com/maps/dir/?api=1" +
-    `&origin=${encodeURIComponent(origin)}` +
-    `&destination=${encodeURIComponent(destination)}` +
+    `&origin=${encodeURIComponent(waypointLabel(origin))}` +
+    `&destination=${encodeURIComponent(waypointLabel(destination))}` +
     `&travelmode=${travel}`
   );
 }
@@ -210,21 +236,32 @@ function mapsDirectionsLink(origin: string, destination: string, mode: TravelMod
  * TRAFFIC_AWARE means the ETA is the one Maps would show right now, which is
  * the whole point of asking "kitna time lagega".
  */
+function waypoint(place: string | Coords): Record<string, unknown> {
+  return typeof place === "string"
+    ? { address: place }
+    : { location: { latLng: { latitude: place.lat, longitude: place.lng } } };
+}
+
+function waypointLabel(place: string | Coords): string {
+  return typeof place === "string" ? place : `${place.lat},${place.lng}`;
+}
+
 export async function computeRoute(opts: {
-  origin: string;
-  destination: string;
+  origin: string | Coords;
+  destination: string | Coords;
   mode?: TravelMode;
 }): Promise<RouteResult | null> {
-  const origin = opts.origin.trim();
-  const destination = opts.destination.trim();
+  const origin = typeof opts.origin === "string" ? opts.origin.trim() : opts.origin;
+  const destination =
+    typeof opts.destination === "string" ? opts.destination.trim() : opts.destination;
   if (!origin || !destination) {
     return null;
   }
   const mode: TravelMode = opts.mode ?? "DRIVE";
 
   const body: Record<string, unknown> = {
-    origin: { address: origin },
-    destination: { address: destination },
+    origin: waypoint(origin),
+    destination: waypoint(destination),
     travelMode: mode,
     languageCode: "en",
     units: "METRIC",
@@ -248,4 +285,49 @@ export async function computeRoute(opts: {
     mode,
     mapsUri: mapsDirectionsLink(origin, destination, mode),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reverse geocoding — coordinates to a name a person would use
+// ---------------------------------------------------------------------------
+
+/**
+ * Turns the device's coordinates into an address.
+ *
+ * This is the one legacy API left in here, because Places (New) and Routes have
+ * no reverse-geocode call. It takes the key as a query parameter rather than a
+ * header, so it does not go through `callMaps`.
+ *
+ * It needs the **Geocoding API** enabled separately. Everything else — "paas
+ * me", distance, ETA — works on coordinates without it, so a failure here
+ * returns null and the caller falls back to the raw position rather than
+ * treating it as an error.
+ */
+export async function reverseGeocode(coords: Coords): Promise<string | null> {
+  let key: string;
+  try {
+    key = await mapsKey();
+  } catch {
+    return null;
+  }
+  const url =
+    "https://maps.googleapis.com/maps/api/geocode/json" +
+    `?latlng=${coords.lat},${coords.lng}&language=en&key=${encodeURIComponent(key)}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      return null;
+    }
+    const body = (await res.json()) as {
+      status?: string;
+      results?: Array<{ formatted_address?: string }>;
+    };
+    if (body.status !== "OK") {
+      return null;
+    }
+    const address = `${body.results?.[0]?.formatted_address ?? ""}`.trim();
+    return address || null;
+  } catch {
+    return null;
+  }
 }

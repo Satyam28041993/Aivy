@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/firebase/firebase_session.dart';
+import '../../../core/location/device_location.dart';
 import '../../../core/theme/aivy_theme.dart';
 import '../data/agent_service.dart';
 import '../models/agent_models.dart';
@@ -83,6 +84,10 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     _input.addListener(_repaintComposer);
     _inputFocus.addListener(_repaintComposer);
     unawaited(_refreshGoogleStatus());
+    // Asked here rather than at launch, so the system dialog arrives with the
+    // screen that actually uses the answer. Declining costs nothing: location
+    // simply stays unknown and "paas me" asks for an area instead.
+    unawaited(DeviceLocation.ensurePermission());
   }
 
   /// Silent check — a missing Google connection is not an error, it just means

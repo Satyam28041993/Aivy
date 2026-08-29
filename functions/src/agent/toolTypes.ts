@@ -76,4 +76,10 @@ export interface ToolContext {
    * "near what" for a search like "paas me printing press" to mean anything.
    */
   userCity?: string | null;
+  /**
+   * Where the device says they are right now, when the app could get a fix.
+   * Beats `userCity` for anything nearby — a remembered city cannot tell you
+   * which end of it someone is standing in.
+   */
+  coords?: { lat: number; lng: number } | null;
 }

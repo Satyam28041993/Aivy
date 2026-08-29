@@ -18,6 +18,8 @@ export interface PromptContext {
   pendingDrafts: Array<{ id: string; title: string; summary: string }>;
   /** Whether this turn carries a Google token, i.e. Gmail/Calendar/Sheets work. */
   googleConnected: boolean;
+  /** Whether the app sent a device fix with this turn. */
+  hasLiveLocation: boolean;
 }
 
 function memoryBlock(memory: Record<string, unknown>): string {
@@ -119,6 +121,14 @@ hogi.`
 doori ya time poochhein to \`get_directions\` (traffic ke saath asli ETA deta hai).
 Jawaab me maps ka link de dena, taaki wo seedha khol sakein. Ye Google Maps hai,
 unki client list nahi — apne clients ke liye \`search_clients\`.
+${
+    ctx.hasLiveLocation
+      ? `Unke phone ki live location is turn me maujood hai — "paas me", "yahan se"
+jaise sawaalon me \`near\`/\`origin\` khaali chhod do, server khud wahi le lega. Wo
+kisi bhi yaad kiye hue shehar se behtar hai.`
+      : `Abhi unke phone ki location nahi mili (permission nahi hai ya GPS band hai),
+to "paas me" ke liye jagah ka naam chahiye hoga.`
+  }
 Jab wo apni jagah batayein ("main Vasai East me hoon", "Kanpur me rehta hoon"), to
 \`remember_fact\` (category: city) se yaad rakh lo — uske baad har "paas me" wahin se
 chalega. Aur jab tak yaad na ho, conversation me jo area unhone bataya ho wo har

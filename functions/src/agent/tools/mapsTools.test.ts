@@ -4,6 +4,7 @@ import type { ToolContext } from "../toolTypes";
 
 const placesMock = vi.fn();
 const routeMock = vi.fn();
+const geocodeMock = vi.fn();
 
 vi.mock("../google/maps", async () => {
   const actual = await vi.importActual<typeof import("../google/maps")>("../google/maps");
@@ -11,10 +12,11 @@ vi.mock("../google/maps", async () => {
     ...actual,
     placesTextSearch: (...a: unknown[]) => placesMock(...a),
     computeRoute: (...a: unknown[]) => routeMock(...a),
+    reverseGeocode: (...a: unknown[]) => geocodeMock(...a),
   };
 });
 
-const { findPlacesTool, getDirectionsTool } = await import("./mapsTools");
+const { findPlacesTool, getDirectionsTool, whereAmITool } = await import("./mapsTools");
 const { MapsApiError } = await import("../google/maps");
 
 const CTX: ToolContext = {
@@ -25,9 +27,13 @@ const CTX: ToolContext = {
   userCity: "Kanpur",
 };
 
+/** Vasai East, roughly. */
+const LOCATED: ToolContext = { ...CTX, coords: { lat: 19.3919, lng: 72.8397 } };
+
 beforeEach(() => {
   placesMock.mockReset();
   routeMock.mockReset();
+  geocodeMock.mockReset();
 });
 
 describe("find_places", () => {
@@ -99,5 +105,69 @@ describe("get_directions", () => {
     routeMock.mockResolvedValue(null);
     const res = await getDirectionsTool(CTX, { destination: "Antarctica" });
     expect(res.ok === false && res.reason).toBe("nothing_found");
+  });
+});
+
+describe("live location", () => {
+  it("prefers the device fix over the remembered city", async () => {
+    placesMock.mockResolvedValue([
+      { name: "X", address: "Y", rating: null, ratingCount: 0, openNow: null, phone: "", mapsUri: "" },
+    ]);
+    await findPlacesTool(LOCATED, { query: "printing press" });
+    const arg = placesMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg.coords).toEqual({ lat: 19.3919, lng: 72.8397 });
+  });
+
+  it("steps aside when the user names an area", async () => {
+    placesMock.mockResolvedValue([
+      { name: "X", address: "Y", rating: null, ratingCount: 0, openNow: null, phone: "", mapsUri: "" },
+    ]);
+    await findPlacesTool(LOCATED, { query: "courier", near: "Lucknow" });
+    const arg = placesMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg.coords).toBeNull();
+    expect(arg.near).toBe("Lucknow");
+  });
+
+  it("routes from where they are standing", async () => {
+    routeMock.mockResolvedValue({ distanceKm: 12, durationMinutes: 25, mode: "DRIVE", mapsUri: "u" });
+    const res = await getDirectionsTool(LOCATED, { destination: "Saphale railway station" });
+    expect(res.ok).toBe(true);
+    expect(routeMock.mock.calls[0]![0]).toMatchObject({
+      origin: { lat: 19.3919, lng: 72.8397 },
+    });
+  });
+
+  it("ignores a nonsense fix", async () => {
+    placesMock.mockResolvedValue([]);
+    const res = await findPlacesTool(
+      { ...CTX, userCity: null, coords: { lat: 0, lng: 0 } },
+      { query: "x" },
+    );
+    // No usable location at all, so it must ask rather than search the ocean.
+    expect(res.ok === false && res.reason).toBe("needs_detail");
+  });
+});
+
+describe("where_am_i", () => {
+  it("answers with the address when Geocoding is available", async () => {
+    geocodeMock.mockResolvedValue("Vasai East, Maharashtra 401208, India");
+    const res = await whereAmITool(LOCATED);
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.address).toContain("Vasai East");
+    expect(data.maps_link).toContain("19.3919");
+  });
+
+  it("still gives the position when Geocoding is not enabled", async () => {
+    geocodeMock.mockResolvedValue(null);
+    const res = await whereAmITool(LOCATED);
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.address).toBeUndefined();
+    expect(data.lat).toBe(19.3919);
+    expect(`${data.note}`).toContain("Geocoding");
+  });
+
+  it("says what to check when there is no fix", async () => {
+    const res = await whereAmITool(CTX);
+    expect(res.ok === false && res.message).toContain("permission");
   });
 });
