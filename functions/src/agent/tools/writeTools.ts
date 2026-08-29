@@ -181,6 +181,19 @@ export async function createMeetingTool(
     label: "Reminder",
     value: `${lead} min pehle — ${reminderAt.toFormat("h:mm a")}`,
   });
+
+  // Only promise the calendar when this turn actually carries a Google token —
+  // a card that says "Calendar par bhi jaayega" and then does not is worse than
+  // one that never mentioned it.
+  const hasGoogle = typeof ctx.googleToken === "string" && ctx.googleToken.trim().length > 0;
+  const addToCalendar = hasGoogle && args.add_to_calendar !== false;
+  const durationMinutes = typeof args.duration_minutes === "number"
+    ? Math.max(15, Math.min(12 * 60, args.duration_minutes))
+    : 60;
+  if (addToCalendar) {
+    lines.push({ label: "Calendar", value: `Google Calendar par bhi (${durationMinutes} min)` });
+  }
+
   if (note) {
     lines.push({ label: "Note", value: note });
   }
@@ -201,6 +214,8 @@ export async function createMeetingTool(
       whenLabel: when.label ?? whenPhrase,
       reminderLeadMinutes: lead,
       note,
+      addToCalendar,
+      durationMinutes,
     },
   });
 

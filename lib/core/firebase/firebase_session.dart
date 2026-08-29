@@ -231,6 +231,32 @@ class FirebaseSession {
     return after.authHeaders;
   }
 
+  /// Bearer token for the agent backend, or null when Google simply is not
+  /// available here — web, no device sign-in, or scopes never granted.
+  ///
+  /// Deliberately returns null instead of throwing: the agent screen works
+  /// perfectly well without Google, and a message should not fail to send just
+  /// because Calendar is not hooked up.
+  static Future<String?> googleAccessTokenOrNull() async {
+    if (kIsWeb) {
+      return null;
+    }
+    try {
+      final headers = await googleWorkspaceAuthHeaders();
+      final auth = headers['Authorization'] ?? '';
+      if (!auth.startsWith('Bearer ')) {
+        return null;
+      }
+      final token = auth.substring('Bearer '.length).trim();
+      return token.isEmpty ? null : token;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[Aivy] Google token unavailable: $error');
+      }
+      return null;
+    }
+  }
+
   static Future<void> signOut() async {
     if (kIsWeb) {
       await auth.signOut();

@@ -145,3 +145,67 @@ Naya **Aivy** tab kholkar:
 
 Kuch galat lage to **card par hi dikhega** — save hone se pehle. "Badlo" dabakar
 normal bhasha me theek kar sakte hain: "12 baje kar do".
+
+---
+
+## 6. Google — Calendar, Gmail, Sheets, Contacts (naya)
+
+Ab agent ke paas Google ke tools bhi hain. WhatsApp jaan-boojhkar chhoda hai.
+
+| Tool | Kya karta hai | Confirm card? |
+| --- | --- | --- |
+| `create_meeting` | app ka reminder **+ Google Calendar par event** | haan |
+| `create_calendar_event` | personal event calendar par | haan |
+| `send_email` | Gmail se mail bhejti hai (mail wo khud likhti hai) | haan |
+| `append_sheet_row` | default Google Sheet me row | haan |
+| `list_calendar_events` | "kal calendar par kya hai" | nahi (padhna hai) |
+| `list_recent_emails` | "koi mail aaya kya" | nahi |
+| `find_contact` | naam se email/phone | nahi |
+
+Jo cheez bahar jaati hai (mail, calendar invite, sheet) wo **sirf card confirm karne
+par** jaati hai — waise hi jaise quotation ya payment.
+
+### ⚠️ Ye sirf **Android app** me chalta hai
+
+Google ke REST API device wali Google sign-in se chalte hain, jo web build me
+available nahi hai (`FirebaseSession.googleWorkspaceAuthHeaders()` web par
+`UnsupportedError` phenkti hai). Matlab:
+
+- **Web (aivy-5c031.web.app)** — baaki sab kuch chalta hai; calendar/mail/sheet wale
+  tools Aivy khud bata degi ki "Android app chahiye"
+- **Android APK** — sab chalta hai
+
+Isliye ab **APK build karna zaroori ho gaya**: Actions → "Build APK" → Run workflow.
+
+### Phone par ek baar permission deni hai
+
+Naye Aivy tab me upar-right me ek **cloud icon** hai:
+
+- ☁️ (grey, cross) — Google juda nahi hai → tap karke permission de dijiye
+- ☁️ (hara, tick) — juda hua hai, sab chaalu
+
+Ya purana raasta: **More → Allow Google extras**.
+
+### Token kahan rehta hai
+
+Kahin store nahi hota. Har message ke saath app apna Google access token function ko
+bhejti hai, function usi turn me Google se baat karta hai, aur baat khatam. Firestore
+me nahi likha jaata, log me nahi jaata, aur Google use ~1 ghante me khud expire kar
+deta hai. Draft ke saath bhi save nahi hota — isliye confirm karte waqt app token
+dobara bhejti hai.
+
+### Sheet ka ID
+
+`append_sheet_row` default sheet use karta hai — wahi jo pehle se
+`users/{uid}/meta/google_prefs` → `defaultSpreadsheetId` me set hota hai (More →
+Google settings). Set nahi hai to Aivy maang legi.
+
+### Test karne ke liye (APK par)
+
+| Boliye | Hona chahiye |
+| --- | --- |
+| "kal 11 baje rohan ke saath meeting hai" → confirm | reminder + "Google Calendar par bhi daal diya" |
+| "kal calendar par kya hai?" | Google Calendar ke events |
+| "koi mail aaya kya?" | inbox ke last 8 mail |
+| "rohan ko mail bhej do ki quotation bhej diya hai" | mail ka card — padhkar confirm |
+| "rohan ka email kya hai?" | contacts se address |

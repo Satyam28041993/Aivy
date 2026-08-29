@@ -47,7 +47,7 @@ const REGION = "us-central1";
  * unreachable from the browser, which surfaces as a CORS error because the
  * preflight is rejected before it reaches the function.
  */
-const AGENT_BUILD = "v2";
+const AGENT_BUILD = "v3-google";
 
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
@@ -92,6 +92,11 @@ export const aivyAgent = onCall(
       throw new HttpsError("invalid-argument", "text is required");
     }
 
+    // Google token for this turn only. It is deliberately never written to
+    // Firestore or logged — it lives in memory for the length of the call and
+    // Google expires it in about an hour anyway. See agent/google/workspace.ts.
+    const googleToken = str(payload.googleAccessToken) || null;
+
     const timezone = str(payload.timezone) || "Asia/Kolkata";
     const nowIso = str(payload.nowIso) || DateTime.now().setZone(timezone).toISO()!;
     const key = geminiApiKey.value() || process.env.GEMINI_API_KEY || "";
@@ -119,6 +124,7 @@ export const aivyAgent = onCall(
         title: d.title,
         summary: d.lines.map((l) => `${l.label}: ${l.value}`).join(", "),
       })),
+      googleConnected: googleToken != null,
     });
 
     await appendMessage(uid, chatId, { role: "user", text: userText });
@@ -126,7 +132,7 @@ export const aivyAgent = onCall(
     let turn;
     try {
       turn = await runAgentTurn({
-        ctx: { uid, timezone, nowIso, chatId },
+        ctx: { uid, timezone, nowIso, chatId, googleToken },
         systemPrompt,
         history,
         userText,
@@ -160,6 +166,7 @@ export const aivyAgent = onCall(
       uid,
       chatId,
       hops: turn.hops,
+      google: googleToken != null,
       tools: turn.trace.map((t) => `${t.name}:${t.ok ? "ok" : t.reason}`),
       drafts: turn.drafts.length,
     });
@@ -192,7 +199,9 @@ export const aivyAgentCommit = onCall(
       return { ok: true, message: "Theek hai, rehne diya.", createdIds: [] };
     }
 
-    const result = await commitDraft(uid, draftId);
+    const result = await commitDraft(uid, draftId, {
+      googleToken: str(payload.googleAccessToken) || null,
+    });
 
     const chatId = str(payload.chatId);
     if (chatId && result.ok) {

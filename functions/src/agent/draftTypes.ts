@@ -16,7 +16,10 @@ export type DraftKind =
   | "order"
   | "payment_due"
   | "payment_received"
-  | "remember_fact";
+  | "remember_fact"
+  | "calendar_event"
+  | "email"
+  | "sheet_row";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -38,6 +41,13 @@ export interface MeetingDraftData {
   /** Minutes before the meeting for the automatic reminder. */
   reminderLeadMinutes: number;
   note: string | null;
+  /**
+   * Also put it on Google Calendar when the turn carried a Google token.
+   * Optional so drafts written before this existed still commit.
+   */
+  addToCalendar?: boolean;
+  /** Minutes the calendar event should block out. */
+  durationMinutes?: number;
 }
 
 export interface ReminderDraftData {
@@ -97,6 +107,35 @@ export interface PaymentReceivedDraftData {
   note: string | null;
 }
 
+export interface CalendarEventDraftData {
+  kind: "calendar_event";
+  summary: string;
+  description: string | null;
+  whenIso: string;
+  whenMs: number;
+  whenLabel: string;
+  durationMinutes: number;
+  timezone: string;
+  attendeeEmails: string[];
+}
+
+export interface EmailDraftData {
+  kind: "email";
+  to: string;
+  /** Who it is, when the address came from a contact lookup. */
+  toName: string | null;
+  subject: string;
+  body: string;
+}
+
+export interface SheetRowDraftData {
+  kind: "sheet_row";
+  /** Null means "use the default sheet saved in settings" at commit time. */
+  spreadsheetId: string | null;
+  tab: string;
+  cells: string[];
+}
+
 export interface RememberFactDraftData {
   kind: "remember_fact";
   category: string;
@@ -110,7 +149,10 @@ export type DraftData =
   | OrderDraftData
   | PaymentDueDraftData
   | PaymentReceivedDraftData
-  | RememberFactDraftData;
+  | RememberFactDraftData
+  | CalendarEventDraftData
+  | EmailDraftData
+  | SheetRowDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {

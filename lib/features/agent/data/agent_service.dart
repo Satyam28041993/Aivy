@@ -86,11 +86,13 @@ class AgentService {
       'aivyAgent',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
     );
+    final googleToken = await FirebaseSession.googleAccessTokenOrNull();
     final res = await callable.call<Map<String, dynamic>>(<String, dynamic>{
       'text': trimmed,
       if (chatId != null && chatId.isNotEmpty) 'chatId': chatId,
       'timezone': await _timezone(),
       'nowIso': _nowIso(),
+      if (googleToken != null) 'googleAccessToken': googleToken,
     });
     return AgentTurnResponse.fromMap(Map<String, dynamic>.from(res.data));
   }
@@ -116,11 +118,16 @@ class AgentService {
     String? action,
   }) async {
     await _ensureAuth();
+    // Cancelling touches nothing outside Firestore, so it needs no Google
+    // token; confirming might send a mail or book a calendar slot, so it does.
+    final googleToken =
+        action == 'cancel' ? null : await FirebaseSession.googleAccessTokenOrNull();
     final callable = _functions.httpsCallable('aivyAgentCommit');
     final res = await callable.call<Map<String, dynamic>>(<String, dynamic>{
       'draftId': draftId,
       if (chatId != null && chatId.isNotEmpty) 'chatId': chatId,
       if (action != null) 'action': action,
+      if (googleToken != null) 'googleAccessToken': googleToken,
     });
     return AgentCommitResult.fromMap(Map<String, dynamic>.from(res.data));
   }

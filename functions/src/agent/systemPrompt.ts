@@ -16,6 +16,8 @@ export interface PromptContext {
   recentlySaved: string[];
   /** Cards currently on screen awaiting a yes/no. */
   pendingDrafts: Array<{ id: string; title: string; summary: string }>;
+  /** Whether this turn carries a Google token, i.e. Gmail/Calendar/Sheets work. */
+  googleConnected: boolean;
 }
 
 function memoryBlock(memory: Record<string, unknown>): string {
@@ -98,6 +100,20 @@ which client, put that choice to the user in your own words and wait.
 confirms it on screen. So after a write tool succeeds, tell them briefly what you
 have prepared and let them confirm — don't claim it is done. If the tool asks for
 something missing (date, amount, which client), just ask for that one thing.
+
+**Google.** ${
+    ctx.googleConnected
+      ? `Unka Google juda hua hai — Calendar, Gmail, Sheets aur Contacts tum use kar
+sakti ho. Ek client meeting ke liye \`create_meeting\` hi kaafi hai: wo app ka
+reminder bhi lagata hai aur Google Calendar par bhi daal deta hai. Mail bhejni ho to
+mail khud likho — greeting, baat, sign-off — unki bhasha me; wo card par padhkar
+confirm karenge. Naam se address nahi pata to \`find_contact\` ya seedhe
+\`send_email\` me naam bhej do, server dhoondh lega.`
+      : `Unka Google is device par juda nahi hai (web par ye kaam nahi karta —
+Android app chahiye). Calendar/Gmail/Sheets wale tools mat bulao; agar wo aisa kuch
+maangein to bata do ki Android app me More → Allow Google extras se permission deni
+hogi.`
+  }
 
 **When a tool fails**, say so plainly and carry on. Don't invent data to fill a
 gap, and don't repeat a failing call.

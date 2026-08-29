@@ -66,4 +66,9 @@ export interface ToolContext {
   timezone: string;
   nowIso: string;
   chatId: string | null;
+  /**
+   * Google OAuth access token for this turn only, when the client had one.
+   * Never persisted — see `agent/google/workspace.ts`.
+   */
+  googleToken?: string | null;
 }

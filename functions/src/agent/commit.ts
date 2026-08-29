@@ -29,9 +29,17 @@ import {
   effectivePaidAmount,
   effectiveOriginalAmount,
 } from "../paymentSettlement";
+import {
+  calendarInsertEvent,
+  gmailSend,
+  GoogleApiError,
+  sheetsAppendRow,
+} from "./google/workspace";
 import type {
   AgentDraft,
+  CalendarEventDraftData,
   DraftClientRef,
+  EmailDraftData,
   MeetingDraftData,
   OrderDraftData,
   PaymentDueDraftData,
@@ -39,7 +47,17 @@ import type {
   QuotationDraftData,
   ReminderDraftData,
   RememberFactDraftData,
+  SheetRowDraftData,
 } from "./draftTypes";
+
+/**
+ * Extras a commit may need beyond the draft itself. The Google token is the
+ * only one so far: it cannot be stored with the draft (a token in Firestore is
+ * a token waiting to leak), so the client resends it when confirming.
+ */
+export interface CommitOptions {
+  googleToken?: string | null;
+}
 
 export interface CommitResult {
   ok: boolean;
@@ -111,7 +129,11 @@ async function writeReminder(
   return ref.id;
 }
 
-async function commitMeeting(uid: string, d: MeetingDraftData): Promise<CommitResult> {
+async function commitMeeting(
+  uid: string,
+  d: MeetingDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
   const client = d.client ? await ensureClient(uid, d.client) : null;
   const who = client ? ` — ${client.name}` : "";
   const title = d.agenda ? `Meeting: ${d.agenda}` : `Meeting${who}`;
@@ -144,9 +166,31 @@ async function commitMeeting(uid: string, d: MeetingDraftData): Promise<CommitRe
     ids.push(nudgeId);
   }
 
+  // Google Calendar is best-effort on purpose: the meeting is already saved in
+  // the app by this point, and losing it because Google returned a 403 would be
+  // the wrong trade. The message says what happened either way.
+  let calendarNote = "";
+  if (d.addToCalendar && opts.googleToken) {
+    try {
+      await calendarInsertEvent(opts.googleToken, {
+        summary: title,
+        description: d.note ?? null,
+        startMs: d.whenMs,
+        durationMinutes: d.durationMinutes ?? 60,
+        timezone: "UTC",
+      });
+      calendarNote = " Google Calendar par bhi daal diya.";
+    } catch (e) {
+      calendarNote =
+        e instanceof GoogleApiError && e.isAuth
+          ? " (Calendar par nahi daal paayi — Google permission chahiye.)"
+          : " (Calendar par nahi daal paayi.)";
+    }
+  }
+
   return {
     ok: true,
-    message: `Meeting set ho gayi — ${d.whenLabel}${who}.`,
+    message: `Meeting set ho gayi — ${d.whenLabel}${who}.${calendarNote}`,
     createdIds: ids,
     summary: `meeting ${client?.name ?? ""} ${d.whenLabel} (${d.agenda || "no agenda"})`.trim(),
   };
@@ -365,10 +409,130 @@ async function commitRememberFact(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Google Workspace
+// ---------------------------------------------------------------------------
+
+/**
+ * These three actually leave the building — an event on someone's calendar, a
+ * mail in someone's inbox, a row in a shared sheet. Unlike the Firestore
+ * writes above there is no undo, which is exactly why they only run here, after
+ * the user has read the card and tapped confirm.
+ */
+
+function needsGoogle(): CommitResult {
+  return {
+    ok: false,
+    message:
+      "Google connect nahi hai — Android app me More → Allow Google extras se permission dijiye.",
+    createdIds: [],
+    summary: "",
+  };
+}
+
+function googleFailed(e: unknown, what: string): CommitResult {
+  const message =
+    e instanceof GoogleApiError
+      ? `${what} nahi ho paaya — ${e.hindiMessage}`
+      : `${what} nahi ho paaya.`;
+  return { ok: false, message, createdIds: [], summary: "" };
+}
+
+async function commitCalendarEvent(
+  d: CalendarEventDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  if (!opts.googleToken) {
+    return needsGoogle();
+  }
+  try {
+    const ref = await calendarInsertEvent(opts.googleToken, {
+      summary: d.summary,
+      description: d.description,
+      startMs: d.whenMs,
+      durationMinutes: d.durationMinutes,
+      timezone: d.timezone,
+      attendeeEmails: d.attendeeEmails,
+    });
+    return {
+      ok: true,
+      message: `Calendar par daal diya — ${d.whenLabel}.`,
+      createdIds: ref.id ? [ref.id] : [],
+      summary: `calendar event "${d.summary}" ${d.whenLabel}`,
+    };
+  } catch (e) {
+    return googleFailed(e, "Calendar event");
+  }
+}
+
+async function commitEmail(
+  d: EmailDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  if (!opts.googleToken) {
+    return needsGoogle();
+  }
+  try {
+    const id = await gmailSend(opts.googleToken, {
+      to: d.to,
+      subject: d.subject,
+      body: d.body,
+    });
+    const who = d.toName ? `${d.toName} ko` : `${d.to} par`;
+    return {
+      ok: true,
+      message: `Mail bhej diya — ${who}.`,
+      createdIds: id ? [id] : [],
+      summary: `email to ${d.toName ?? d.to}: ${d.subject}`,
+    };
+  } catch (e) {
+    return googleFailed(e, "Mail");
+  }
+}
+
+async function commitSheetRow(
+  uid: string,
+  d: SheetRowDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  if (!opts.googleToken) {
+    return needsGoogle();
+  }
+  let spreadsheetId = d.spreadsheetId;
+  if (!spreadsheetId) {
+    const snap = await userRef(uid).collection("meta").doc("google_prefs").get();
+    spreadsheetId = `${snap.data()?.defaultSpreadsheetId ?? ""}`.trim() || null;
+  }
+  if (!spreadsheetId) {
+    return {
+      ok: false,
+      message: "Koi default Google Sheet set nahi hai.",
+      createdIds: [],
+      summary: "",
+    };
+  }
+  try {
+    await sheetsAppendRow(opts.googleToken, {
+      spreadsheetId,
+      tab: d.tab,
+      cells: d.cells,
+    });
+    return {
+      ok: true,
+      message: "Sheet me row add kar di.",
+      createdIds: [],
+      summary: `sheet row: ${d.cells.join(" | ")}`,
+    };
+  } catch (e) {
+    return googleFailed(e, "Sheet update");
+  }
+}
+
 /** Replays one confirmed draft. Idempotent: a committed draft is not redone. */
 export async function commitDraft(
   uid: string,
   draftId: string,
+  opts: CommitOptions = {},
 ): Promise<CommitResult> {
   const draft: AgentDraft | null = await getDraft(uid, draftId);
   if (!draft) {
@@ -389,7 +553,7 @@ export async function commitDraft(
   let result: CommitResult;
   switch (draft.data.kind) {
     case "meeting":
-      result = await commitMeeting(uid, draft.data);
+      result = await commitMeeting(uid, draft.data, opts);
       break;
     case "reminder":
       result = await commitReminder(uid, draft.data);
@@ -408,6 +572,15 @@ export async function commitDraft(
       break;
     case "remember_fact":
       result = await commitRememberFact(uid, draft.data);
+      break;
+    case "calendar_event":
+      result = await commitCalendarEvent(draft.data, opts);
+      break;
+    case "email":
+      result = await commitEmail(draft.data, opts);
+      break;
+    case "sheet_row":
+      result = await commitSheetRow(uid, draft.data, opts);
       break;
     default:
       return { ok: false, message: "Is draft ka type samajh nahi aaya.", createdIds: [], summary: "" };

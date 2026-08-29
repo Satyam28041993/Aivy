@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/firebase/firebase_session.dart';
 import '../../../core/theme/aivy_theme.dart';
 import '../data/agent_service.dart';
 import '../models/agent_models.dart';
@@ -56,6 +58,10 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   /// Shown immediately so the user sees their own line before the round trip.
   String? _pendingUserText;
 
+  /// Whether Gmail/Calendar/Sheets are reachable from this device. Null until
+  /// checked; always false on web, where the Google REST stack does not run.
+  bool? _googleReady;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +82,42 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     // and the border lifts on focus.
     _input.addListener(_repaintComposer);
     _inputFocus.addListener(_repaintComposer);
+    unawaited(_refreshGoogleStatus());
+  }
+
+  /// Silent check — a missing Google connection is not an error, it just means
+  /// the calendar and mail tools stay out of reach.
+  Future<void> _refreshGoogleStatus() async {
+    final token = await FirebaseSession.googleAccessTokenOrNull();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _googleReady = token != null);
+  }
+
+  Future<void> _connectGoogle() async {
+    if (_googleReady == true) {
+      _snack('Google juda hua hai — Calendar, Gmail aur Sheets chaalu hain.');
+      return;
+    }
+    if (kIsWeb) {
+      _snack('Calendar/Gmail sirf Android app me chalte hain.');
+      return;
+    }
+    try {
+      await FirebaseSession.ensureWorkspaceScopes();
+    } catch (_) {
+      // The status refresh below is the real answer either way.
+    }
+    await _refreshGoogleStatus();
+    if (!mounted) {
+      return;
+    }
+    _snack(
+      _googleReady == true
+          ? 'Google jud gaya — ab meeting Calendar par bhi jaayegi.'
+          : 'Google permission nahi mili.',
+    );
   }
 
   void _repaintComposer() {
@@ -452,6 +494,21 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            icon: Icon(
+              _googleReady == true
+                  ? Icons.cloud_done_outlined
+                  : Icons.cloud_off_outlined,
+              color: _googleReady == true
+                  ? const Color(0xFF34D399)
+                  : const Color(0xFF64748B),
+              size: 20,
+            ),
+            tooltip: _googleReady == true
+                ? 'Google juda hai'
+                : 'Google jodein (Calendar, Gmail, Sheets)',
+            onPressed: _connectGoogle,
           ),
           IconButton(
             icon: const Icon(Icons.add_comment_outlined,

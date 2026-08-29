@@ -26,6 +26,14 @@ import {
   searchClientsTool,
   webSearchTool,
 } from "./tools/readTools";
+import {
+  appendSheetRowTool,
+  createCalendarEventTool,
+  findContactTool,
+  listCalendarEventsTool,
+  listRecentEmailsTool,
+  sendEmailTool,
+} from "./tools/googleTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -117,6 +125,16 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         reminder_lead_minutes: {
           type: "number",
           description: "Minutes before the meeting to be reminded. Default 15.",
+        },
+        duration_minutes: {
+          type: "number",
+          description: "How long the meeting runs. Default 60.",
+        },
+        add_to_calendar: {
+          type: "boolean",
+          description:
+            "Also put it on their Google Calendar. Default true — pass false only " +
+            "if they say they don't want it on the calendar.",
         },
       },
       required: ["when_phrase"],
@@ -252,6 +270,82 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
 
+  {
+    name: "create_calendar_event",
+    description:
+      "Put something on the user's Google Calendar that is not a client meeting — " +
+      "a personal appointment, a reminder to block time, a travel slot. For a " +
+      "client meeting use create_meeting instead, which does both. Creates a " +
+      "draft for confirmation.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Event title." },
+        when_phrase: WHEN_PHRASE,
+        when_tense: WHEN_TENSE,
+        day_period: DAY_PERIOD,
+        duration_minutes: { type: "number", description: "Default 60." },
+        description: { type: "string" },
+        attendee_emails: {
+          type: "array",
+          items: { type: "string" },
+          description: "Email addresses to invite. Only real addresses.",
+        },
+      },
+      required: ["summary", "when_phrase"],
+    },
+  },
+  {
+    name: "send_email",
+    description:
+      "Send an email from the user's Gmail. Write the mail yourself in their " +
+      "voice from what they told you — they will read it on the card before it " +
+      "goes. Creates a draft for confirmation; nothing is sent until they " +
+      "confirm.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description:
+            "Email address, or just the person's name — if it is a name the " +
+            "server looks it up in their contacts.",
+        },
+        subject: { type: "string" },
+        body: {
+          type: "string",
+          description:
+            "The full mail body, ready to send. Write it properly — greeting, " +
+            "the message, sign-off — in the language the user would use.",
+        },
+      },
+      required: ["to", "body"],
+    },
+  },
+  {
+    name: "append_sheet_row",
+    description:
+      "Add a row to the user's Google Sheet — for keeping a log or a tracker. " +
+      "Uses their default sheet unless a spreadsheet id is given. Creates a " +
+      "draft for confirmation.",
+    parameters: {
+      type: "object",
+      properties: {
+        cells: {
+          type: "array",
+          items: { type: "string" },
+          description: "The row, left to right.",
+        },
+        sheet_tab: { type: "string", description: "Tab name. Default Sheet1." },
+        spreadsheet_id: {
+          type: "string",
+          description: "Only when the user names a specific sheet.",
+        },
+      },
+      required: ["cells"],
+    },
+  },
+
   // ---- read ----
   {
     name: "get_agenda",
@@ -330,6 +424,45 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "list_calendar_events",
+    description:
+      "What is on the user's Google Calendar in a time window. Use for " +
+      "'calendar me kya hai', 'kal calendar par kya hai'. This is their Google " +
+      "Calendar, separate from the reminders in this app — for those use get_agenda.",
+    parameters: {
+      type: "object",
+      properties: { window: WINDOW },
+    },
+  },
+  {
+    name: "list_recent_emails",
+    description:
+      "Recent inbox mail — sender, subject, a snippet. Use for 'koi mail aaya kya', " +
+      "'inbox me kya hai', or to find a specific mail with a query.",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "How many. Default 8, max 15." },
+        query: {
+          type: "string",
+          description: "Gmail search query, e.g. 'from:rohan' or 'invoice'. Optional.",
+        },
+      },
+    },
+  },
+  {
+    name: "find_contact",
+    description:
+      "Look up someone's email or phone in the user's Google Contacts. Use when " +
+      "you need an address before writing a mail, or when they ask for someone's " +
+      "number.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "Name to search for." } },
+      required: ["query"],
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -359,6 +492,12 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_client_summary: getClientSummaryTool,
   search_clients: searchClientsTool,
   web_search: webSearchTool,
+  create_calendar_event: createCalendarEventTool,
+  send_email: sendEmailTool,
+  append_sheet_row: appendSheetRowTool,
+  list_calendar_events: listCalendarEventsTool,
+  list_recent_emails: listRecentEmailsTool,
+  find_contact: findContactTool,
 };
 
 /** Tools that create a draft, so the loop knows to surface a card. */
@@ -370,6 +509,9 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "record_payment_due",
   "record_payment_received",
   "remember_fact",
+  "create_calendar_event",
+  "send_email",
+  "append_sheet_row",
 ]);
 
 export function isKnownTool(name: string): boolean {
