@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -164,7 +165,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
         return;
       }
       setState(() {
-        _error = 'Bhej nahi paayi — dobara try kijiye.';
+        _error = _describeSendFailure(error);
         // Put the text back so nothing is lost.
         _input.text = text;
         _pendingUserText = null;
@@ -174,6 +175,37 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
         setState(() => _sending = false);
       }
     }
+  }
+
+  /// Names the actual cause rather than reporting every failure the same way.
+  ///
+  /// The three causes need different responses from whoever sees them — a
+  /// missing deploy, a permission problem, and a dropped connection all look
+  /// identical behind one "try again", which makes a backend that was never
+  /// deployed indistinguishable from a flaky signal.
+  String _describeSendFailure(Object error) {
+    if (error is FirebaseFunctionsException) {
+      switch (error.code) {
+        case 'not-found':
+          return 'Aivy ka backend abhi deploy nahi hua hai. '
+              '(aivyAgent function not found)';
+        case 'permission-denied':
+          return 'Backend tak pahunch nahi mili — function ki permission check kijiye. '
+              '(permission-denied)';
+        case 'unauthenticated':
+          return 'Sign-in expire ho gaya lagta hai — dobara sign in kijiye.';
+        case 'unavailable':
+        case 'deadline-exceeded':
+          return 'Connection nahi bana. Network check karke dobara bhejiye.';
+        case 'resource-exhausted':
+          return 'Abhi limit lag gayi hai — thodi der baad try kijiye.';
+        default:
+          final detail = error.message?.trim();
+          return 'Bhej nahi paayi (${error.code})'
+              '${detail == null || detail.isEmpty ? '' : ' — $detail'}';
+      }
+    }
+    return 'Bhej nahi paayi — dobara try kijiye.';
   }
 
   Future<void> _confirmDraft(AgentDraft draft) async {
