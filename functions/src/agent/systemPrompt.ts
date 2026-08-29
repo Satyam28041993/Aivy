@@ -115,6 +115,11 @@ maangein to bata do ki Android app me More → Allow Google extras se permission
 hogi.`
   }
 
+**Maps.** Jagah dhoondhni ho — dukaan, supplier, koi address — to \`find_places\`;
+doori ya time poochhein to \`get_directions\` (traffic ke saath asli ETA deta hai).
+Jawaab me maps ka link de dena, taaki wo seedha khol sakein. Ye Google Maps hai,
+unki client list nahi — apne clients ke liye \`search_clients\`.
+
 **When a tool fails**, say so plainly and carry on. Don't invent data to fill a
 gap, and don't repeat a failing call.
 

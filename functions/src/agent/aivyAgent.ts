@@ -47,7 +47,7 @@ const REGION = "us-central1";
  * unreachable from the browser, which surfaces as a CORS error because the
  * preflight is rejected before it reaches the function.
  */
-const AGENT_BUILD = "v3-google";
+const AGENT_BUILD = "v4-maps";
 
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
@@ -71,6 +71,20 @@ function userNameFrom(memory: Record<string, unknown>, token: Record<string, unk
     return fromToken.split(" ")[0]!;
   }
   return "Sir";
+}
+
+/**
+ * Where they are based, for Maps searches like "paas me printing press".
+ * Read from remembered facts, so it improves as they mention it.
+ */
+function cityFrom(memory: Record<string, unknown>): string | null {
+  for (const key of ["city", "location", "base", "address", "shehar"]) {
+    const v = str(memory[key]);
+    if (v) {
+      return v;
+    }
+  }
+  return null;
 }
 
 export const aivyAgent = onCall(
@@ -132,7 +146,7 @@ export const aivyAgent = onCall(
     let turn;
     try {
       turn = await runAgentTurn({
-        ctx: { uid, timezone, nowIso, chatId, googleToken },
+        ctx: { uid, timezone, nowIso, chatId, googleToken, userCity: cityFrom(memory) },
         systemPrompt,
         history,
         userText,

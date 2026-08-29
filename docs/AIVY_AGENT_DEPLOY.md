@@ -209,3 +209,73 @@ Google settings). Set nahi hai to Aivy maang legi.
 | "koi mail aaya kya?" | inbox ke last 8 mail |
 | "rohan ko mail bhej do ki quotation bhej diya hai" | mail ka card — padhkar confirm |
 | "rohan ka email kya hai?" | contacts se address |
+
+---
+
+## 7. Google Maps — Places + Routes (naya)
+
+Ab do aur tools hain, dono **padhne wale** (koi card nahi, kuch save nahi hota):
+
+| Boliye | Tool | Milega |
+| --- | --- | --- |
+| "paas me koi printing press hai?" | `find_places` | naam, address, phone, rating, abhi khula hai ya nahi, Maps ka link |
+| "Sharma Printers Kanpur ka address?" | `find_places` | wahi |
+| "Lucknow kitna door hai, kitna time lagega?" | `get_directions` | km + **traffic ke saath asli ETA** + Maps link |
+| "bike se kitna time?" | `get_directions` | two-wheeler ka time |
+
+"Paas me" ka matlab aapke shehar ke aas-paas hota hai — wo shehar aapki remembered
+facts se aata hai. Ek baar bol dijiye "main Kanpur me hoon", Aivy `remember_fact` se
+yaad rakh legi aur uske baad har search wahin se hogi.
+
+### ⚠️ Ye Android aur web — dono par chalega
+
+Maps ke liye aapka Google account nahi, **project ki API key** lagti hai. Isliye
+Gmail/Calendar wali Android-only wali baat yahan lagu nahi hoti.
+
+### Key kaise banayein (10 minute, ek baar)
+
+1. [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials?project=aivy-5c031)
+   (project `aivy-5c031` hi chuna hona chahiye)
+2. **+ CREATE CREDENTIALS → API key** → key copy kar lijiye
+3. Us key par **Edit** → **API restrictions** → "Restrict key" → sirf ye do chunein:
+   - **Places API (New)**
+   - **Routes API**
+   → Save
+   > Application restriction "None" hi rehne dijiye — key server par use hoti hai,
+   > kisi browser ya app se nahi.
+4. Dono API enable karni hongi (agar pehle se nahi hain):
+   - [Places API (New) enable](https://console.cloud.google.com/apis/library/places.googleapis.com?project=aivy-5c031)
+   - [Routes API enable](https://console.cloud.google.com/apis/library/routes.googleapis.com?project=aivy-5c031)
+5. **Billing** on karni padegi — Cloud Console → Billing → card add. Ye Google ki
+   shart hai, kharch ki wajah se nahi (neeche dekhiye).
+6. Key ko app tak pahunchaiye — Firebase Console → **Firestore Database** →
+   collection `app_config` → document `maps` → field **`mapsApiKey`** (string) →
+   key paste → Save
+
+Bas. Redeploy ki zaroorat nahi — function 5 minute ke andar khud utha lega.
+
+### Kharch — practically zero
+
+Google har mahine **$200 ka free credit** deta hai Maps Platform par. Iss app ke
+hisaab se:
+
+- Text Search (Places New, essentials) ≈ **$32 per 1000** requests
+- Compute Routes ≈ **$5 per 1000** requests
+
+Matlab free credit me har mahine **~6000 place searches** ya **~40,000 route
+queries** aa jaate hain. Ek aadmi ke business assistant me itna use hona mushkil
+hai. Phir bhi safety ke liye: Cloud Console → Billing → **Budgets & alerts** me
+₹500 ka alert laga dijiye, aur upar wali API restriction laga hi rakhiye taaki key
+kahin aur use na ho sake.
+
+### Key kahan rehti hai
+
+App me kabhi nahi. Sirf Firestore `app_config/maps` me, jise **koi client padh nahi
+sakta** — na app, na browser; sirf Cloud Functions (Admin SDK). Wahi tarika jo
+`serperApiKey` ke liye use hota hai. Isiliye ye document **Firebase Console se hi**
+banega, app se nahi.
+
+### Key daalne se pehle kya hoga
+
+Kuch toota nahi — Aivy saaf-saaf keh degi ki "Maps abhi set nahi hai", aur baaki sab
+kaam waise hi chalta rahega.

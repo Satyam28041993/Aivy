@@ -71,4 +71,9 @@ export interface ToolContext {
    * Never persisted — see `agent/google/workspace.ts`.
    */
   googleToken?: string | null;
+  /**
+   * Where the user is based, read off their remembered facts. Maps needs a
+   * "near what" for a search like "paas me printing press" to mean anything.
+   */
+  userCity?: string | null;
 }

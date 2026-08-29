@@ -34,6 +34,7 @@ import {
   listRecentEmailsTool,
   sendEmailTool,
 } from "./tools/googleTools";
+import { findPlacesTool, getDirectionsTool } from "./tools/mapsTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -463,6 +464,56 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "find_places",
+    description:
+      "Find a real place on Google Maps — a shop, a supplier, an office, a " +
+      "restaurant — with its address, phone, rating and whether it is open. Use " +
+      "for 'paas me koi printing press hai', 'X ka address kya hai', 'is area me " +
+      "courier wale'. This is Maps, not the user's own client list — for their " +
+      "clients use search_clients.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "What to look for, e.g. 'printing press', 'Rohan Traders'.",
+        },
+        near: {
+          type: "string",
+          description:
+            "Area or city to look around. Omit and their own city is used, so " +
+            "pass this only when they name somewhere else.",
+        },
+        open_now: { type: "boolean", description: "Only places open right now." },
+        limit: { type: "number", description: "How many. Default 5, max 10." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_directions",
+    description:
+      "Distance and travel time between two places, with live traffic. Use for " +
+      "'kitni door hai', 'kitna time lagega', 'kaise jaana hai'. Give places in " +
+      "plain words — Maps works out the addresses itself.",
+    parameters: {
+      type: "object",
+      properties: {
+        destination: { type: "string", description: "Where they are going." },
+        origin: {
+          type: "string",
+          description: "Starting point. Omit to start from their own city.",
+        },
+        travel_mode: {
+          type: "string",
+          enum: ["car", "bike", "walk", "cycle", "transit"],
+          description: "How they are travelling. Default car.",
+        },
+      },
+      required: ["destination"],
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -498,6 +549,8 @@ const HANDLERS: Record<string, ToolHandler> = {
   list_calendar_events: listCalendarEventsTool,
   list_recent_emails: listRecentEmailsTool,
   find_contact: findContactTool,
+  find_places: findPlacesTool,
+  get_directions: getDirectionsTool,
 };
 
 /** Tools that create a draft, so the loop knows to surface a card. */
