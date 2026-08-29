@@ -20,7 +20,7 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
   final _testWhatsappPhone = TextEditingController();
   final _dateFormat = DateFormat.yMMMd();
 
-  _DeleteMode _mode = _DeleteMode.wipe;
+  _DeleteMode _mode = _DeleteMode.freshStart;
   bool _working = false;
 
   @override
@@ -28,6 +28,45 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
     _confirmWipe.dispose();
     _testWhatsappPhone.dispose();
     super.dispose();
+  }
+
+  Future<void> _runFreshStart() async {
+    if (_confirmWipe.text.trim() != ClearUserDataService.wipeConfirmPhrase) {
+      _toast('Type the exact phrase: ${ClearUserDataService.wipeConfirmPhrase}');
+      return;
+    }
+    final ok = await _confirmDialog(
+      title: 'Start fresh?',
+      body:
+          'Removes every client, quotation, order, payment, reminder, task, '
+          'chat and WhatsApp message. What Aivy remembers about you and your '
+          'Google settings are kept. This cannot be undone.',
+    );
+    if (!ok || !mounted) {
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      final summary = await _clear.freshStart();
+      if (!mounted) {
+        return;
+      }
+      final total = (summary?['total'] as num?)?.toInt() ?? 0;
+      _confirmWipe.clear();
+      _toast(
+        total == 0
+            ? 'Nothing left to remove — already clean.'
+            : 'Removed $total records. Aivy remembers you, the data is gone.',
+      );
+    } on FirebaseFunctionsException catch (e) {
+      _toast(e.message ?? e.code);
+    } catch (e) {
+      _toast(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _working = false);
+      }
+    }
   }
 
   Future<void> _runWipe() async {
@@ -126,6 +165,7 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
     try {
       Map<String, dynamic>? summary;
       switch (_mode) {
+        case _DeleteMode.freshStart:
         case _DeleteMode.wipe:
           break;
         case _DeleteMode.before:
@@ -268,6 +308,11 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(
+                value: _DeleteMode.freshStart,
+                label: Text('Fresh'),
+                icon: Icon(Icons.auto_delete_outlined, size: 18),
+              ),
+              ButtonSegment(
                 value: _DeleteMode.wipe,
                 label: Text('All'),
                 icon: Icon(Icons.delete_forever_outlined, size: 18),
@@ -296,7 +341,55 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
             },
           ),
           const SizedBox(height: 20),
-          if (_mode == _DeleteMode.wipe) ...[
+          if (_mode == _DeleteMode.freshStart) ...[
+            Text(
+              'Fresh start',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Clients, quotations, orders, payments, reminders, tasks, chats '
+              'and WhatsApp history are removed.\n\n'
+              'Kept: what Aivy remembers about you, and your Google settings. '
+              'Your sign-in and WhatsApp connection are untouched.',
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Type this phrase exactly:',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              ClearUserDataService.wipeConfirmPhrase,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontFamily: 'monospace',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _confirmWipe,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Confirmation phrase',
+              ),
+              enabled: !_working,
+              autocorrect: false,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _working ? null : _runFreshStart,
+              icon: _working
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_delete_outlined),
+              label: const Text('Start fresh'),
+            ),
+          ] else if (_mode == _DeleteMode.wipe) ...[
             Text(
               'Full reset',
               style: theme.textTheme.titleSmall,
@@ -415,7 +508,9 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          if (_working && _mode != _DeleteMode.wipe)
+          if (_working &&
+              _mode != _DeleteMode.wipe &&
+              _mode != _DeleteMode.freshStart)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Center(child: CircularProgressIndicator()),
@@ -473,4 +568,4 @@ class _DataManagementScreenState extends State<DataManagementScreen> {
   }
 }
 
-enum _DeleteMode { wipe, before, after, between }
+enum _DeleteMode { freshStart, wipe, before, after, between }

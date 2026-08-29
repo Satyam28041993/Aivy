@@ -21,6 +21,23 @@ class ClearUserDataService {
     });
   }
 
+  /// Removes every business record but keeps what Aivy has learned about you.
+  ///
+  /// Different from [wipeAll] in two ways that matter: `memory/` and the Google
+  /// settings survive, and WhatsApp history — which lives outside the user
+  /// subtree — is included.
+  Future<Map<String, dynamic>?> freshStart({bool includeWhatsApp = true}) async {
+    final callable = _functions.httpsCallable(
+      'aivyResetData',
+      options: HttpsCallableOptions(timeout: const Duration(minutes: 9)),
+    );
+    final result = await callable.call<dynamic>(<String, dynamic>{
+      'confirmPhrase': wipeConfirmPhrase,
+      'includeWhatsApp': includeWhatsApp,
+    });
+    return _asMap(result.data);
+  }
+
   /// Delete documents whose timestamps fall **strictly before** [before] (start of that local day).
   Future<Map<String, dynamic>?> deleteBefore(DateTime before) async {
     final start = DateTime(before.year, before.month, before.day);
