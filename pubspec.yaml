@@ -113,5 +113,6 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
+  web:
     generate: true
   image_path: "Asset/Aivy Icon.png"
