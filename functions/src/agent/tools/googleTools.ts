@@ -315,7 +315,7 @@ export async function listCalendarEventsTool(
         : DateTime.fromISO(r.startIso, { zone: ctx.timezone }).isValid
           ? formatWhenLabel(DateTime.fromISO(r.startIso, { zone: ctx.timezone }), true)
           : r.startIso,
-      location: r.location || undefined,
+      ...(r.location ? { location: r.location } : {}),
     })),
   });
 }

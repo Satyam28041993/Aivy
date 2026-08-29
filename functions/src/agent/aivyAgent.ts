@@ -47,7 +47,7 @@ const REGION = "us-central1";
  * unreachable from the browser, which surfaces as a CORS error because the
  * preflight is rejected before it reaches the function.
  */
-const AGENT_BUILD = "v4-maps";
+const AGENT_BUILD = "v5";
 
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
@@ -163,12 +163,30 @@ export const aivyAgent = onCall(
       return { chatId, reply: sorry, drafts: [], trace: [], failed: true };
     }
 
-    const messageId = await appendMessage(uid, chatId, {
-      role: "assistant",
-      text: turn.reply,
-      drafts: turn.drafts,
-      modelParts: turn.newContents,
-    });
+    // The reply already exists at this point; losing it to a storage problem
+    // would be the worst possible outcome, and the screen only renders what is
+    // in Firestore. So a failed save falls back to storing the words alone —
+    // the conversation continues, only the model's tool payload is missing.
+    let messageId: string;
+    try {
+      messageId = await appendMessage(uid, chatId, {
+        role: "assistant",
+        text: turn.reply,
+        drafts: turn.drafts,
+        modelParts: turn.newContents,
+      });
+    } catch (e) {
+      logger.error("aivyAgent: saving the tool payload failed; storing text only", {
+        uid,
+        chatId,
+        err: e instanceof Error ? e.message : String(e),
+      });
+      messageId = await appendMessage(uid, chatId, {
+        role: "assistant",
+        text: turn.reply,
+        drafts: turn.drafts,
+      });
+    }
 
     await touchChat(uid, chatId, {
       lastMessage: turn.reply,

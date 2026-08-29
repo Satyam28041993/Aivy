@@ -88,16 +88,15 @@ export async function findPlacesTool(
 
   return dataResult({
     query,
-    near: near || undefined,
+    ...(near ? { near } : {}),
     count: rows.length,
     places: rows.map((r) => ({
       name: r.name,
       address: r.address,
-      rating: r.rating ?? undefined,
-      ratings: r.ratingCount || undefined,
-      open_now: r.openNow ?? undefined,
-      phone: r.phone || undefined,
-      maps_link: r.mapsUri || undefined,
+      ...(r.rating != null ? { rating: r.rating, ratings: r.ratingCount } : {}),
+      ...(r.openNow != null ? { open_now: r.openNow } : {}),
+      ...(r.phone ? { phone: r.phone } : {}),
+      ...(r.mapsUri ? { maps_link: r.mapsUri } : {}),
     })),
   });
 }

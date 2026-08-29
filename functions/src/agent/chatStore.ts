@@ -96,6 +96,32 @@ export interface StoredMessage {
   modelParts: GeminiContent[] | null;
 }
 
+/**
+ * Firestore rejects `undefined` outright — the whole write throws, which
+ * surfaces to the app as a bare INTERNAL with no clue where it came from.
+ *
+ * Tool results reach this file verbatim inside `modelParts`, and a tool that
+ * writes `location: value || undefined` to mean "leave this out" is perfectly
+ * reasonable JSON and perfectly fatal here. So the key is dropped at the write
+ * boundary rather than trusting every tool, present and future, to remember.
+ */
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => stripUndefined(v)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) {
+        continue;
+      }
+      out[k] = stripUndefined(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export async function appendMessage(
   uid: string,
   chatId: string,
@@ -107,14 +133,16 @@ export async function appendMessage(
   },
 ): Promise<string> {
   const ref = messagesRef(uid, chatId).doc();
-  await ref.set({
-    id: ref.id,
-    role: msg.role,
-    text: msg.text,
-    createdAtMs: Date.now(),
-    drafts: msg.drafts ?? [],
-    modelParts: msg.modelParts ?? null,
-  });
+  await ref.set(
+    stripUndefined({
+      id: ref.id,
+      role: msg.role,
+      text: msg.text,
+      createdAtMs: Date.now(),
+      drafts: msg.drafts ?? [],
+      modelParts: msg.modelParts ?? null,
+    }),
+  );
   return ref.id;
 }
 
