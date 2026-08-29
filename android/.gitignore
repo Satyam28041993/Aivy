@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# ...except the shared debug keystore, which has to be in the repo for every
+# build to carry the same SHA-1 (see app/build.gradle.kts).
+!app/aivy-debug.keystore
