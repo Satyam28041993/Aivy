@@ -1,46 +1,107 @@
 import 'package:flutter/material.dart';
 
+import '../design/aivy_ui.dart';
+
 class AivyTheme {
+  /// The app's one theme.
+  ///
+  /// Named `light()` still because every call site says so; the app itself is
+  /// dark throughout now. Aivy — the screen the user lives in — was always
+  /// near-black, and a shell that flipped to white on the next tab read as two
+  /// apps stitched together.
+  ///
+  /// The values come from [AivyUi] so a Material widget nobody styled by hand
+  /// still lands in the same palette as the ones that were.
   static ThemeData light() {
-    const seedColor = Color(0xFF4F46E5);
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: seedColor,
-      brightness: Brightness.light,
+    final colorScheme = ColorScheme.dark(
+      primary: AivyUi.brand,
+      secondary: AivyUi.info,
+      surface: AivyUi.surface,
+      error: AivyUi.danger,
+      onPrimary: Colors.white,
+      onSurface: AivyUi.ink,
+      onSurfaceVariant: AivyUi.inkSoft,
+      outline: AivyUi.line,
+      outlineVariant: AivyUi.line,
     );
 
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.dark,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-      iconTheme: IconThemeData(color: colorScheme.onSurfaceVariant),
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+      scaffoldBackgroundColor: AivyUi.bg,
+      canvasColor: AivyUi.bg,
+      iconTheme: const IconThemeData(color: AivyUi.inkSoft),
+      dividerTheme: const DividerThemeData(color: AivyUi.line, space: 1),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AivyUi.bg,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        foregroundColor: colorScheme.onSurface,
+        foregroundColor: AivyUi.ink,
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: AivyUi.ink,
+        iconColor: AivyUi.inkSoft,
+        subtitleTextStyle: TextStyle(color: AivyUi.inkSoft, fontSize: 12.5),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AivyUi.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AivyUi.radius),
+        ),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: AivyUi.surfaceHigh,
+        contentTextStyle: TextStyle(color: AivyUi.ink),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: AivyUi.surface,
+        hintStyle: const TextStyle(color: AivyUi.inkFaint),
+        labelStyle: const TextStyle(color: AivyUi.inkSoft),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(AivyUi.radiusSm),
+          borderSide: const BorderSide(color: AivyUi.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(AivyUi.radiusSm),
+          borderSide: const BorderSide(color: AivyUi.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: colorScheme.primary.withValues(alpha: 0.3),
-          ),
+          borderRadius: BorderRadius.circular(AivyUi.radiusSm),
+          borderSide: const BorderSide(color: AivyUi.brand),
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: AivyUi.surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AivyUi.radius),
+          side: const BorderSide(color: AivyUi.line),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AivyUi.brand,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: AivyUi.brand),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AivyUi.ink,
+          side: const BorderSide(color: AivyUi.line),
+        ),
+      ),
+      expansionTileTheme: const ExpansionTileThemeData(
+        textColor: AivyUi.ink,
+        collapsedTextColor: AivyUi.ink,
+        iconColor: AivyUi.inkFaint,
+        collapsedIconColor: AivyUi.inkFaint,
       ),
     );
   }

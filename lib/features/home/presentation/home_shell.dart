@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/design/aivy_ui.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../dashboard/data/agent_nudge_service.dart';
 import '../../dashboard/data/passive_nudge_coordinator.dart';
@@ -29,16 +30,14 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  // Tab order: Aivy, Aaj (dashboard), Records (reports), More.
   static const int _tabAgent = 0;
-  static const int _tabDashboard = 1;
   static const int _tabReports = 2;
-  static const int _tabMore = 3;
 
   late final ChatRepository _repository;
   late final AgentNudgeService _nudgeService;
   late final PassiveNudgeCoordinator _passiveNudges;
   int _currentIndex = _tabAgent;
-  int _reportsResyncTick = 0;
   AgentInsights? _launchInsights;
   String? _activeChatId;
   StreamSubscription<String?>? _activeChatSub;
@@ -122,60 +121,39 @@ class _HomeShellState extends State<HomeShell> {
     });
   }
 
+  /// Dashboard shows today; every "see everything" on it opens Reports.
+  void _openReportsTab() {
+    setState(() {
+      _currentIndex = _tabReports;
+    });
+  }
+
   PreferredSizeWidget? _buildAppBar(BuildContext context) {
-    final theme = Theme.of(context);
-    switch (_currentIndex) {
-      // Aivy and Dashboard draw their own headers.
-      case _tabAgent:
-      case _tabDashboard:
-        return null;
-      case _tabReports:
-        return AppBar(
-          title: const Text('Reports'),
-          backgroundColor: theme.colorScheme.surface,
-          actions: [
-            IconButton(
-              tooltip: 'Refresh data',
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () {
-                setState(() => _reportsResyncTick++);
-              },
-            ),
-          ],
-        );
-      case _tabMore:
-      default:
-        return AppBar(
-          title: const Text('More'),
-          backgroundColor: theme.colorScheme.surface,
-        );
-    }
+    // Every screen draws its own header now — each one wants a different thing
+    // there (a greeting, a search field, an account row), and a shared bar
+    // could only be the least useful of the three.
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isAgent = _currentIndex == _tabAgent;
-
     final screens = [
       AivyAgentScreen(userId: widget.userId),
       DashboardScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
         onOpenChat: _openAgentTab,
+        onOpenReports: _openReportsTab,
       ),
       ReportsScreen(
-        key: ValueKey<int>(_reportsResyncTick),
         userId: widget.userId,
-        launchInsights: _launchInsights,
+        onOpenChat: _openAgentTab,
       ),
       MoreScreen(userId: widget.userId),
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: _currentIndex == _tabDashboard,
-      backgroundColor:
-          isAgent ? const Color(0xFF030712) : theme.scaffoldBackgroundColor,
+      backgroundColor: AivyUi.bg,
       appBar: _buildAppBar(context),
       body: IndexedStack(
         index: _currentIndex,
@@ -189,34 +167,25 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor:
-              isAgent ? const Color(0xFF0E0E14) : theme.colorScheme.surface,
-          indicatorColor: isAgent
-              ? const Color(0xFF6366F1).withValues(alpha: 0.35)
-              : theme.colorScheme.secondaryContainer,
+          backgroundColor: AivyUi.surface,
+          indicatorColor: AivyUi.brand.withValues(alpha: 0.20),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (!isAgent) {
-              return theme.textTheme.labelMedium;
-            }
+            final base = Theme.of(context).textTheme.labelMedium;
             if (states.contains(WidgetState.selected)) {
-              return theme.textTheme.labelMedium?.copyWith(
-                color: const Color(0xFFC4B5FD),
+              return base?.copyWith(
+                color: AivyUi.brand,
                 fontWeight: FontWeight.w600,
               );
             }
-            return theme.textTheme.labelMedium?.copyWith(
-              color: const Color(0xFF64748B),
-            );
+            return base?.copyWith(color: AivyUi.inkFaint);
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
-            final base = theme.iconTheme;
-            if (!isAgent) {
-              return base.copyWith(color: theme.colorScheme.onSurfaceVariant);
-            }
-            if (states.contains(WidgetState.selected)) {
-              return base.copyWith(color: const Color(0xFFA78BFA));
-            }
-            return base.copyWith(color: const Color(0xFF64748B));
+            final base = Theme.of(context).iconTheme;
+            return base.copyWith(
+              color: states.contains(WidgetState.selected)
+                  ? AivyUi.brand
+                  : AivyUi.inkFaint,
+            );
           }),
         ),
         child: NavigationBar(
@@ -236,12 +205,12 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard',
+              label: 'Aaj',
             ),
             NavigationDestination(
               icon: Icon(Icons.bar_chart_outlined),
               selectedIcon: Icon(Icons.bar_chart_rounded),
-              label: 'Reports',
+              label: 'Records',
             ),
             NavigationDestination(
               icon: Icon(Icons.more_horiz),
