@@ -153,7 +153,9 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: "create_reminder",
     description:
       "Set a reminder, call reminder, follow-up or task. Use for 'yaad dila dena', " +
-      "'call karna hai', 'follow up karna hai'. Creates a draft for confirmation.",
+      "'call karna hai', 'follow up karna hai'. Works for personal life as much " +
+      "as work — medicine, a school meeting, a birthday call. Creates a draft " +
+      "for confirmation.",
     parameters: {
       type: "object",
       properties: {
@@ -164,11 +166,19 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         when_phrase: WHEN_PHRASE,
         when_tense: WHEN_TENSE,
         day_period: DAY_PERIOD,
-        client_name: CLIENT_NAME,
+        client_name: {
+          type: "string",
+          description:
+            "Only a business client. Leave empty for anything personal — a " +
+            "family member, a doctor, a school are not clients, and naming one " +
+            "here files them as a customer of the business.",
+        },
         reminder_type: {
           type: "string",
           enum: ["call", "followup", "task", "meeting", "personal"],
-          description: "Kind of reminder. 'personal' for non-business things.",
+          description:
+            "Kind of reminder. Use 'personal' for anything outside the " +
+            "business — family, health, home, school.",
         },
         priority: { type: "string", enum: ["high", "medium", "low"] },
         note: { type: "string" },

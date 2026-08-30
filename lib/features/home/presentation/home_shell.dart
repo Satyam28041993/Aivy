@@ -6,6 +6,7 @@ import '../../../core/design/aivy_ui.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../dashboard/data/agent_nudge_service.dart';
 import '../../dashboard/data/passive_nudge_coordinator.dart';
+import '../../reminders/data/reminder_alarm_sync.dart';
 import '../../dashboard/models/agent_insights.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../dashboard/presentation/reports_screen.dart';
@@ -37,6 +38,7 @@ class _HomeShellState extends State<HomeShell> {
   late final ChatRepository _repository;
   late final AgentNudgeService _nudgeService;
   late final PassiveNudgeCoordinator _passiveNudges;
+  late final ReminderAlarmSync _alarms;
   int _currentIndex = _tabAgent;
   AgentInsights? _launchInsights;
   String? _activeChatId;
@@ -48,6 +50,9 @@ class _HomeShellState extends State<HomeShell> {
     _repository = ChatRepository();
     _nudgeService = AgentNudgeService(repository: _repository);
     _passiveNudges = PassiveNudgeCoordinator(repository: _repository);
+    // Reminders Aivy created live only on the server until something on the
+    // phone sets the alarm for them.
+    _alarms = ReminderAlarmSync()..start(widget.userId);
     unawaited(_bootstrapChatSession());
     _activeChatSub = _repository.watchActiveChatId(widget.userId).listen(
       (id) {
@@ -79,6 +84,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     unawaited(_activeChatSub?.cancel());
+    _alarms.dispose();
     super.dispose();
   }
 
