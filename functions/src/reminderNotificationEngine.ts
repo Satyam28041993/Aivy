@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 import { getDashboardEngineStats } from "./clientStats";
+import { pushToUser } from "./push";
 
 const REGION = "us-central1";
 const NOTIFICATIONS = "notifications";
@@ -77,6 +78,19 @@ export async function createNotification(
   // eslint-disable-next-line no-console
   console.log("Notification created", { id, userId: p.userId, type: p.type });
   logger.info("Notification created", { id, userId: p.userId, type: p.type });
+
+  // The row above is only visible with the app open. This is what reaches the
+  // phone. It is awaited but never allowed to throw: delivery failing must not
+  // undo the notification.
+  await pushToUser(p.userId, {
+    title: p.title,
+    body: p.message,
+    data: {
+      type: p.type,
+      notificationId: id,
+      ...(p.reminderId ? { reminderId: p.reminderId } : {}),
+    },
+  });
   return id;
 }
 
@@ -353,6 +367,25 @@ export const checkReminders = onSchedule(
         });
         // eslint-disable-next-line no-console
         console.log("Notification created");
+
+        // Written inside the transaction above, so it does not go through
+        // createNotification and needs sending on its own. Read back rather
+        // than recomputed, so the phone shows exactly the stored line.
+        const fired = await db
+          .collection(USERS)
+          .doc(userId)
+          .collection(NOTIFICATIONS)
+          .where("dedupeKey", "==", `reminder_fired:${reminderId}`)
+          .limit(1)
+          .get();
+        const row = fired.docs[0]?.data();
+        if (row) {
+          await pushToUser(userId, {
+            title: String(row.title ?? "Reminder"),
+            body: String(row.message ?? ""),
+            data: { type: String(row.type ?? "followup"), reminderId },
+          });
+        }
       } catch (err) {
         logger.error("checkReminders: transaction failed", {
           reminderId,

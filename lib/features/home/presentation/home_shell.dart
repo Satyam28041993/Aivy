@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/design/aivy_ui.dart';
+import '../../../core/notifications/push_registration.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../dashboard/data/agent_nudge_service.dart';
 import '../../dashboard/data/passive_nudge_coordinator.dart';
@@ -53,6 +54,9 @@ class _HomeShellState extends State<HomeShell> {
     // Reminders Aivy created live only on the server until something on the
     // phone sets the alarm for them.
     _alarms = ReminderAlarmSync()..start(widget.userId);
+    // Push is what arrives when the app is closed; the alarm above is the
+    // offline backup for the same reminder.
+    unawaited(PushRegistration().register(widget.userId));
     unawaited(_bootstrapChatSession());
     _activeChatSub = _repository.watchActiveChatId(widget.userId).listen(
       (id) {

@@ -212,6 +212,59 @@ class NotificationService {
     }
   }
 
+  /// Shows a reminder immediately, on the same channel as a scheduled one.
+  ///
+  /// Android's system tray draws a push itself while the app is closed, but
+  /// stays silent when the app is in the foreground — so a push that arrives
+  /// while the user is looking at the app is drawn here instead. [tag] keeps a
+  /// push and its local alarm on one notification id rather than two, so the
+  /// same reminder never appears twice.
+  Future<void> showReminderNow({
+    required String title,
+    required String body,
+    String? subtitle,
+    required String tag,
+  }) async {
+    if (!_initialized) {
+      await initialize();
+    }
+    final androidDetails = AndroidNotificationDetails(
+      _reminderChannelId,
+      _reminderChannelName,
+      channelDescription: _reminderChannelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      category: AndroidNotificationCategory.reminder,
+      subText: subtitle,
+      playSound: true,
+      sound: _reminderAndroidSound,
+    );
+    final darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      subtitle: subtitle,
+    );
+    try {
+      await _plugin.show(
+        _notificationIdFor(tag),
+        title,
+        body,
+        NotificationDetails(
+          android: androidDetails,
+          iOS: darwinDetails,
+          macOS: darwinDetails,
+        ),
+        payload: tag,
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'NotificationService: failed to show reminder "$tag": '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
   /// Cancels a previously scheduled reminder, if any.
   Future<void> cancelReminderNotification(String reminderId) async {
     if (!_initialized) {

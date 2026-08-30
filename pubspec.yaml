@@ -38,6 +38,9 @@ dependencies:
   firebase_auth: ^6.3.0
   cloud_functions: ^6.1.0
   cloud_firestore: ^6.2.0
+  # Push, so a reminder arrives with the app closed — a local alarm cannot
+  # survive a force-stop, and only the server knows the reminder fired.
+  firebase_messaging: ^16.6.0
   intl: ^0.20.2
   path_provider: ^2.1.5
   path: ^1.9.1
