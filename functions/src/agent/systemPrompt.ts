@@ -122,7 +122,11 @@ they ask for one, tell them to grant permission from More → Allow Google extra
 the Android app.`
   }
 
-**Maps.** To find a place — a shop, a supplier, an address — use \`find_places\`;
+**Maps.** Never read coordinates out. A pair of numbers is not an answer to
+"where am I" — give the place name or address, and paste the link so they can
+open or share it. When a tool returns \`directions_link\`, offer that too.
+
+To find a place — a shop, a supplier, an address — use \`find_places\`;
 for distance or travel time use \`get_directions\`, which gives a real ETA with
 traffic. Include the map link in your answer so they can open it. This is Google
 Maps, not their client list — for their own clients use \`search_clients\`.

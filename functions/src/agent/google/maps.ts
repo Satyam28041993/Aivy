@@ -15,6 +15,7 @@
  */
 
 import { getFirestore } from "firebase-admin/firestore";
+import { logger } from "firebase-functions";
 
 export class MapsApiError extends Error {
   constructor(
@@ -315,18 +316,77 @@ export async function reverseGeocode(coords: Coords): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) {
+      logger.warn("reverseGeocode: HTTP failure", { status: res.status });
       return null;
     }
     const body = (await res.json()) as {
       status?: string;
+      error_message?: string;
       results?: Array<{ formatted_address?: string }>;
     };
     if (body.status !== "OK") {
+      // Usually REQUEST_DENIED (API not enabled, or the key is restricted to
+      // other APIs). Silent nulls made that impossible to tell from "no address
+      // exists here", so it is logged.
+      logger.warn("reverseGeocode: refused", {
+        status: body.status,
+        error: body.error_message,
+      });
       return null;
     }
     const address = `${body.results?.[0]?.formatted_address ?? ""}`.trim();
     return address || null;
+  } catch (e) {
+    logger.warn("reverseGeocode: threw", {
+      err: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
+}
+
+/**
+ * Nearest named place, as a fallback when Geocoding is unavailable.
+ *
+ * Places (New) is already enabled for search, so this needs no extra API: the
+ * closest landmark's address is a fine answer to "where am I" — better than a
+ * pair of coordinates, which is what the user would otherwise be handed.
+ */
+export async function nearestPlaceLabel(coords: Coords): Promise<string | null> {
+  try {
+    const res = await callMaps<{ places?: Array<Record<string, unknown>> }>(
+      "Places",
+      "https://places.googleapis.com/v1/places:searchNearby",
+      "places.displayName,places.formattedAddress",
+      {
+        maxResultCount: 1,
+        rankPreference: "DISTANCE",
+        languageCode: "en",
+        regionCode: "IN",
+        locationRestriction: {
+          circle: {
+            center: { latitude: coords.lat, longitude: coords.lng },
+            radius: 300,
+          },
+        },
+      },
+    );
+    const first = res.places?.[0];
+    if (!first) {
+      return null;
+    }
+    const address = `${first.formattedAddress ?? ""}`.trim();
+    return address || null;
   } catch {
     return null;
   }
+}
+
+/** Opens Google Maps with a pin dropped on this point. */
+export function mapsPinLink(coords: Coords): string {
+  return `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
+}
+
+/** Opens Google Maps with directions running to this point. */
+export function mapsDirectionsToLink(coords: Coords): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
 }

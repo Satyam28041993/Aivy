@@ -10,6 +10,9 @@
 import {
   computeRoute,
   MapsApiError,
+  mapsDirectionsToLink,
+  mapsPinLink,
+  nearestPlaceLabel,
   placesTextSearch,
   reverseGeocode,
   type Coords,
@@ -177,7 +180,7 @@ export async function getDirectionsTool(
     distance_km: route.distanceKm,
     // Live traffic is baked in, which is what makes this worth asking for.
     duration_minutes: route.durationMinutes,
-    maps_link: route.mapsUri,
+    directions_link: route.mapsUri,
   });
 }
 
@@ -199,13 +202,15 @@ export async function whereAmITool(ctx: ToolContext): Promise<ToolResult> {
         "been given permission? (Settings → Apps → Aivy → Permissions → Location)",
     );
   }
-  const address = await reverseGeocode(coords);
+  // Geocoding gives a street address; the nearest known place stands in when it
+  // is unavailable. Coordinates are deliberately NOT returned — handed a pair
+  // of numbers the model reads them out, and "19.5699515, 72.8027339" is not an
+  // answer to "where am I".
+  const address = (await reverseGeocode(coords)) ?? (await nearestPlaceLabel(coords));
   return dataResult({
-    ...(address ? { address } : {}),
-    lat: coords.lat,
-    lng: coords.lng,
-    maps_link: `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`,
-    ...(address ? {} : { note: "Could not resolve an address (Geocoding API not enabled)." }),
+    ...(address ? { address } : { address_unavailable: true }),
+    map_link: mapsPinLink(coords),
+    directions_link: mapsDirectionsToLink(coords),
   });
 }
 
@@ -239,9 +244,11 @@ export async function savePlaceTool(
   }
 
   // Best-effort: a place with no address is still a usable place.
+  // A card showing raw coordinates is one the user cannot check, so the nearest
+  // known place stands in when Geocoding is unavailable.
   let address = "";
   try {
-    address = (await reverseGeocode(coords)) ?? "";
+    address = (await reverseGeocode(coords)) ?? (await nearestPlaceLabel(coords)) ?? "";
   } catch {
     address = "";
   }
@@ -301,9 +308,8 @@ export async function getSavedPlaceTool(
 
   const out: Record<string, unknown> = {
     name: place.name,
-    maps_link: place.mapsLink || mapsPointLink(place.lat, place.lng),
-    lat: place.lat,
-    lng: place.lng,
+    map_link: place.mapsLink || mapsPointLink(place.lat, place.lng),
+    directions_link: mapsDirectionsToLink({ lat: place.lat, lng: place.lng }),
   };
   if (place.address) {
     out.address = place.address;
@@ -338,7 +344,7 @@ export async function listSavedPlacesTool(ctx: ToolContext): Promise<ToolResult>
     places: rows.map((p) => ({
       name: p.name,
       ...(p.address ? { address: p.address } : {}),
-      maps_link: p.mapsLink || mapsPointLink(p.lat, p.lng),
+      map_link: p.mapsLink || mapsPointLink(p.lat, p.lng),
     })),
   });
 }

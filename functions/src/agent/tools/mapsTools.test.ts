@@ -5,6 +5,7 @@ import type { ToolContext } from "../toolTypes";
 const placesMock = vi.fn();
 const routeMock = vi.fn();
 const geocodeMock = vi.fn();
+const nearestMock = vi.fn();
 const findSavedMock = vi.fn();
 const listSavedMock = vi.fn();
 const deleteSavedMock = vi.fn();
@@ -17,6 +18,7 @@ vi.mock("../google/maps", async () => {
     placesTextSearch: (...a: unknown[]) => placesMock(...a),
     computeRoute: (...a: unknown[]) => routeMock(...a),
     reverseGeocode: (...a: unknown[]) => geocodeMock(...a),
+    nearestPlaceLabel: (...a: unknown[]) => nearestMock(...a),
   };
 });
 
@@ -63,6 +65,7 @@ beforeEach(() => {
   placesMock.mockReset();
   routeMock.mockReset();
   geocodeMock.mockReset();
+  nearestMock.mockReset().mockResolvedValue(null);
   findSavedMock.mockReset().mockResolvedValue(null);
   listSavedMock.mockReset().mockResolvedValue([]);
   deleteSavedMock.mockReset();
@@ -187,16 +190,27 @@ describe("where_am_i", () => {
     const res = await whereAmITool(LOCATED);
     const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
     expect(data.address).toContain("Vasai East");
-    expect(data.maps_link).toContain("19.3919");
+    expect(data.map_link).toContain("19.3919");
+    expect(data.directions_link).toContain("destination=19.3919");
   });
 
-  it("still gives the position when Geocoding is not enabled", async () => {
+  it("falls back to the nearest place when Geocoding is unavailable", async () => {
     geocodeMock.mockResolvedValue(null);
+    nearestMock.mockResolvedValue("Station Road, Vasai East");
     const res = await whereAmITool(LOCATED);
     const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
-    expect(data.address).toBeUndefined();
-    expect(data.lat).toBe(19.3919);
-    expect(`${data.note}`).toContain("Geocoding");
+    expect(data.address).toBe("Station Road, Vasai East");
+  });
+
+  it("never hands back raw coordinates for the model to read out", async () => {
+    geocodeMock.mockResolvedValue(null);
+    nearestMock.mockResolvedValue(null);
+    const res = await whereAmITool(LOCATED);
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.lat).toBeUndefined();
+    expect(data.lng).toBeUndefined();
+    expect(data.address_unavailable).toBe(true);
+    expect(data.map_link).toContain("19.3919");
   });
 
   it("says what to check when there is no fix", async () => {
@@ -259,7 +273,7 @@ describe("saved places", () => {
     routeMock.mockResolvedValue({ distanceKm: 4.2, durationMinutes: 11, mode: "DRIVE", mapsUri: "u" });
     const res = await getSavedPlaceTool(LOCATED, { name: "rohan office" });
     const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
-    expect(data.maps_link).toBe("https://maps/x");
+    expect(data.map_link).toBe("https://maps/x");
     expect(data.distance_km).toBe(4.2);
   });
 
@@ -268,7 +282,7 @@ describe("saved places", () => {
     routeMock.mockRejectedValue(new Error("routes down"));
     const res = await getSavedPlaceTool(LOCATED, { name: "rohan office" });
     const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
-    expect(data.maps_link).toBe("https://maps/x");
+    expect(data.map_link).toBe("https://maps/x");
     expect(data.distance_km).toBeUndefined();
   });
 
