@@ -103,8 +103,12 @@ export interface Coords {
 }
 
 export interface PlaceRow {
+  /** Google's own id for the place, which makes a link point at *this* one. */
+  id: string;
   name: string;
   address: string;
+  /** Where it actually is, so a route can be measured to the point itself. */
+  coords: Coords | null;
   rating: number | null;
   ratingCount: number;
   openNow: boolean | null;
@@ -113,6 +117,8 @@ export interface PlaceRow {
 }
 
 const PLACES_FIELDS = [
+  "places.id",
+  "places.location",
   "places.displayName",
   "places.formattedAddress",
   "places.rating",
@@ -174,8 +180,13 @@ export async function placesTextSearch(opts: {
   return (res.places ?? []).map((p) => {
     const display = (p.displayName ?? {}) as Record<string, unknown>;
     const hours = (p.currentOpeningHours ?? {}) as Record<string, unknown>;
+    const loc = (p.location ?? {}) as Record<string, unknown>;
+    const lat = Number(loc.latitude);
+    const lng = Number(loc.longitude);
     const rating = Number(p.rating);
     return {
+      id: `${p.id ?? ""}`,
+      coords: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
       name: `${display.text ?? "(unnamed)"}`,
       address: `${p.formattedAddress ?? ""}`,
       rating: Number.isFinite(rating) && rating > 0 ? rating : null,
@@ -212,6 +223,10 @@ function mapsDirectionsLink(
   origin: string | Coords,
   destination: string | Coords,
   mode: TravelMode,
+  /** Google's id for the destination, when we resolved one. */
+  destinationPlaceId?: string,
+  /** What to show in the destination box — a name reads better than numbers. */
+  destinationLabel?: string,
 ): string {
   const travel =
     mode === "WALK"
@@ -221,10 +236,14 @@ function mapsDirectionsLink(
         : mode === "TRANSIT"
           ? "transit"
           : "driving";
+  // With a place id Maps opens the exact place we measured to, so the app and
+  // the link can never disagree about which "Saphale station" was meant.
+  const destText = destinationLabel?.trim() || waypointLabel(destination);
   return (
     "https://www.google.com/maps/dir/?api=1" +
     `&origin=${encodeURIComponent(waypointLabel(origin))}` +
-    `&destination=${encodeURIComponent(waypointLabel(destination))}` +
+    `&destination=${encodeURIComponent(destText)}` +
+    (destinationPlaceId ? `&destination_place_id=${encodeURIComponent(destinationPlaceId)}` : "") +
     `&travelmode=${travel}`
   );
 }
@@ -250,6 +269,9 @@ export async function computeRoute(opts: {
   origin: string | Coords;
   destination: string | Coords;
   mode?: TravelMode;
+  /** Only affects the link, not the measurement. */
+  destinationPlaceId?: string;
+  destinationLabel?: string;
 }): Promise<RouteResult | null> {
   const origin = typeof opts.origin === "string" ? opts.origin.trim() : opts.origin;
   const destination =
@@ -283,7 +305,13 @@ export async function computeRoute(opts: {
     distanceKm: Math.round(((route.distanceMeters ?? 0) / 1000) * 10) / 10,
     durationMinutes: Math.round(secondsFrom(route.duration) / 60),
     mode,
-    mapsUri: mapsDirectionsLink(origin, destination, mode),
+    mapsUri: mapsDirectionsLink(
+      origin,
+      destination,
+      mode,
+      opts.destinationPlaceId,
+      opts.destinationLabel,
+    ),
   };
 }
 
@@ -389,4 +417,40 @@ export function mapsPinLink(coords: Coords): string {
 /** Opens Google Maps with directions running to this point. */
 export function mapsDirectionsToLink(coords: Coords): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Resolving a name to a point
+// ---------------------------------------------------------------------------
+
+/**
+ * Turns "Saphale station" into the actual place near the user.
+ *
+ * Routes will geocode a plain string itself, but it does that with no idea
+ * where the user is standing — so "station" can land on a same-named place in
+ * another district and the distance comes back wrong with no hint that it did.
+ * Resolving through Places first, biased to the device fix, both fixes the
+ * measurement and gives us a name to show back, so the user can see which place
+ * was picked.
+ */
+export async function resolvePlacePoint(opts: {
+  query: string;
+  coords?: Coords | null;
+  near?: string | null;
+}): Promise<PlaceRow | null> {
+  try {
+    const rows = await placesTextSearch({
+      query: opts.query,
+      coords: opts.coords ?? null,
+      near: opts.near ?? null,
+      // A name like "station" is only meaningful within a few kilometres.
+      radiusM: 15_000,
+      limit: 1,
+    });
+    return rows[0] ?? null;
+  } catch {
+    // The route can still be computed from the raw text; this was an upgrade.
+    return null;
+  }
 }

@@ -14,6 +14,7 @@ import {
   mapsPinLink,
   nearestPlaceLabel,
   placesTextSearch,
+  resolvePlacePoint,
   reverseGeocode,
   type Coords,
   type TravelMode,
@@ -144,20 +145,36 @@ export async function getDirectionsTool(
   // A saved name beats free text: "Rohan Office" is a point the user pinned,
   // not something for Google to guess at.
   const savedTo = await findSavedPlace(ctx.uid, rawDestination);
-  const destination: string | Coords = savedTo
-    ? { lat: savedTo.lat, lng: savedTo.lng }
-    : rawDestination;
-  const destinationLabel = savedTo ? savedTo.name : rawDestination;
 
   const namedOrigin = str(args.origin);
   const savedFrom = namedOrigin ? await findSavedPlace(ctx.uid, namedOrigin) : null;
   const coords = namedOrigin ? null : coordsOf(ctx);
+
   const origin: string | Coords = savedFrom
     ? { lat: savedFrom.lat, lng: savedFrom.lng }
     : namedOrigin || coords || str(ctx.userCity);
   if (!origin) {
     return fail("needs_detail", "Starting from where? (a city or place)");
   }
+
+  // Free text is resolved against Places near the user before it is routed.
+  // Handed "Saphale station" on its own, Routes picks whichever one it likes
+  // and the distance is quietly wrong; biased to the device fix it picks the
+  // one they meant, and we get a name and a place id to show for it.
+  const resolved =
+    savedTo == null
+      ? await resolvePlacePoint({
+          query: rawDestination,
+          coords,
+          near: coords ? null : str(ctx.userCity) || null,
+        })
+      : null;
+
+  const destination: string | Coords = savedTo
+    ? { lat: savedTo.lat, lng: savedTo.lng }
+    : (resolved?.coords ?? rawDestination);
+  const destinationLabel = savedTo ? savedTo.name : (resolved?.name ?? rawDestination);
+
   const originLabel = savedFrom
     ? savedFrom.name
     : namedOrigin || (coords ? "your current location" : str(ctx.userCity));
@@ -165,7 +182,13 @@ export async function getDirectionsTool(
 
   let route;
   try {
-    route = await computeRoute({ origin, destination, mode });
+    route = await computeRoute({
+      origin,
+      destination,
+      mode,
+      ...(resolved?.id ? { destinationPlaceId: resolved.id } : {}),
+      destinationLabel,
+    });
   } catch (e) {
     return mapsFailure(e);
   }
@@ -176,8 +199,13 @@ export async function getDirectionsTool(
   return dataResult({
     from: originLabel,
     to: destinationLabel,
+    // The address makes it checkable: if Maps picked the wrong branch of a
+    // common name, the user can see that instead of just doubting the number.
+    ...(resolved?.address ? { to_address: resolved.address } : {}),
     mode: route.mode,
-    distance_km: route.distanceKm,
+    // Along the road, not across the map — the two differ a lot in a town, and
+    // a user who measured it in a straight line will think this is wrong.
+    distance_km_by_road: route.distanceKm,
     // Live traffic is baked in, which is what makes this worth asking for.
     duration_minutes: route.durationMinutes,
     directions_link: route.mapsUri,

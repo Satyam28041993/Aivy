@@ -78,7 +78,7 @@ class AgentHistoryDrawer extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(28),
         child: Text(
-          'Abhi koi purani baat nahi.\nNeeche likh kar shuru kijiye.',
+          'No past chats yet.\nType below to start one.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Color(0xFF64748B), height: 1.5),
         ),

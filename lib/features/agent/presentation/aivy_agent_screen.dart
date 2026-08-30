@@ -120,8 +120,8 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     }
     _snack(
       _googleReady == true
-          ? 'Google jud gaya — ab meeting Calendar par bhi jaayegi.'
-          : 'Google permission nahi mili.',
+          ? 'Google connected — meetings will go to Calendar too.'
+          : 'Google permission was not granted.',
     );
   }
 
@@ -234,25 +234,25 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     if (error is FirebaseFunctionsException) {
       switch (error.code) {
         case 'not-found':
-          return 'Aivy ka backend abhi deploy nahi hua hai. '
+          return 'Aivy\'s backend is not deployed yet. '
               '(aivyAgent function not found)';
         case 'permission-denied':
-          return 'Backend tak pahunch nahi mili — function ki permission check kijiye. '
+          return 'Could not reach the backend — check the function permissions. '
               '(permission-denied)';
         case 'unauthenticated':
-          return 'Sign-in expire ho gaya lagta hai — dobara sign in kijiye.';
+          return 'Your sign-in looks expired — sign in again.';
         case 'unavailable':
         case 'deadline-exceeded':
-          return 'Connection nahi bana. Network check karke dobara bhejiye.';
+          return 'No connection. Check the network and send again.';
         case 'resource-exhausted':
-          return 'Abhi limit lag gayi hai — thodi der baad try kijiye.';
+          return 'Rate limit hit — try again in a little while.';
         default:
           final detail = error.message?.trim();
-          return 'Bhej nahi paayi (${error.code})'
+          return 'Could not send (${error.code})'
               '${detail == null || detail.isEmpty ? '' : ' — $detail'}';
       }
     }
-    return 'Bhej nahi paayi — dobara try kijiye.';
+    return 'Could not send — try again.';
   }
 
   Future<void> _confirmDraft(AgentDraft draft) async {
@@ -273,7 +273,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       }
     } catch (_) {
       if (mounted) {
-        _snack('Save nahi ho paaya — dobara try kijiye.');
+        _snack('Could not save — try again.');
       }
     } finally {
       if (mounted) {
@@ -327,7 +327,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       _bindChat(id);
     } catch (_) {
       if (mounted) {
-        _snack('Nayi baat shuru nahi ho paayi.');
+        _snack('Could not start a new chat.');
       }
     }
   }
@@ -371,7 +371,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       await _service.renameChat(chat.id, trimmed);
     } catch (_) {
       if (mounted) {
-        _snack('Naam badal nahi paaya.');
+        _snack('Could not rename it.');
       }
     }
   }
@@ -383,11 +383,11 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF161B29),
         title: const Text(
-          'Ye baat delete karein?',
+          'Delete this chat?',
           style: TextStyle(color: Color(0xFFE2E8F0)),
         ),
         content: Text(
-          '"${chat.title}" hamesha ke liye hat jaayegi.',
+          '"${chat.title}" will be gone for good.',
           style: const TextStyle(color: Color(0xFF94A3B8)),
         ),
         actions: [
@@ -423,7 +423,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       }
     } catch (_) {
       if (mounted) {
-        _snack('Delete nahi ho paaya.');
+        _snack('Could not delete it.');
       }
     }
   }
@@ -494,7 +494,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
                       ),
                 ),
                 const Text(
-                  'jo bhi kehna ho, seedha kahiye',
+                  'say it however you like',
                   style: TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
                 ),
               ],
@@ -511,7 +511,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
               size: 20,
             ),
             tooltip: _googleReady == true
-                ? 'Google juda hai'
+                ? 'Google connected'
                 : 'Google jodein (Calendar, Gmail, Sheets)',
             onPressed: _connectGoogle,
           ),
@@ -609,7 +609,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Kaam bataiye, sawaal poochhiye, ya bas aise hi baat kijiye.',
+              'Tell me a job, ask a question, or just talk.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF64748B), height: 1.5, fontSize: 13),
             ),
@@ -682,7 +682,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
                   height: 1.4,
                 ),
                 decoration: const InputDecoration(
-                  hintText: 'Kuch bhi likhiye…',
+                  hintText: 'Type anything…',
                   hintStyle: TextStyle(color: Color(0xFF475569), fontSize: 15),
                   border: InputBorder.none,
                   isDense: true,

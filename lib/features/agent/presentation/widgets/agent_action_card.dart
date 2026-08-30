@@ -102,7 +102,7 @@ class AgentActionCard extends StatelessWidget {
                 border: Border.all(color: _accent.withValues(alpha: 0.3)),
               ),
               child: const Text(
-                'save nahi hua',
+                'not saved',
                 style: TextStyle(
                   color: _accent,
                   fontSize: 10.5,
@@ -156,7 +156,7 @@ class AgentActionCard extends StatelessWidget {
           Expanded(
             flex: 3,
             child: _button(
-              label: busy ? 'Save ho raha…' : 'Sahi hai',
+              label: busy ? 'Saving…' : 'Looks right',
               icon: Icons.check_rounded,
               filled: true,
               onTap: busy ? null : onConfirm,
@@ -196,7 +196,7 @@ class AgentActionCard extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            committed ? 'Save ho gaya' : 'Cancel kiya',
+            committed ? 'Saved' : 'Cancelled',
             style: TextStyle(
               color: committed ? _done : _muted,
               fontSize: 12.5,

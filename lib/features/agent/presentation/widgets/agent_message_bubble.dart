@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/agent_models.dart';
 import 'agent_action_card.dart';
+import 'message_links.dart';
 
 /// One turn in the conversation, with any confirm cards attached below it.
 class AgentMessageBubble extends StatelessWidget {
@@ -63,6 +65,12 @@ class AgentMessageBubble extends StatelessWidget {
   }
 
   Widget _bubble(BuildContext context, bool isUser) {
+    // A bare map URL in the middle of a sentence is unreadable and, worse, was
+    // not tappable at all — so links are lifted out of the text and shown as
+    // buttons underneath it, the way a shared location arrives on WhatsApp.
+    final links = extractLinks(message.text);
+    final body = stripLinks(message.text, links);
+
     return GestureDetector(
       onLongPress: () async {
         await Clipboard.setData(ClipboardData(text: message.text));
@@ -71,7 +79,7 @@ class AgentMessageBubble extends StatelessWidget {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Copy ho gaya'),
+            content: Text('Copied'),
             duration: Duration(seconds: 1),
           ),
         );
@@ -97,13 +105,104 @@ class AgentMessageBubble extends StatelessWidget {
               ? null
               : Border.all(color: Colors.white.withValues(alpha: 0.07)),
         ),
-        child: SelectableText(
-          message.text,
-          style: TextStyle(
-            color: isUser ? Colors.white : const Color(0xFFE7EDF5),
-            fontSize: 15,
-            height: 1.42,
-            fontWeight: FontWeight.w400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (body.isNotEmpty)
+              SelectableText(
+                body,
+                style: TextStyle(
+                  color: isUser ? Colors.white : const Color(0xFFE7EDF5),
+                  fontSize: 15,
+                  height: 1.42,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            if (links.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: body.isEmpty ? 0 : 9),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [for (final l in links) _LinkChip(link: l)],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkChip extends StatelessWidget {
+  const _LinkChip({required this.link});
+
+  final MessageLink link;
+
+  Future<void> _open(BuildContext context) async {
+    final uri = Uri.tryParse(link.url);
+    var ok = false;
+    if (uri != null) {
+      try {
+        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        // A blocked pop-up on web throws rather than returning false.
+        ok = false;
+      }
+    }
+    if (ok || !context.mounted) {
+      return;
+    }
+    // Blocked pop-up, or no app that handles it — the address is still useful.
+    await Clipboard.setData(ClipboardData(text: link.url));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not open it — link copied'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(11),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(11),
+        onTap: () => _open(context),
+        onLongPress: () async {
+          await Clipboard.setData(ClipboardData(text: link.url));
+          if (!context.mounted) {
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Link copied'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(link.icon, size: 16, color: const Color(0xFF22D3EE)),
+              const SizedBox(width: 7),
+              Text(
+                link.label,
+                style: const TextStyle(
+                  color: Color(0xFFE7EDF5),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),

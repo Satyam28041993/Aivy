@@ -85,6 +85,8 @@ describe("places", () => {
         json: {
           places: [
             {
+              id: "ChIJprinters",
+              location: { latitude: 26.46, longitude: 80.32 },
               displayName: { text: "Sharma Printers" },
               formattedAddress: "Mall Road, Kanpur",
               rating: 4.3,
@@ -99,6 +101,8 @@ describe("places", () => {
     ]);
     const rows = await placesTextSearch({ query: "printers" });
     expect(rows[0]).toEqual({
+      id: "ChIJprinters",
+      coords: { lat: 26.46, lng: 80.32 },
       name: "Sharma Printers",
       address: "Mall Road, Kanpur",
       rating: 4.3,

@@ -4,6 +4,7 @@ import type { ToolContext } from "../toolTypes";
 
 const placesMock = vi.fn();
 const routeMock = vi.fn();
+const resolveMock = vi.fn();
 const geocodeMock = vi.fn();
 const nearestMock = vi.fn();
 const findSavedMock = vi.fn();
@@ -17,6 +18,7 @@ vi.mock("../google/maps", async () => {
     ...actual,
     placesTextSearch: (...a: unknown[]) => placesMock(...a),
     computeRoute: (...a: unknown[]) => routeMock(...a),
+    resolvePlacePoint: (...a: unknown[]) => resolveMock(...a),
     reverseGeocode: (...a: unknown[]) => geocodeMock(...a),
     nearestPlaceLabel: (...a: unknown[]) => nearestMock(...a),
   };
@@ -64,6 +66,7 @@ const LOCATED: ToolContext = { ...CTX, coords: { lat: 19.3919, lng: 72.8397 } };
 beforeEach(() => {
   placesMock.mockReset();
   routeMock.mockReset();
+  resolveMock.mockReset().mockResolvedValue(null);
   geocodeMock.mockReset();
   nearestMock.mockReset().mockResolvedValue(null);
   findSavedMock.mockReset().mockResolvedValue(null);
@@ -135,6 +138,54 @@ describe("get_directions", () => {
     const res = await getDirectionsTool({ ...CTX, userCity: null }, { destination: "Lucknow" });
     expect(res.ok === false && res.reason).toBe("needs_detail");
     expect(routeMock).not.toHaveBeenCalled();
+  });
+
+  it("routes to the place near them, not to whatever the name geocodes to", async () => {
+    resolveMock.mockResolvedValue({
+      id: "ChIJsaphale",
+      name: "Saphale Railway Station",
+      address: "Saphale, Maharashtra 401102",
+      coords: { lat: 19.5501, lng: 72.7621 },
+    });
+    routeMock.mockResolvedValue({
+      distanceKm: 2.1,
+      durationMinutes: 6,
+      mode: "DRIVE",
+      mapsUri: "u",
+    });
+    const res = await getDirectionsTool(LOCATED, { destination: "saphale station" });
+
+    // The name was resolved against Places first, biased to the device fix.
+    expect(resolveMock.mock.calls[0]![0]).toMatchObject({
+      query: "saphale station",
+      coords: { lat: 19.3919, lng: 72.8397 },
+    });
+    // ...and the route was measured to that point, not to the raw words.
+    expect(routeMock.mock.calls[0]![0]).toMatchObject({
+      destination: { lat: 19.5501, lng: 72.7621 },
+      destinationPlaceId: "ChIJsaphale",
+    });
+    const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
+    expect(data.to).toBe("Saphale Railway Station");
+    expect(data.to_address).toBe("Saphale, Maharashtra 401102");
+    // Named for what it is, so a straight-line guess is not mistaken for it.
+    expect(data.distance_km_by_road).toBe(2.1);
+    expect(data.distance_km).toBeUndefined();
+  });
+
+  it("still routes on the raw words when Places cannot resolve them", async () => {
+    resolveMock.mockResolvedValue(null);
+    routeMock.mockResolvedValue({ distanceKm: 9, durationMinutes: 20, mode: "DRIVE", mapsUri: "u" });
+    await getDirectionsTool(LOCATED, { destination: "behind the old mill" });
+    expect(routeMock.mock.calls[0]![0]).toMatchObject({
+      destination: "behind the old mill",
+    });
+  });
+
+  it("does not resolve anything when there is nowhere to start from", async () => {
+    const res = await getDirectionsTool({ ...CTX, userCity: null }, { destination: "Lucknow" });
+    expect(res.ok === false && res.reason).toBe("needs_detail");
+    expect(resolveMock).not.toHaveBeenCalled();
   });
 
   it("says so when no route exists", async () => {
