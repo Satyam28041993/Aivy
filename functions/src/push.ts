@@ -76,10 +76,13 @@ export async function pushToUser(userId: string, msg: PushMessage): Promise<numb
       android: {
         priority: "high",
         notification: {
+          // The channel decides the sound on Android 8 and up, and it already
+          // carries the reminder tone. Naming a raw resource here as well adds
+          // nothing and risks the system failing to build the notification at
+          // all when it cannot resolve the name — which shows up as FCM
+          // reporting success and the phone showing nothing.
           channelId: REMINDER_CHANNEL,
           priority: "high",
-          defaultSound: false,
-          sound: "aivy_reminder",
         },
       },
       apns: {

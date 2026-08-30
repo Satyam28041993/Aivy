@@ -16,6 +16,13 @@ import 'notification_service.dart';
 ///
 /// The token lands in `users/{uid}/devices/{id}`, which the server reads.
 class PushRegistration {
+  /// Pushes this app has actually received while running, and the last token
+  /// it registered. Both exist for the health screen: "FCM accepted it" and
+  /// "the phone received it" are different claims, and without this there is
+  /// no way to tell them apart from outside the device.
+  static int received = 0;
+  static String? lastToken;
+
   PushRegistration({
     FirebaseFirestore? firestore,
     FirebaseMessaging? messaging,
@@ -63,6 +70,7 @@ class PushRegistration {
 
       final token = await _messaging.getToken();
       if (token != null && token.isNotEmpty) {
+        lastToken = token;
         await _save(userId, token);
       }
 
@@ -70,7 +78,10 @@ class PushRegistration {
       // own. A stale one silently stops delivering, so the new one is stored
       // as soon as it is issued.
       _messaging.onTokenRefresh.listen(
-        (t) => _save(userId, t),
+        (t) {
+          lastToken = t;
+          return _save(userId, t);
+        },
         onError: (Object e) => debugPrint('PushRegistration: refresh failed: $e'),
       );
 
@@ -101,6 +112,7 @@ class PushRegistration {
   }
 
   Future<void> _showForeground(RemoteMessage message) async {
+    received++;
     final n = message.notification;
     final title = (n?.title ?? '').trim();
     final body = (n?.body ?? '').trim();

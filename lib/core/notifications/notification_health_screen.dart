@@ -81,6 +81,27 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
     await _refresh();
   }
 
+  /// Fires a notification with no server and no network involved.
+  ///
+  /// This is the half of the chain the test push cannot separate: if the push
+  /// says "sent" and nothing appears, either FCM never delivered it or this
+  /// phone cannot draw a notification at all. This answers that on its own.
+  Future<void> _showLocal() async {
+    await NotificationService.instance.showReminderNow(
+      title: 'Aivy local test',
+      body: 'Drawn by the app itself, with no server involved.',
+      tag: 'local_test',
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _result = 'Asked Android to show a notification right now. If this one '
+          'does not appear either, the problem is on the phone, not in '
+          'delivery.';
+    });
+  }
+
   Future<void> _sendTest() async {
     setState(() {
       _busy = true;
@@ -94,9 +115,10 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
       final sent = (res.data['sent'] as num?)?.toInt() ?? 0;
       setState(() {
         if (sent > 0) {
-          _result = 'Sent to $sent device(s). It should appear within a few '
-              'seconds. If it does not, the phone is holding it — see the note '
-              'at the bottom.';
+          _result = 'Sent to $sent device(s). Watch the "Pushes received" line '
+              'above: if it goes up, the message reached this phone and the '
+              'problem is only in showing it. If it stays put, the phone never '
+              'got it.';
         } else if (devices == 0) {
           _result = 'Nothing to send to: no device is registered. '
               'Tap "Register this phone".';
@@ -174,6 +196,27 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
                   : 'Without this the server has nowhere to send. Register below.',
             ),
             _Check(
+              ok: PushRegistration.received > 0,
+              title: 'Pushes received: ${PushRegistration.received}',
+              detail: PushRegistration.received > 0
+                  ? 'Messages have reached this phone, so delivery works.'
+                  : 'Nothing has arrived yet. Send a test below, then pull '
+                      'refresh — if this stays at zero, FCM accepted the '
+                      'message but never delivered it.',
+            ),
+            _Check(
+              ok: PushRegistration.lastToken != null,
+              title: PushRegistration.lastToken != null
+                  ? 'Token: …${PushRegistration.lastToken!.substring(
+                      PushRegistration.lastToken!.length - 12,
+                    )}'
+                  : 'No token on this device',
+              detail: PushRegistration.lastToken != null
+                  ? 'The address the server sends to. It changes on reinstall.'
+                  : 'Firebase Messaging never issued one — tap "Register this '
+                      'phone".',
+            ),
+            _Check(
               ok: h.scheduledCount >= _pendingReminders,
               title: 'Alarms queued: ${h.scheduledCount}',
               detail: _pendingReminders == 0
@@ -198,9 +241,15 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
+            onPressed: _busy ? null : _showLocal,
+            icon: const Icon(Icons.notifications),
+            label: const Text('Show a notification right now (no server)'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
             onPressed: _busy ? null : _sendTest,
             icon: const Icon(Icons.send),
-            label: const Text('Send me a test notification'),
+            label: const Text('Send me a test push (through the server)'),
           ),
           if (_result != null) ...[
             const SizedBox(height: 14),
