@@ -87,7 +87,7 @@ jobs:
       - name: Ensure agent callables are publicly invokable
         if: ${{ inputs.deploy_functions }}
         run: |
-          for svc in aivyagent aivyagentcommit aivyagentchats aivyresetdata; do
+          for svc in aivyagent aivyagentcommit aivyagentchats aivyresetdata aivytestpush; do
             echo "--- $svc"
             gcloud run services add-iam-policy-binding "$svc" \
               --region=us-central1 \

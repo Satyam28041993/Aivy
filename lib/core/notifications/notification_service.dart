@@ -7,6 +7,33 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+/// What the OS will and will not let this app do about notifications.
+@immutable
+class NotificationHealth {
+  const NotificationHealth({
+    required this.supported,
+    required this.notificationsEnabled,
+    required this.canScheduleExactAlarms,
+    required this.scheduledCount,
+  });
+
+  /// False on web, where none of this exists.
+  final bool supported;
+
+  /// Denied here and nothing displays at all — neither an alarm nor a push.
+  final bool notificationsEnabled;
+
+  /// Denied here and reminders still arrive, but the OS may hold them for a
+  /// few minutes rather than firing on the exact minute.
+  final bool canScheduleExactAlarms;
+
+  /// Alarms currently queued on the OS, which should match the pending
+  /// reminders. Zero with reminders pending means they were never scheduled.
+  final int scheduledCount;
+
+  bool get healthy => supported && notificationsEnabled;
+}
+
 /// Thin wrapper around `flutter_local_notifications` that exposes a single
 /// entry point to schedule reminder notifications.
 ///
@@ -263,6 +290,61 @@ class NotificationService {
         '$error\n$stackTrace',
       );
     }
+  }
+
+  /// What the OS currently allows, and what is actually queued on it.
+  ///
+  /// A reminder that does not arrive has several possible causes that look
+  /// identical from the outside — permission never granted, exact alarms
+  /// refused, or nothing scheduled at all — and none of them are visible from
+  /// a phone. This reports each separately so the real one can be seen.
+  Future<NotificationHealth> health() async {
+    if (!_initialized) {
+      await initialize();
+    }
+    if (kIsWeb) {
+      return const NotificationHealth(
+        supported: false,
+        notificationsEnabled: false,
+        canScheduleExactAlarms: false,
+        scheduledCount: 0,
+      );
+    }
+
+    var enabled = true;
+    var exact = true;
+    if (Platform.isAndroid) {
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      enabled = await android?.areNotificationsEnabled() ?? false;
+      exact = await android?.canScheduleExactNotifications() ?? false;
+    }
+
+    var pending = 0;
+    try {
+      pending = (await _plugin.pendingNotificationRequests()).length;
+    } catch (error) {
+      debugPrint('NotificationService: could not read pending: $error');
+    }
+
+    return NotificationHealth(
+      supported: true,
+      notificationsEnabled: enabled,
+      canScheduleExactAlarms: exact,
+      scheduledCount: pending,
+    );
+  }
+
+  /// Asks again for whatever was declined. Android only shows its own dialog
+  /// once, so this may open Settings instead — which is the honest outcome.
+  Future<void> requestPermissionsAgain() async {
+    if (!_initialized) {
+      await initialize();
+      return;
+    }
+    await _requestPermissions();
   }
 
   /// Cancels a previously scheduled reminder, if any.

@@ -6,6 +6,7 @@ import '../../../core/auth/aivy_auth_scope.dart';
 import '../../../core/firebase/firebase_session.dart';
 import '../../integrations/data/google_integration_store.dart';
 import '../../integrations/presentation/gmail_recent_screen.dart';
+import '../../../core/notifications/notification_health_screen.dart';
 import '../../../core/notifications/notifications_screen.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/models/chat_session.dart';
@@ -194,6 +195,21 @@ class _MoreScreenState extends State<MoreScreen> {
           style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
         ),
         const SizedBox(height: 12),
+        ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Notification health'),
+          subtitle: const Text(
+            'Why a reminder did or did not reach your phone — and a test',
+          ),
+          onTap: () {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (context) =>
+                    NotificationHealthScreen(userId: widget.userId),
+              ),
+            );
+          },
+        ),
         ListTile(
           leading: const Icon(Icons.notifications_outlined),
           title: const Text('In-app notifications'),

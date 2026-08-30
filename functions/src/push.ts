@@ -17,6 +17,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 const USERS = "users";
 const DEVICES = "devices";
@@ -140,3 +141,35 @@ export async function pushToUser(userId: string, msg: PushMessage): Promise<numb
 export function tokenDocId(token: string): string {
   return token.replace(/[^A-Za-z0-9_-]/g, "").slice(-120) || "device";
 }
+
+/**
+ * Callable: sends a push to the caller's own devices, right now.
+ *
+ * A reminder that does not arrive has a long chain behind it — permission,
+ * token registration, the scheduler, FCM, the phone's battery policy — and
+ * waiting five minutes for the next scheduled run tells you nothing about
+ * which link broke. This exercises the whole delivery path on demand and
+ * reports how many devices it reached, which separates "nothing is
+ * registered" from "sent, but the phone did not show it".
+ */
+export const aivyTestPush = onCall(
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Sign in first.");
+    }
+
+    const db = getFirestore();
+    const snap = await db.collection("users").doc(uid).collection("devices").get();
+    const devices = snap.size;
+
+    const sent = await pushToUser(uid, {
+      title: "Aivy test",
+      body: "If you can see this, reminders will arrive the same way.",
+      data: { type: "test" },
+    });
+
+    return { devices, sent };
+  },
+);
