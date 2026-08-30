@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/design/aivy_ui.dart';
+import '../data/morning_brief_service.dart';
+import '../models/morning_brief.dart';
+import 'widgets/morning_brief_card.dart';
 import '../../chat/data/aivy_process_service.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../clients/data/client_repository.dart';
@@ -56,6 +59,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final Set<String> _completing = <String>{};
 
+  late final MorningBriefService _briefService;
+  MorningBrief? _brief;
+  bool _briefLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +71,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
     _reminders = ReminderRepository();
+    _briefService = MorningBriefService();
+    unawaited(_loadBrief());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_aivyProcess.syncClientStats());
       unawaited(_aivyProcess.fetchDashboardStats());
@@ -75,6 +84,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _aivyProcess.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBrief({bool force = false}) async {
+    if (mounted) {
+      setState(() => _briefLoading = true);
+    }
+    final brief = await _briefService.fetch(force: force);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _brief = brief;
+      _briefLoading = false;
+    });
   }
 
   Future<void> _complete(ReminderItem r) async {
@@ -111,7 +134,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           color: AivyUi.brand,
           backgroundColor: AivyUi.surface,
           onRefresh: () async {
-            await _aivyProcess.syncClientStats();
+            // Pulling down is the one gesture that means "this is stale", so
+            // it rebuilds the brief rather than handing back the cached one.
+            await Future.wait([
+              _aivyProcess.syncClientStats(),
+              _loadBrief(force: true),
+            ]);
             if (mounted) {
               setState(() {});
             }
@@ -122,6 +150,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               _Greeting(onAsk: widget.onOpenChat),
               const SizedBox(height: 18),
+              MorningBriefCard(
+                brief: _brief,
+                loading: _briefLoading,
+                onRetry: () => _loadBrief(force: true),
+              ),
+              if (_brief != null || _briefLoading) const SizedBox(height: 22),
               _MoneySection(
                 payments: _payments,
                 userId: widget.userId,

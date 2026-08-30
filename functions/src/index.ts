@@ -47,6 +47,7 @@ export { aivyAgent, aivyAgentChats, aivyAgentCommit } from "./agent/aivyAgent";
 export { aivyResetData } from "./agent/resetData";
 export { aivyTestPush } from "./push";
 export { checkOccasions } from "./occasionReminders";
+export { aivyMorningBrief } from "./morning/aivyMorningBrief";
 export { translateWaPreview } from "./translateWaPreview";
 export { checkWhatsappHealth } from "./checkWhatsappHealth";
 export {

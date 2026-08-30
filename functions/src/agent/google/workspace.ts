@@ -226,12 +226,43 @@ function headerValue(headers: unknown, name: string): string {
  * returns ids only), so this is deliberately capped low — the model wants a
  * glance, not a mailbox.
  */
+/**
+ * The same read as `gmailListRecent`, without its two assumptions: it does not
+ * force the INBOX label, and it allows a larger page.
+ *
+ * The morning brief needs three different slices of one mailbox — alerts, bank
+ * mail, everything else — and some of them are filed out of the inbox by the
+ * user's own rules. A slice that silently excludes them would report a quiet
+ * morning that was not quiet.
+ */
+export async function gmailSearch(
+  token: string,
+  query: string,
+  maxResults = 20,
+): Promise<GmailSummaryRow[]> {
+  return gmailListRecent(token, {
+    query,
+    maxResults,
+    inboxOnly: false,
+    hardMax: 30,
+  });
+}
+
 export async function gmailListRecent(
   token: string,
-  opts: { maxResults?: number; query?: string } = {},
+  opts: {
+    maxResults?: number;
+    query?: string;
+    /** Default true, which is what every existing caller wants. */
+    inboxOnly?: boolean;
+    hardMax?: number;
+  } = {},
 ): Promise<GmailSummaryRow[]> {
-  const max = Math.min(15, Math.max(1, opts.maxResults ?? 8));
-  const q = new URLSearchParams({ maxResults: String(max), labelIds: "INBOX" });
+  const max = Math.min(opts.hardMax ?? 15, Math.max(1, opts.maxResults ?? 8));
+  const q = new URLSearchParams({ maxResults: String(max) });
+  if (opts.inboxOnly !== false) {
+    q.set("labelIds", "INBOX");
+  }
   if (opts.query && opts.query.trim()) {
     q.set("q", opts.query.trim());
   }
