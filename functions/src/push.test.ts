@@ -45,6 +45,19 @@ beforeEach(() => {
 });
 
 describe("pushToUser", () => {
+  it("tags a reminder so the phone's own alarm and this one collapse into one", async () => {
+    getMock.mockResolvedValue(devices("tok"));
+    sendMock.mockResolvedValue({
+      successCount: 1,
+      failureCount: 0,
+      responses: [{ success: true }],
+    });
+
+    await pushToUser("u1", { title: "t", body: "b", tag: "rem_42" });
+    const msg = sendMock.mock.calls[0]![0] as Record<string, never>;
+    expect(msg).toMatchObject({ android: { notification: { tag: "rem_42" } } });
+  });
+
   it("sends to every registered device on the reminder channel", async () => {
     getMock.mockResolvedValue(devices("tok_a", "tok_b"));
     sendMock.mockResolvedValue({

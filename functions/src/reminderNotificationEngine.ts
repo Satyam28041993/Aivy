@@ -148,6 +148,13 @@ function dueDateLineFromMs(ms: number, timeZone: string): string {
   return d.toFormat("d MMM yyyy");
 }
 
+/** "3:45 PM" in the user's own zone — what a reminder is actually about. */
+function timeLineFromMs(ms: number, timeZone: string): string {
+  const z = (timeZone && timeZone.trim()) || "Asia/Kolkata";
+  const d = DateTime.fromMillis(ms, { zone: "UTC" }).setZone(z);
+  return d.isValid ? d.toFormat("h:mm a") : "";
+}
+
 function userIdFromReminderPath(
   p: string | undefined,
   collectionId: string,
@@ -306,12 +313,23 @@ export const checkReminders = onSchedule(
             title = "Payment Reminder";
             message = `₹${ru} from ${clientName} due on ${dateLine}`;
           } else if (!payIdLen) {
-            const t0 = docTitle || String((r2 as { message?: string }).message ?? "").trim() || "Reminder";
-            title = t0;
-            message = docDesc.length > 0 ? `${t0} — ${docDesc}` : t0;
-            if (dateLine.length > 0) {
-              message = `${message} · ${dateLine}`;
+            // The task is the headline. Repeating it in the body — which is
+            // what this used to do — wastes the only two lines a notification
+            // gets, and a date is not news at the moment the thing is due.
+            title =
+              docTitle || String((r2 as { message?: string }).message ?? "").trim() || "Reminder";
+            const parts: string[] = [];
+            if (docDesc.length > 0) {
+              parts.push(docDesc);
             }
+            if (clientName && clientName !== "Client") {
+              parts.push(clientName);
+            }
+            const timeLine = timeLineFromMs(stMs, timeZone);
+            if (timeLine.length > 0) {
+              parts.push(timeLine);
+            }
+            message = parts.length > 0 ? parts.join(" · ") : "Reminder";
           } else {
             title = docTitle || "Payment Reminder";
             message = `₹${ru} from ${clientName} due on ${dateLine}`;
@@ -384,6 +402,8 @@ export const checkReminders = onSchedule(
             title: String(row.title ?? "Reminder"),
             body: String(row.message ?? ""),
             data: { type: String(row.type ?? "followup"), reminderId },
+            // Same tag the phone's own alarm uses, so one reminder shows once.
+            tag: reminderId,
           });
         }
       } catch (err) {

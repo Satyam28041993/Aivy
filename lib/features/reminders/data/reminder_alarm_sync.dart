@@ -37,11 +37,21 @@ class ReminderAlarm {
     final title = _firstText(data, const ['title', 'message']);
     final note = _firstText(data, const ['note', 'description']);
     final client = _text(data['clientName']);
+
+    // The task is the headline; the body carries what the headline cannot.
+    // It used to read "Aivy reminder", which told the reader nothing they did
+    // not already know from the app's own icon.
+    final parts = <String>[
+      if (note.isNotEmpty) note,
+      if (client.isNotEmpty) client,
+      _timeLabel(whenMs),
+    ].where((p) => p.isNotEmpty).toList();
+
     return ReminderAlarm(
       id: id,
       whenMs: whenMs,
       title: title.isNotEmpty ? title : 'Reminder',
-      body: note.isNotEmpty ? note : 'Aivy reminder',
+      body: parts.isEmpty ? 'Reminder' : parts.join(' · '),
       subtitle: client.isNotEmpty ? client : null,
     );
   }
@@ -63,6 +73,14 @@ int _readScheduledMs(Map<String, dynamic> data) {
 }
 
 String _text(Object? raw) => raw is String ? raw.trim() : '';
+
+/// "3:45 PM" in the phone's own zone, which is the zone the user set it in.
+String _timeLabel(int ms) {
+  final t = DateTime.fromMillisecondsSinceEpoch(ms);
+  final hour = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final minute = t.minute.toString().padLeft(2, '0');
+  return '$hour:$minute ${t.hour < 12 ? 'AM' : 'PM'}';
+}
 
 String _firstText(Map<String, dynamic> data, List<String> keys) {
   for (final k in keys) {

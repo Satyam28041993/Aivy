@@ -227,6 +227,10 @@ class NotificationService {
       category: AndroidNotificationCategory.reminder,
       subText: subtitle,
       playSound: true,
+      // One reminder has two ways of arriving — this alarm, and the server's
+      // push a few minutes later — and without a shared tag Android draws
+      // both. Tagging by reminder makes the second replace the first.
+      tag: reminderId,
     );
     final details = NotificationDetails(
       android: androidDetailsWithSubtitle,
@@ -291,6 +295,7 @@ class NotificationService {
       category: AndroidNotificationCategory.reminder,
       subText: subtitle,
       playSound: true,
+      tag: tag,
     );
     final darwinDetails = DarwinNotificationDetails(
       presentAlert: true,

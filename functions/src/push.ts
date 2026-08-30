@@ -30,6 +30,12 @@ export interface PushMessage {
   body: string;
   /** Small payload the app reads when the notification is tapped. */
   data?: Record<string, string>;
+  /**
+   * Android collapses notifications sharing a tag. A reminder can arrive twice
+   * — the phone's own alarm at the exact minute, and this a few minutes later
+   * — so both are tagged by reminder id and the reader sees one.
+   */
+  tag?: string;
 }
 
 /**
@@ -76,6 +82,7 @@ export async function pushToUser(userId: string, msg: PushMessage): Promise<numb
       android: {
         priority: "high",
         notification: {
+          ...(msg.tag ? { tag: msg.tag } : {}),
           // The channel decides the sound on Android 8 and up, and it already
           // carries the reminder tone. Naming a raw resource here as well adds
           // nothing and risks the system failing to build the notification at

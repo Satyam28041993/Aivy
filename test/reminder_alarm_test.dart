@@ -17,8 +17,9 @@ void main() {
       expect(alarm, isNotNull);
       expect(alarm!.whenMs, 1757000000000);
       expect(alarm.title, 'Mummy ki dawa');
-      // Nothing to elaborate on, so the body says where it came from.
-      expect(alarm.body, 'Aivy reminder');
+      // Nothing to add, so the body carries the time rather than a filler
+      // line repeating what the app icon already says.
+      expect(alarm.body, matches(r'^\d{1,2}:\d{2} (AM|PM)$'));
       expect(alarm.subtitle, isNull);
     });
 
@@ -38,7 +39,9 @@ void main() {
         'clientName': 'Rohan Traders',
         'scheduledTimeMs': 1757000000000,
       });
-      expect(alarm!.body, 'Quotation 50000');
+      // Note, then who it is about, then when — the headline is the task, so
+      // the body must not repeat it.
+      expect(alarm!.body, startsWith('Quotation 50000 · Rohan Traders · '));
       expect(alarm.subtitle, 'Rohan Traders');
     });
 
@@ -49,7 +52,7 @@ void main() {
         'scheduledTimeMs': 1757000000000,
       });
       expect(alarm!.title, 'Call Rohan');
-      expect(alarm.body, 'about the pending order');
+      expect(alarm.body, startsWith('about the pending order · '));
     });
 
     test('refuses a reminder with no usable time', () {
