@@ -43,6 +43,11 @@ import {
   savePlaceTool,
   whereAmITool,
 } from "./tools/mapsTools";
+import {
+  forgetOccasionTool,
+  listOccasionsTool,
+  saveOccasionTool,
+} from "./tools/occasionTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -585,6 +590,50 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "save_occasion",
+    description:
+      "Record a birthday or anniversary — a date that comes back every year. " +
+      "Use this, not create_reminder, whenever the user names someone's " +
+      "birthday or an anniversary: a reminder fires once and is gone, while " +
+      "this warns them 15, 10, 5 and 1 days before, and again on the day, " +
+      "every year. Saving the same person again just moves the date.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Whose day it is — 'Ruchi', 'Prisha', 'our wedding'.",
+        },
+        kind: { type: "string", enum: ["birthday", "anniversary", "other"] },
+        day: { type: "number", description: "Day of the month, 1-31." },
+        month: { type: "number", description: "Month, 1-12." },
+        year: {
+          type: "number",
+          description:
+            "Year it first happened — the year of birth, or of the wedding. " +
+            "Only when known; it is what makes 'turning 31' possible.",
+        },
+      },
+      required: ["name", "day", "month"],
+    },
+  },
+  {
+    name: "list_occasions",
+    description:
+      "Every birthday and anniversary saved, soonest first. Use for 'kya aa " +
+      "raha hai', 'kiska birthday hai is mahine'.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "forget_occasion",
+    description: "Remove a saved birthday or anniversary.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
     name: "where_am_i",
     description:
       "Where the user is right now, from their phone's location — address plus a " +
@@ -665,6 +714,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_saved_place: getSavedPlaceTool,
   list_saved_places: (ctx) => listSavedPlacesTool(ctx),
   forget_place: forgetPlaceTool,
+  save_occasion: saveOccasionTool,
+  list_occasions: (ctx) => listOccasionsTool(ctx),
+  forget_occasion: forgetOccasionTool,
 };
 
 /** Tools that create a draft, so the loop knows to surface a card. */

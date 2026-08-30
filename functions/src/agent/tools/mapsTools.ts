@@ -9,6 +9,7 @@
 
 import {
   computeRoute,
+  crowDistanceKm,
   MapsApiError,
   mapsDirectionsToLink,
   mapsPinLink,
@@ -114,17 +115,31 @@ export async function findPlacesTool(
     return fail("nothing_found", `Nothing found for "${query}" around ${near}.`);
   }
 
+  // Near to far, which is the order anyone reads a list of nearby places in.
+  const withDistance = rows.map((r) => ({
+    row: r,
+    km: coords && r.coords ? crowDistanceKm(coords, r.coords) : null,
+  }));
+  if (coords) {
+    withDistance.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));
+  }
+
   return dataResult({
     query,
     ...(coords ? { near: "your current location" } : near ? { near } : {}),
-    count: rows.length,
-    places: rows.map((r) => ({
+    count: withDistance.length,
+    places: withDistance.map(({ row: r, km }) => ({
       name: r.name,
       address: r.address,
+      ...(km != null ? { distance_km_straight_line: km } : {}),
       ...(r.rating != null ? { rating: r.rating, ratings: r.ratingCount } : {}),
       ...(r.openNow != null ? { open_now: r.openNow } : {}),
       ...(r.phone ? { phone: r.phone } : {}),
-      ...(r.mapsUri ? { maps_link: r.mapsUri } : {}),
+      ...(r.mapsUri
+        ? { maps_link: r.mapsUri }
+        : r.coords
+          ? { maps_link: mapsPinLink(r.coords) }
+          : {}),
     })),
   });
 }

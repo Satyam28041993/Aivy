@@ -454,3 +454,23 @@ export async function resolvePlacePoint(opts: {
     return null;
   }
 }
+
+
+/**
+ * Straight-line distance in kilometres.
+ *
+ * Deliberately not a Routes call: five places would be five billed requests
+ * for a number nobody navigates by. "1.2 km away" is what Maps itself puts in
+ * a list of results, and it is enough to tell near from far — the road
+ * distance is one tap away in the link.
+ */
+export function crowDistanceKm(a: Coords, b: Coords): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 10) / 10;
+}

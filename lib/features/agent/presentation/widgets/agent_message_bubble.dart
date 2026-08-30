@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -69,7 +70,13 @@ class AgentMessageBubble extends StatelessWidget {
     // not tappable at all — so links are lifted out of the text and shown as
     // buttons underneath it, the way a shared location arrives on WhatsApp.
     final links = extractLinks(message.text);
-    final body = stripLinks(message.text, links);
+    // One link is a shared location: lift it out and make it a button, the way
+    // WhatsApp does. Several links are a list — five places, each with its own
+    // map link — and lifting those out strips every one of them from the name
+    // it belonged to, leaving five identical buttons at the bottom. So a list
+    // keeps its links where they were written, tappable in place.
+    final asChips = links.length == 1;
+    final body = asChips ? stripLinks(message.text, links) : message.text;
 
     return GestureDetector(
       onLongPress: () async {
@@ -110,16 +117,23 @@ class AgentMessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (body.isNotEmpty)
-              SelectableText(
-                body,
-                style: TextStyle(
+              if (asChips || links.isEmpty)
+                SelectableText(
+                  body,
+                  style: TextStyle(
+                    color: isUser ? Colors.white : const Color(0xFFE7EDF5),
+                    fontSize: 15,
+                    height: 1.42,
+                    fontWeight: FontWeight.w400,
+                  ),
+                )
+              else
+                _InlineLinkText(
+                  text: body,
+                  links: links,
                   color: isUser ? Colors.white : const Color(0xFFE7EDF5),
-                  fontSize: 15,
-                  height: 1.42,
-                  fontWeight: FontWeight.w400,
                 ),
-              ),
-            if (links.isNotEmpty)
+            if (asChips && links.isNotEmpty)
               Padding(
                 padding: EdgeInsets.only(top: body.isEmpty ? 0 : 9),
                 child: Wrap(
@@ -132,6 +146,120 @@ class AgentMessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Prose with its links left where they were written, each one tappable.
+///
+/// The URL itself is not shown — a raw maps address wraps over four lines and
+/// tells the reader nothing. In its place goes the label the link earned:
+/// "Open in Maps", "Get directions".
+class _InlineLinkText extends StatefulWidget {
+  const _InlineLinkText({
+    required this.text,
+    required this.links,
+    required this.color,
+  });
+
+  final String text;
+  final List<MessageLink> links;
+  final Color color;
+
+  @override
+  State<_InlineLinkText> createState() => _InlineLinkTextState();
+}
+
+class _InlineLinkTextState extends State<_InlineLinkText> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _open(String url) async {
+    final uri = Uri.tryParse(url);
+    var ok = false;
+    if (uri != null) {
+      try {
+        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        ok = false;
+      }
+    }
+    if (ok || !mounted) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not open it — link copied'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+
+    final base = TextStyle(
+      color: widget.color,
+      fontSize: 15,
+      height: 1.42,
+      fontWeight: FontWeight.w400,
+    );
+
+    final spans = <InlineSpan>[];
+    var rest = widget.text;
+    // Longest first, so one URL that is a prefix of another cannot swallow it.
+    final byLength = [...widget.links]
+      ..sort((a, b) => b.url.length.compareTo(a.url.length));
+
+    while (rest.isNotEmpty) {
+      var at = -1;
+      MessageLink? hit;
+      for (final l in byLength) {
+        final i = rest.indexOf(l.url);
+        if (i >= 0 && (at < 0 || i < at)) {
+          at = i;
+          hit = l;
+        }
+      }
+      if (hit == null || at < 0) {
+        spans.add(TextSpan(text: rest, style: base));
+        break;
+      }
+      if (at > 0) {
+        spans.add(TextSpan(text: rest.substring(0, at), style: base));
+      }
+      final recognizer = TapGestureRecognizer()..onTap = () => _open(hit!.url);
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: hit.label,
+          style: base.copyWith(
+            color: const Color(0xFF22D3EE),
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+            decorationColor: const Color(0x5522D3EE),
+          ),
+          recognizer: recognizer,
+        ),
+      );
+      rest = rest.substring(at + hit.url.length);
+    }
+
+    return SelectableText.rich(TextSpan(children: spans));
   }
 }
 
