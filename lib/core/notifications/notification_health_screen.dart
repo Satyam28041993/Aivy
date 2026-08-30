@@ -45,9 +45,14 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
     try {
       final user = FirebaseFirestore.instance.collection('users').doc(widget.userId);
       devices = (await user.collection('devices').get()).size;
+      // Only reminders still ahead of us. A reminder whose time has passed is
+      // deliberately never put on the clock — counting those made this line
+      // read red when nothing was wrong.
       reminders = (await user
               .collection('reminders')
               .where('status', isEqualTo: 'pending')
+              .where('scheduledTimeMs',
+                  isGreaterThan: DateTime.now().millisecondsSinceEpoch)
               .get())
           .size;
     } catch (e) {
@@ -171,9 +176,12 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
             _Check(
               ok: h.scheduledCount >= _pendingReminders,
               title: 'Alarms queued: ${h.scheduledCount}',
-              detail: '$_pendingReminders reminder(s) pending. These should '
-                  'match — fewer alarms means some reminders never reached this '
-                  "phone's clock.",
+              detail: _pendingReminders == 0
+                  ? 'No reminders are due in the future, so there is nothing to '
+                      'queue. Set one and this number should go up.'
+                  : '$_pendingReminders reminder(s) still due. These should '
+                      'match — fewer alarms means some never reached this '
+                      "phone's clock.",
             ),
           ],
           const SizedBox(height: 20),

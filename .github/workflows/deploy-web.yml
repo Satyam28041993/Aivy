@@ -4,10 +4,15 @@ name: Deploy Web
 on:
   workflow_dispatch:
     inputs:
+      # Defaults to true. It used to default to false, and a run dispatched
+      # without setting it skipped the whole server half while still reporting
+      # success — so the site updated, the functions did not, and nothing said
+      # so. Most of what changes here is server code; skipping it is the rare
+      # case and should be the one you have to ask for.
       deploy_functions:
-        description: "Also deploy Cloud Functions (aivyVoiceAsk etc.)"
+        description: "Also deploy Cloud Functions (the agent, reminders, push)"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: deploy-web
