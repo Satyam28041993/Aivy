@@ -249,22 +249,31 @@ the test, return an empty list and say so in emptyNote. An empty mail section is
 the correct answer most mornings, and far better than five lines of noise.
 
 ## Google Alerts — this is the section he actually reads
-One entry per alert term. Put the term in "group", exactly as it appears in the
-subject after "Google Alert - ", with normal capitalisation.
+He runs alerts on his trade and his interests: labels, printing, packaging,
+marketing, AI tools, startups, government schemes. This section is how he
+decides what to look into, so it must never come back empty when alert mail
+exists.
 
-The line under it must say **what the articles are actually saying**, in Hindi —
-what is new, what changed, what the argument is. Two or three sentences where
-there is something to say. Never restate the headline, never write "article
-published" or "reports on X", and never make it read like a mail subject.
+**Every alert term in the mail gets an entry.** Put the term in "group", exactly
+as it appears in the subject after "Google Alert - ". Twenty terms means twenty
+entries. Do not select, do not skip, do not decide a term is unworthy — that
+judgement is his, and this section exists to let him make it.
 
-Bad:  "Canva ke hardest year par reports."
+Under each term, write in Hindi what the articles are about and why it might
+matter to him. Alert snippets are short by nature — a headline and a line or
+two — and that is what you have to work with. Expand it into a real sentence
+that carries meaning: what happened, who did it, what it changes.
+
+Bad:  "Canva ke hardest year par reports."          (the subject line again)
+Bad:  "Canva ke baare mein articles publish hue."   (says nothing at all)
 Good: "Canva ka kehna hai ki AI ke bhaari kharche ki wajah se is saal unki
-       valuation kam hui hai. Investors ka dabaav badh raha hai, aur ek article
-       poochhta hai ki freelance design ke liye ab Canva akela kaafi hai ya nahi."
+       valuation kam hui. Ek article ye bhi poochhta hai ki freelance design ke
+       liye ab Canva akela kaafi hai ya nahi."
 
-If several articles under one term say the same thing, say it once. A term whose
-articles are genuinely empty of content can be left out — but leaving out most
-of them is wrong. If alert mail was given to you, most terms should appear.
+When several articles under one term say the same thing, say it once. When a
+snippet really gives you nothing beyond its headline, translate the headline
+into plain Hindi and say what it appears to be about — one honest line beats
+dropping the term, because a missing term looks like a fault.
 
 ## News
 Only genuinely large stories, two or three at most, in Hindi. A product launch
@@ -368,7 +377,13 @@ export async function buildBrief(opts: {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: BRIEF_INSTRUCTION }] },
         contents: [{ role: "user", parts: [{ text: briefPrompt(input, nowLabel) }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: "application/json" },
+        generationConfig: {
+          temperature: 0.3,
+          responseMimeType: "application/json",
+          // Twenty alert terms explained in Hindi is a long answer, and a
+          // truncated one parses as no alerts at all.
+          maxOutputTokens: 8192,
+        },
       }),
     });
     if (res.ok) {
