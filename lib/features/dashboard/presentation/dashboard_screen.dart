@@ -37,6 +37,7 @@ class DashboardScreen extends StatefulWidget {
     this.activeChatId,
     this.onOpenChat,
     this.onOpenReports,
+    this.onAskAbout,
   });
 
   final String userId;
@@ -45,6 +46,10 @@ class DashboardScreen extends StatefulWidget {
   /// Opens the Aivy tab — every "ask about this" affordance lands there.
   final VoidCallback? onOpenChat;
   final VoidCallback? onOpenReports;
+
+  /// "Ask Aivy about this" from a brief item — jumps to the chat with the
+  /// question already written out.
+  final ValueChanged<String>? onAskAbout;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -154,6 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 brief: _brief,
                 loading: _briefLoading,
                 onRetry: () => _loadBrief(force: true),
+                onAskAbout: widget.onAskAbout,
               ),
               if (_brief != null || _briefLoading) const SizedBox(height: 22),
               _MoneySection(

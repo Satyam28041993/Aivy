@@ -45,6 +45,12 @@ class _HomeShellState extends State<HomeShell> {
   String? _activeChatId;
   StreamSubscription<String?>? _activeChatSub;
 
+  /// Text to drop into the agent's message box when something elsewhere in the
+  /// app says "ask about this". The agent screen stays alive inside an
+  /// IndexedStack, so it cannot be handed a constructor argument after the
+  /// fact — it listens to this instead.
+  final ValueNotifier<String?> _agentPrefill = ValueNotifier<String?>(null);
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +94,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     unawaited(_activeChatSub?.cancel());
+    _agentPrefill.dispose();
     _alarms.dispose();
     super.dispose();
   }
@@ -132,6 +139,17 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   /// Dashboard shows today; every "see everything" on it opens Reports.
+  /// Jump to Aivy with the question already written, from a tap on a news item
+  /// or an alert. Not sent — the user may want to word it their own way.
+  void _askAivyAbout(String topic) {
+    final trimmed = topic.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    _agentPrefill.value = 'Tell me more about this: $trimmed';
+    setState(() => _currentIndex = _tabAgent);
+  }
+
   void _openReportsTab() {
     setState(() {
       _currentIndex = _tabReports;
@@ -148,12 +166,13 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      AivyAgentScreen(userId: widget.userId),
+      AivyAgentScreen(userId: widget.userId, prefill: _agentPrefill),
       DashboardScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
         onOpenChat: _openAgentTab,
         onOpenReports: _openReportsTab,
+        onAskAbout: _askAivyAbout,
       ),
       ReportsScreen(
         userId: widget.userId,

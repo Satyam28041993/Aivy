@@ -16,11 +16,17 @@ class MorningBriefCard extends StatelessWidget {
     required this.brief,
     required this.loading,
     required this.onRetry,
+    this.onAskAbout,
   });
 
   final MorningBrief? brief;
   final bool loading;
   final VoidCallback onRetry;
+
+  /// Opens Aivy with a question about one item already written. Offered on the
+  /// two sections that exist to be followed up — news and alerts — and not on
+  /// mail or today's list, where the next step is the mail or the task itself.
+  final ValueChanged<String>? onAskAbout;
 
   static const _icons = <String, IconData>{
     'mail': Icons.mail_outline_rounded,
@@ -104,6 +110,9 @@ class MorningBriefCard extends StatelessWidget {
         ..add(_Section(
           icon: _icons[section.kind] ?? Icons.circle_outlined,
           section: section,
+          onAskAbout: const {'news', 'alerts'}.contains(section.kind)
+              ? onAskAbout
+              : null,
         ));
     }
 
@@ -130,10 +139,15 @@ class MorningBriefCard extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.icon, required this.section});
+  const _Section({
+    required this.icon,
+    required this.section,
+    this.onAskAbout,
+  });
 
   final IconData icon;
   final BriefSection section;
+  final ValueChanged<String>? onAskAbout;
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +181,7 @@ class _Section extends StatelessWidget {
             style: const TextStyle(color: AivyUi.inkFaint, fontSize: 13, height: 1.35),
           )
         else ...[
-          for (final item in loose) _Item(item: item),
+          for (final item in loose) _Item(item: item, onAskAbout: onAskAbout),
           for (final entry in groups.entries) ...[
             Padding(
               padding: const EdgeInsets.only(top: 6, bottom: 2),
@@ -180,7 +194,15 @@ class _Section extends StatelessWidget {
                 ),
               ),
             ),
-            for (final item in entry.value) _Item(item: item, indented: true),
+            for (final item in entry.value)
+              _Item(
+                item: item,
+                indented: true,
+                // The alert term is the topic, not the one-line summary under
+                // it — "Canva ai" is what he wants to ask about.
+                topic: entry.key,
+                onAskAbout: onAskAbout,
+              ),
           ],
         ],
       ],
@@ -189,10 +211,19 @@ class _Section extends StatelessWidget {
 }
 
 class _Item extends StatelessWidget {
-  const _Item({required this.item, this.indented = false});
+  const _Item({
+    required this.item,
+    this.indented = false,
+    this.topic,
+    this.onAskAbout,
+  });
 
   final BriefItem item;
   final bool indented;
+
+  /// What to ask Aivy about, when it is not simply the headline.
+  final String? topic;
+  final ValueChanged<String>? onAskAbout;
 
   Future<void> _open(BuildContext context) async {
     final url = item.link;
@@ -245,7 +276,18 @@ class _Item extends StatelessWidget {
                 ),
               ),
               if (item.link != null)
-                const Icon(Icons.open_in_new_rounded, size: 13, color: AivyUi.inkFaint),
+                const Padding(
+                  padding: EdgeInsets.only(left: 6, top: 1),
+                  child: Icon(
+                    Icons.open_in_new_rounded,
+                    size: 13,
+                    color: AivyUi.inkFaint,
+                  ),
+                ),
+              if (onAskAbout != null)
+                _AskAivyButton(
+                  onTap: () => onAskAbout!(topic ?? item.headline),
+                ),
             ],
           ),
           if (item.detail != null)
@@ -271,6 +313,40 @@ class _Item extends StatelessWidget {
       onTap: () => _open(context),
       borderRadius: BorderRadius.circular(6),
       child: row,
+    );
+  }
+}
+
+/// The one tap that turns reading into asking.
+///
+/// Sits on news and alert lines, because those are the two things worth
+/// following up and the brief deliberately keeps them to a sentence — the rest
+/// of the story is a question away rather than a longer card.
+class _AskAivyButton extends StatelessWidget {
+  const _AskAivyButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Material(
+        color: AivyUi.brand.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(7),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+            child: Icon(
+              Icons.auto_awesome,
+              size: 13,
+              color: AivyUi.brand,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

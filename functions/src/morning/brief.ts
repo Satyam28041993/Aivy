@@ -9,7 +9,10 @@
  *
  * The sections are the ones asked for, in the order a morning is actually
  * read: mail that wants an answer, news large enough to matter, the alert
- * digests grouped by subject, today's own commitments, and yesterday's money.
+ * digests grouped by subject, and today's own commitments.
+ *
+ * Money was here and has been taken out on request — the reading code and its
+ * tests are kept, since it is coming back once the shape of it is settled.
  */
 
 import { getFirestore } from "firebase-admin/firestore";
@@ -18,7 +21,6 @@ import { DateTime } from "luxon";
 
 import { gmailSearch, GoogleApiError, type GmailSummaryRow } from "../agent/google/workspace";
 import { runWebSearch } from "../webSearch";
-import { totalMoney, type MoneyTotals } from "./money";
 
 const MODEL = "gemini-2.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
@@ -26,7 +28,7 @@ const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODE
 const ALERTS_SENDER = "googlealerts-noreply@google.com";
 
 export interface BriefSection {
-  /** "mail" | "news" | "alerts" | "today" | "money" */
+  /** "mail" | "news" | "alerts" | "today" */
   kind: string;
   title: string;
   items: BriefItem[];
@@ -76,7 +78,6 @@ export async function cachedBrief(uid: string, dateKey: string): Promise<Morning
 export interface GatheredInput {
   important: GmailSummaryRow[];
   alerts: GmailSummaryRow[];
-  money: MoneyTotals;
   news: Array<{ title: string; snippet: string; link: string }>;
   today: string[];
   gaps: string[];
@@ -152,21 +153,19 @@ export async function gather(
   const gaps: string[] = [];
   let important: GmailSummaryRow[] = [];
   let alerts: GmailSummaryRow[] = [];
-  let money: MoneyTotals = {
-    credited: 0,
-    spent: 0,
-    creditCount: 0,
-    spendCount: 0,
-    lines: [],
-  };
 
   if (googleToken) {
-    // Three slices of one mailbox, in parallel — the brief is on the critical
+    // Two slices of one mailbox, in parallel — the brief is on the critical
     // path of opening the app, so they must not queue behind each other.
-    const [imp, alr, mny] = await Promise.all([
+    // Transaction and bank mail is excluded at the query rather than left for
+    // the model to reject: it is the loudest noise in this inbox and there is
+    // no version of it worth a line in the morning.
+    const [imp, alr] = await Promise.all([
       gmailSearch(
         googleToken,
-        `newer_than:2d -from:${ALERTS_SENDER} -category:promotions -category:social`,
+        `newer_than:2d -from:${ALERTS_SENDER} -category:promotions -category:social ` +
+          "-from:notifications@github.com -from:noreply@github.com " +
+          "-subject:(UPI OR debited OR credited OR OTP OR statement OR EMI)",
         20,
       ).catch((e) => {
         gaps.push(gmailGap(e, "your inbox"));
@@ -176,22 +175,11 @@ export async function gather(
         gaps.push("Google Alerts could not be read.");
         return [] as GmailSummaryRow[];
       }),
-      gmailSearch(
-        googleToken,
-        "newer_than:2d (debited OR credited OR UPI OR transaction OR payment)",
-        25,
-      ).catch(() => {
-        gaps.push("Bank and UPI mail could not be read.");
-        return [] as GmailSummaryRow[];
-      }),
     ]);
     important = imp;
     alerts = alr;
-    money = totalMoney(mny);
   } else {
-    gaps.push(
-      "Google is not connected on this device, so mail, alerts and money are missing.",
-    );
+    gaps.push("Google is not connected on this device, so mail and alerts are missing.");
   }
 
   let news: GatheredInput["news"] = [];
@@ -207,7 +195,7 @@ export async function gather(
   }
 
   const today = await todaysCommitments(uid, timezone);
-  return { important, alerts, money, news, today, gaps };
+  return { important, alerts, news, today, gaps };
 }
 
 function gmailGap(e: unknown, what: string): string {
@@ -221,38 +209,71 @@ function gmailGap(e: unknown, what: string): string {
 // Writing it
 // ---------------------------------------------------------------------------
 
-const BRIEF_INSTRUCTION = `You write one person's morning brief. Be brief, concrete and in English.
+const BRIEF_INSTRUCTION = `You write one person's morning brief. Be concrete and short.
 
-You are given raw material. Turn it into sections. Rules that matter:
+## Language
+Section headings and the mail section: English.
+**News and Google Alerts: Hindi** — plain spoken Hindi in Devanagari, the way you
+would explain something to a friend, not translated newspaper Hindi.
 
-- Judge importance yourself. Most mail is noise: newsletters, receipts, alerts,
-  "your app is installed". Only surface mail a person would want to act on or
-  would regret missing — someone waiting on a reply, an interview, a client, a
-  bill due, a delivery problem. If nothing qualifies, say so rather than
-  padding the list.
-- News: only genuinely large stories, two or three at most. A product launch is
-  not news. If nothing is big, return no news items at all.
-- Google Alerts: group by the alert term, which is in the subject after
-  "Google Alert -". One line per term saying what actually came up in it, not a
-  list of every headline. This is the section he reads to decide what to ask
-  about, so it must be scannable.
-- Today: one line per commitment, time first. Say plainly if the day is empty.
-- Money: use ONLY the totals given. Never state a rupee figure that is not in
-  the input. If both totals are zero, say nothing was found.
+## Mail — the hard part is what to leave out
+Almost nothing qualifies. Include a mail only if a person would act on it today
+or would be worse off for missing it: a real person waiting on a reply, a client,
+an interview or offer, a bill actually due, a delivery or order problem, money
+someone owes.
 
-Answer with JSON only, no prose around it, in exactly this shape:
-{"greeting":"one short line","sections":[{"kind":"mail|news|alerts|today|money","title":"...","emptyNote":"...","items":[{"headline":"...","detail":"...","group":"...","link":"..."}]}]}
+Never include, no matter how urgent the subject line sounds:
+- transaction alerts of any kind — "UPI Transaction Successful", "UPI
+  Transaction FAILED", debit and credit alerts, payment receipts
+- bank marketing and loan mail — "Important Update on Your Bank Loan Dues",
+  offers, statements, EMI notices
+- anything automated from a service: GitHub, CI or build failures, tokens
+  expiring, deploy notices, "your app is installed", password and OTP mail
+- newsletters, promotions, job alerts, social notifications, Google Alerts
 
-Keep every section present even when empty — set items to [] and write
-emptyNote. Omit detail, group and link when there is nothing to put in them.`;
+Those five examples are real mail this person did not want. If nothing survives
+the test, return an empty list and say so in emptyNote. An empty mail section is
+the correct answer most mornings, and far better than five lines of noise.
+
+## Google Alerts — this is the section he actually reads
+One entry per alert term. Put the term in "group", exactly as it appears in the
+subject after "Google Alert - ", with normal capitalisation.
+
+The line under it must say **what the articles are actually saying**, in Hindi —
+what is new, what changed, what the argument is. Two or three sentences where
+there is something to say. Never restate the headline, never write "article
+published" or "reports on X", and never make it read like a mail subject.
+
+Bad:  "Canva ke hardest year par reports."
+Good: "Canva ka kehna hai ki AI ke bhaari kharche ki wajah se is saal unki
+       valuation kam hui hai. Investors ka dabaav badh raha hai, aur ek article
+       poochhta hai ki freelance design ke liye ab Canva akela kaafi hai ya nahi."
+
+If several articles under one term say the same thing, say it once. If a term
+brought nothing worth reading, leave that term out entirely.
+
+## News
+Only genuinely large stories, two or three at most, in Hindi. A product launch
+or a company blog post is not news. If nothing is big, return no items.
+
+## Today
+One line per commitment, time first, in English. Say plainly if the day is empty.
+
+## Shape
+Answer with JSON only, no prose around it:
+{"greeting":"one short line","sections":[{"kind":"mail|news|alerts|today","title":"...","emptyNote":"...","items":[{"headline":"...","detail":"...","group":"...","link":"..."}]}]}
+
+Sections in this order: mail, news, alerts, today. Keep each one present even
+when empty — items [] and an emptyNote. Omit detail, group and link when there
+is nothing to put in them. Do not add a money section.`;
 
 function briefPrompt(input: GatheredInput, nowLabel: string): string {
   const mail = input.important
     .map((m) => `- from ${m.from} | ${m.subject} | ${m.snippet.slice(0, 200)}`)
     .join("\n");
-  const alerts = input.alerts
-    .map((m) => `- ${m.subject} | ${m.snippet.slice(0, 300)}`)
-    .join("\n");
+  // Alerts get the whole snippet: the section is judged on whether it explains
+  // what the articles say, and a summary cannot be written from a truncated one.
+  const alerts = input.alerts.map((m) => `- ${m.subject} | ${m.snippet}`).join("\n");
   const news = input.news.map((n) => `- ${n.title} | ${n.snippet} | ${n.link}`).join("\n");
   const today = input.today.map((t) => `- ${t}`).join("\n");
 
@@ -268,11 +289,7 @@ ${alerts || "(none)"}
 ${news || "(none)"}
 
 ## Today's commitments
-${today || "(nothing scheduled)"}
-
-## Money in the last two days, already totalled — do not compute your own
-Credited: ₹${Math.round(input.money.credited)} across ${input.money.creditCount} mail(s)
-Spent: ₹${Math.round(input.money.spent)} across ${input.money.spendCount} mail(s)`;
+${today || "(nothing scheduled)"}`;
 }
 
 function parseBrief(raw: string): { greeting: string; sections: BriefSection[] } | null {

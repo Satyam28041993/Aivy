@@ -24,9 +24,14 @@ class AivyAgentScreen extends StatefulWidget {
     super.key,
     required this.userId,
     this.service,
+    this.prefill,
   });
 
   final String userId;
+
+  /// Text pushed in from elsewhere — a news item, a Google Alert — to be put in
+  /// the message box ready to send.
+  final ValueNotifier<String?>? prefill;
 
   /// Injectable for tests.
   final AgentService? service;
@@ -66,6 +71,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   @override
   void initState() {
     super.initState();
+    widget.prefill?.addListener(_applyPrefill);
     _service = widget.service ?? AgentService();
     _chatSub = _service.watchChats(widget.userId).listen((chats) {
       if (!mounted) {
@@ -135,6 +141,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   void dispose() {
     unawaited(_messageSub?.cancel());
     unawaited(_chatSub?.cancel());
+    widget.prefill?.removeListener(_applyPrefill);
     _input.removeListener(_repaintComposer);
     _inputFocus.removeListener(_repaintComposer);
     _input.dispose();
