@@ -410,18 +410,31 @@ async function commitRememberFact(
   uid: string,
   d: RememberFactDraftData,
 ): Promise<CommitResult> {
-  await userRef(uid)
-    .collection("memory")
-    .doc("profile")
-    .set(
-      { [d.category]: d.fact, updatedAtMs: Date.now() },
-      { merge: true },
-    );
+  // Each fact lands on its own key, so a second family detail sits beside the
+  // first instead of replacing it. Drafts written before this carry only
+  // category/fact, and still commit.
+  const facts =
+    d.facts && d.facts.length > 0
+      ? d.facts
+      : [{ key: d.category, value: d.fact }];
+
+  const patch: Record<string, unknown> = { updatedAtMs: Date.now() };
+  for (const f of facts) {
+    if (f.key && f.value) {
+      patch[f.key] = f.value;
+    }
+  }
+
+  await userRef(uid).collection("memory").doc("profile").set(patch, { merge: true });
+
   return {
     ok: true,
-    message: "Got it, I'll remember that.",
+    message:
+      facts.length === 1
+        ? "Got it, I'll remember that."
+        : `Got it — ${facts.length} things remembered.`,
     createdIds: [],
-    summary: `remembered: ${d.fact}`,
+    summary: `remembered: ${facts.map((f) => f.value).join("; ")}`,
   };
 }
 

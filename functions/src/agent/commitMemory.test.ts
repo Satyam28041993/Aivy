@@ -73,3 +73,41 @@ it("writes the fact into the profile the next turn reads", async () => {
   // Merge, or remembering a second thing would erase the first.
   expect(options).toEqual({ merge: true });
 });
+
+it("gives each fact its own key, so a second family detail keeps the first", async () => {
+  draft.current = {
+    id: "d2",
+    kind: "remember_fact",
+    status: "pending",
+    title: "t",
+    icon: "🧠",
+    lines: [],
+    data: {
+      kind: "remember_fact",
+      category: "wife",
+      fact: "Ruchi Singh, born 19 Oct 1995",
+      facts: [
+        { key: "wife", value: "Ruchi Singh, born 19 Oct 1995" },
+        { key: "daughter", value: "Prisha Singh, born 16 Sep 2020" },
+        { key: "son", value: "Advik Singh, called Ivaan, born 6 Dec 2023" },
+      ],
+    },
+    chatId: "c1",
+    createdAtMs: 0,
+    committedAtMs: null,
+    resultIds: [],
+  };
+
+  const res = await commitDraft("u1", "d2");
+  expect(res.ok).toBe(true);
+
+  const [writtenPath, payload, options] = setMock.mock.calls.at(-1)!;
+  expect(writtenPath).toBe("users/u1/memory/profile");
+  // Filed by category, all three would have collided on one "family" key.
+  expect(payload).toMatchObject({
+    wife: "Ruchi Singh, born 19 Oct 1995",
+    daughter: "Prisha Singh, born 16 Sep 2020",
+    son: "Advik Singh, called Ivaan, born 6 Dec 2023",
+  });
+  expect(options).toEqual({ merge: true });
+});

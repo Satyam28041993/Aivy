@@ -27,7 +27,7 @@ import {
   resolveClient,
   type AgentClient,
 } from "../clientResolve";
-import type { DraftCardLine, DraftClientRef } from "../draftTypes";
+import type { DraftCardLine, DraftClientRef, RememberedFact } from "../draftTypes";
 import { draftResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
 import { DateTime } from "luxon";
 
@@ -625,24 +625,83 @@ export async function recordPaymentReceivedTool(
 // remember_fact
 // ---------------------------------------------------------------------------
 
+/**
+ * A key per subject, not per category.
+ *
+ * Memory is one flat document, so whatever a fact is filed under is what it
+ * overwrites. Filing by category meant the second "family" fact erased the
+ * first — tell it about your wife and then your daughter, and your wife was
+ * gone. The key is the subject itself, so facts accumulate.
+ */
+function factKey(raw: string, fallback: string): string {
+  const key = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+  return key || fallback;
+}
+
+/** Both shapes of the argument: one fact, or a batch of them. */
+function factsFrom(args: Record<string, unknown>): RememberedFact[] {
+  const out: RememberedFact[] = [];
+  const seen = new Set<string>();
+
+  const push = (rawKey: string, rawValue: string, fallbackKey: string) => {
+    const value = rawValue.trim();
+    if (!value) {
+      return;
+    }
+    const key = factKey(rawKey, fallbackKey);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    out.push({ key, value });
+  };
+
+  const batch = Array.isArray(args.facts) ? args.facts : [];
+  batch.forEach((raw, i) => {
+    if (raw == null || typeof raw !== "object") {
+      return;
+    }
+    const row = raw as Record<string, unknown>;
+    push(str(row.key) || str(row.category), str(row.value) || str(row.fact), `fact_${i + 1}`);
+  });
+
+  // The single-fact form still works, and is what a passing remark uses.
+  push(str(args.key) || str(args.category), str(args.fact) || str(args.value), "note");
+
+  return out;
+}
+
 export async function rememberFactTool(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const fact = str(args.fact);
-  if (!fact) {
+  const facts = factsFrom(args);
+  if (facts.length === 0) {
     return fail("needs_detail", "What should I remember?");
   }
-  const category = str(args.category) || "general";
 
   const draft = await createDraft({
     uid: ctx.uid,
     kind: "remember_fact",
-    title: "Remember this",
+    title: facts.length === 1 ? "Remember this" : `Remember ${facts.length} things`,
     icon: "🧠",
-    lines: [{ label: category === "general" ? "Note" : capitalizeWords(category), value: fact }],
+    lines: facts.map((f) => ({
+      label: capitalizeWords(f.key.replace(/_/g, " ")),
+      value: f.value,
+    })),
     chatId: ctx.chatId,
-    data: { kind: "remember_fact", category, fact },
+    data: {
+      kind: "remember_fact",
+      // Kept so a draft written by this build still reads on the old path.
+      category: facts[0]!.key,
+      fact: facts[0]!.value,
+      facts,
+    },
   });
 
   return draftResult(draft, "Ready to remember this — ask them to confirm.");

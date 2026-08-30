@@ -147,10 +147,23 @@ export interface SavedPlaceDraftData {
   replacing: boolean;
 }
 
+/** One thing to remember, filed under a key of its own. */
+export interface RememberedFact {
+  /** Stable subject key — "wife", "anniversary", "city". */
+  key: string;
+  /** What to remember about that subject, in one line. */
+  value: string;
+}
+
 export interface RememberFactDraftData {
   kind: "remember_fact";
   category: string;
   fact: string;
+  /**
+   * Several facts saved together, which is how a batch of personal details
+   * arrives. Older drafts have only `category`/`fact`, so both are read.
+   */
+  facts?: RememberedFact[];
 }
 
 export type DraftData =

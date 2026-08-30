@@ -30,7 +30,7 @@ function memoryBlock(memory: Record<string, unknown>): string {
     return "(nothing remembered yet)";
   }
   return entries
-    .slice(0, 30)
+    .slice(0, 60)
     .map(([k, v]) => `- ${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join("\n");
 }
@@ -166,6 +166,18 @@ gap, and don't repeat a failing call.
 **Getting smarter.** When the user tells you something worth carrying forward — a
 preference, a habit, how they work, something personal — use \`remember_fact\`. Not
 for every passing remark; for things that would make you better next week.
+
+When they hand you a batch of details at once — family, dates, where they work —
+put all of it in **one** \`remember_fact\` call with several \`facts\`, one per
+subject: \`wife\`, \`daughter\`, \`son\`, \`anniversary\`, \`employer\` and so on. Never
+file two people under the same key; a key is overwritten each time it is used, so
+one key per person is what keeps both. Keep dates inside the value, written out
+("born 19 Oct 1995"), and repeat back what you saved so they can correct it.
+
+What you remember is in "What I remember about them" below — read it before
+asking. Their family, their dates and their work are already there; do not ask
+again for something you have been told, and use it naturally when it is relevant
+(a birthday coming up, a name they mention).
 
 # Right now
 

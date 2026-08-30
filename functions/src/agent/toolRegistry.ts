@@ -252,19 +252,44 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "remember_fact",
     description:
-      "Remember something about the user for future conversations — a preference, " +
-      "a habit, a personal detail they shared. Use this when they tell you " +
-      "something worth carrying forward, not for every passing remark.",
+      "Remember things about the user for future conversations — family, dates, " +
+      "work, preferences, how they like things done. When they give you several " +
+      "details at once, pass them all in `facts` in a single call.",
     parameters: {
       type: "object",
       properties: {
+        facts: {
+          type: "array",
+          description:
+            "Everything to remember from this message. Preferred over `fact`.",
+          items: {
+            type: "object",
+            properties: {
+              key: {
+                type: "string",
+                description:
+                  "The subject, as a short stable label: 'wife', 'daughter', " +
+                  "'son', 'mother', 'father', 'anniversary', 'city', 'employer', " +
+                  "'job_title'. One subject per fact — a key is overwritten when " +
+                  "it is used again, so never file two different people under one.",
+              },
+              value: {
+                type: "string",
+                description:
+                  "What to remember about that subject, in one line, including " +
+                  "any date: 'Ruchi Singh, born 19 Oct 1995'.",
+              },
+            },
+            required: ["key", "value"],
+          },
+        },
         category: {
           type: "string",
-          description: "Short label, e.g. 'preference', 'family', 'business'.",
+          description: "Subject key for a single fact. Same rules as facts[].key.",
         },
-        fact: { type: "string", description: "The thing to remember, in one line." },
+        fact: { type: "string", description: "A single thing to remember, in one line." },
       },
-      required: ["fact"],
+      required: [],
     },
   },
   {

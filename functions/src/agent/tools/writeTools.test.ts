@@ -383,6 +383,49 @@ describe("remember_fact", () => {
     const res = await rememberFactTool(CTX, { category: "x" });
     expect(res.ok).toBe(false);
   });
+
+  it("keeps a batch of details apart instead of collapsing them into one", async () => {
+    const res = await rememberFactTool(CTX, {
+      facts: [
+        { key: "wife", value: "Ruchi Singh, born 19 Oct 1995" },
+        { key: "daughter", value: "Prisha Singh, born 16 Sep 2020" },
+        { key: "Wedding Anniversary", value: "21 May 2017" },
+      ],
+    });
+    expect(res.ok).toBe(true);
+
+    const draft = lastDraft();
+    const data = draft.data as Extract<DraftData, { kind: "remember_fact" }>;
+    expect(data.facts?.map((f) => f.key)).toEqual([
+      "wife",
+      "daughter",
+      // Spaces and casing are normalised, so the same subject always lands on
+      // the same key however it was written.
+      "wedding_anniversary",
+    ]);
+    // Every fact is on the card, so a wrong date can be caught before it sticks.
+    expect(draft.lines).toHaveLength(3);
+    expect(draft.title).toBe("Remember 3 things");
+  });
+
+  it("drops a repeated key rather than writing the same subject twice", async () => {
+    await rememberFactTool(CTX, {
+      facts: [
+        { key: "city", value: "Vasai East" },
+        { key: "City", value: "Palghar" },
+      ],
+    });
+    const data = lastDraft().data as Extract<DraftData, { kind: "remember_fact" }>;
+    expect(data.facts).toEqual([{ key: "city", value: "Vasai East" }]);
+  });
+
+  it("still takes a single fact the old way", async () => {
+    await rememberFactTool(CTX, { category: "city", fact: "Vasai East" });
+    const data = lastDraft().data as Extract<DraftData, { kind: "remember_fact" }>;
+    expect(data.category).toBe("city");
+    expect(data.fact).toBe("Vasai East");
+    expect(data.facts).toEqual([{ key: "city", value: "Vasai East" }]);
+  });
 });
 
 describe("repeating reminders", () => {
