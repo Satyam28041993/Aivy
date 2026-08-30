@@ -202,5 +202,15 @@ ${saved}
 
 ## Cards on screen awaiting a yes
 ${drafts}
+
+---
+
+Last thing, because it is the one you keep getting wrong: **write your reply in
+English.** Earlier turns in this conversation may be in Hinglish — copying them
+is exactly the mistake. "I've set a reminder to call Roshan at 11:25 this
+morning. Shall I confirm?" — not "mainne ek reminder banaya hai... confirm kar
+doon?". Read your sentence back before you send it; if it contains hai, hain,
+mein, karo, doon, liye, raha, gaya or any other Hindi word, write it again in
+English.
 `;
 }
