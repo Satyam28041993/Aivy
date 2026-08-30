@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dateKeyFor } from "./brief";
+import { dateKeyFor, parseBrief } from "./brief";
 
 /**
  * The cache key decides whether a morning is rebuilt or handed back, so it has
@@ -32,5 +32,55 @@ describe("dateKeyFor", () => {
 
   it("falls back rather than throwing on an empty zone", () => {
     expect(dateKeyFor("", Date.parse("2026-08-30T20:00:00Z"))).toBe("2026-08-31");
+  });
+});
+
+/**
+ * The parser threw away every Google Alert entry for two days.
+ *
+ * The instruction asked for the term in "group" and the explanation under it;
+ * the model put that explanation in "detail" and left "headline" empty, which
+ * was reasonable — and the parser dropped any item without a headline. The
+ * section then arrived empty and the screen said "Nothing new", which is
+ * indistinguishable from having no alerts at all.
+ */
+describe("parseBrief", () => {
+  function alerts(items: unknown[]): string {
+    return JSON.stringify({
+      greeting: "Good evening",
+      sections: [{ kind: "alerts", title: "Google Alerts", items }],
+    });
+  }
+
+  it("keeps an entry whose words are all in detail", () => {
+    const out = parseBrief(alerts([{ group: "Canva ai", detail: "Canva ki valuation giri." }]));
+    expect(out!.sections[0]!.items).toEqual([
+      { headline: "Canva ki valuation giri.", detail: undefined, group: "Canva ai", link: undefined },
+    ]);
+  });
+
+  it("keeps both when both are given", () => {
+    const out = parseBrief(
+      alerts([{ group: "AI", headline: "Naye model aaye.", detail: "Sasta reasoning." }]),
+    );
+    expect(out!.sections[0]!.items[0]).toMatchObject({
+      headline: "Naye model aaye.",
+      detail: "Sasta reasoning.",
+      group: "AI",
+    });
+  });
+
+  it("still drops an entry that says nothing at all", () => {
+    const out = parseBrief(alerts([{ group: "Marketing" }, { headline: "  " }]));
+    expect(out!.sections[0]!.items).toEqual([]);
+  });
+
+  it("reads through a code fence rather than losing the whole brief", () => {
+    const out = parseBrief('```json\n' + alerts([{ detail: "kuch hua." }]) + '\n```');
+    expect(out!.sections[0]!.items[0]!.headline).toBe("kuch hua.");
+  });
+
+  it("returns null on something that is not JSON at all", () => {
+    expect(parseBrief("sorry, I cannot help with that")).toBeNull();
   });
 });

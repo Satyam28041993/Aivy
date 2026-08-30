@@ -254,10 +254,13 @@ marketing, AI tools, startups, government schemes. This section is how he
 decides what to look into, so it must never come back empty when alert mail
 exists.
 
-**Every alert term in the mail gets an entry.** Put the term in "group", exactly
-as it appears in the subject after "Google Alert - ". Twenty terms means twenty
+**Every alert term in the mail gets an entry.** Twenty terms means twenty
 entries. Do not select, do not skip, do not decide a term is unworthy — that
 judgement is his, and this section exists to let him make it.
+
+Each entry uses exactly two fields: "group" is the term, spelled as it appears
+in the subject after "Google Alert - ", and **"headline" is your Hindi
+explanation** — the sentences themselves. Leave "detail" out of alert entries.
 
 Under each term, write in Hindi what the articles are about and why it might
 matter to him. Alert snippets are short by nature — a headline and a line or
@@ -340,12 +343,21 @@ function parseBrief(raw: string): { greeting: string; sections: BriefSection[] }
             items: Array.isArray(s.items)
               ? s.items
                   .filter((i): i is Record<string, unknown> => i != null && typeof i === "object")
-                  .map((i) => ({
-                    headline: `${i.headline ?? ""}`.trim(),
-                    detail: i.detail ? `${i.detail}`.trim() : undefined,
-                    group: i.group ? `${i.group}`.trim() : undefined,
-                    link: i.link ? `${i.link}`.trim() : undefined,
-                  }))
+                  .map((i) => {
+                    const headline = `${i.headline ?? ""}`.trim();
+                    const detail = `${i.detail ?? ""}`.trim();
+                    return {
+                      // An item whose words are all in detail is still an
+                      // item. Requiring a headline threw away every Google
+                      // Alert entry, because the model put the term in group
+                      // and the explanation in detail — which is exactly what
+                      // it was asked for.
+                      headline: headline || detail,
+                      detail: headline && detail ? detail : undefined,
+                      group: i.group ? `${i.group}`.trim() : undefined,
+                      link: i.link ? `${i.link}`.trim() : undefined,
+                    };
+                  })
                   .filter((i) => i.headline.length > 0)
               : [],
           }))
@@ -445,4 +457,4 @@ export async function buildBrief(opts: {
   return brief;
 }
 
-export { dateKeyFor };
+export { dateKeyFor, parseBrief };
