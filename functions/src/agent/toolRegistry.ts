@@ -493,8 +493,11 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "list_recent_emails",
     description:
-      "Recent inbox mail — sender, subject, a snippet. Use for 'koi mail aaya kya', " +
-      "'inbox me kya hai', or to find a specific mail with a query.",
+      "Mail — sender, subject, a snippet. Without a query it reads the inbox; " +
+      "with one it searches all mail, including anything filed away. Use for " +
+      "'koi mail aaya kya', and to find a particular mail — including a Google " +
+      "Alert digest, with a query like " +
+      "'from:googlealerts-noreply@google.com subject:\"AI tools\"'.",
     parameters: {
       type: "object",
       properties: {

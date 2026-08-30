@@ -337,6 +337,12 @@ export async function listRecentEmailsTool(
     rows = await gmailListRecent(token, {
       maxResults: typeof args.limit === "number" ? args.limit : 8,
       query: str(args.query) || undefined,
+      // A query means "find me this", and what is being looked for is often
+      // filed out of the inbox by the user's own rules — a Google Alert, a
+      // receipt, a thread already archived. Restricting a search to the inbox
+      // answers "not found" when the mail is sitting right there.
+      inboxOnly: !str(args.query),
+      hardMax: 25,
     });
   } catch (e) {
     return googleFailure(e);
@@ -346,7 +352,9 @@ export async function listRecentEmailsTool(
     emails: rows.map((r) => ({
       from: r.from,
       subject: r.subject,
-      snippet: r.snippet.slice(0, 200),
+      // Long enough to actually be read. A Google Alert's whole content is its
+      // snippet, and 200 characters cuts it off mid-headline.
+      snippet: r.snippet.slice(0, 500),
       when: r.receivedMs
         ? formatWhenLabel(DateTime.fromMillis(r.receivedMs, { zone: ctx.timezone }), true)
         : "",

@@ -146,7 +146,13 @@ class _HomeShellState extends State<HomeShell> {
     if (trimmed.isEmpty) {
       return;
     }
-    _agentPrefill.value = 'Tell me more about this: $trimmed';
+    // Named as an alert or a story, and quoted, so the agent knows to go and
+    // read the mail it came from before answering — and so a topic that
+    // arrives truncated is visible as one.
+    _agentPrefill.value =
+        'Tell me more about this from my morning brief: "$trimmed". '
+        'Read the mail it came from, then search the web, and give me the '
+        'source links.';
     setState(() => _currentIndex = _tabAgent);
   }
 
