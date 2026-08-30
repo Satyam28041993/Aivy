@@ -86,6 +86,14 @@ String _firstText(Map<String, dynamic> data, List<String> keys) {
 /// every pending reminder and schedules one for each, which also repairs a
 /// reminder made on another device, or before the app was reinstalled.
 class ReminderAlarmSync {
+  /// Reminders this has seen, and alarms it managed to queue.
+  ///
+  /// "Alarms queued: 0" means two very different things — that this never ran,
+  /// or that it ran and every attempt was refused — and from a phone they look
+  /// the same. These separate them.
+  static int seen = 0;
+  static int queued = 0;
+
   ReminderAlarmSync({
     FirebaseFirestore? firestore,
     NotificationService? notifications,
@@ -133,6 +141,7 @@ class ReminderAlarmSync {
         continue;
       }
       live.add(alarm.id);
+      seen++;
       // Same reminder, same minute — the alarm standing on the OS is correct.
       if (_scheduled[alarm.id] == alarm.whenMs) {
         continue;
@@ -147,6 +156,7 @@ class ReminderAlarmSync {
           scheduledTime: DateTime.fromMillisecondsSinceEpoch(alarm.whenMs),
           reminderId: alarm.id,
         );
+        queued++;
       } catch (e) {
         debugPrint('ReminderAlarmSync: could not schedule ${alarm.id}: $e');
         _scheduled.remove(alarm.id);

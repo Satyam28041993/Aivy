@@ -62,7 +62,7 @@ describe("pushToUser", () => {
       notification: { title: "Mummy ki dawa", body: "7 pm" },
       // High priority on the app's own channel, or Android may hold it back
       // and it arrives quietly, late, or not at all while the phone is dozing.
-      android: { priority: "high", notification: { channelId: "aivy_reminders_v2" } },
+      android: { priority: "high", notification: { channelId: "aivy_reminders_v3" } },
     });
   });
 

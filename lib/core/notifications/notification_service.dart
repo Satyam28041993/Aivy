@@ -15,6 +15,8 @@ class NotificationHealth {
     required this.notificationsEnabled,
     required this.canScheduleExactAlarms,
     required this.scheduledCount,
+    this.channelEnabled = true,
+    this.channelState = 'unknown',
   });
 
   /// False on web, where none of this exists.
@@ -31,7 +33,17 @@ class NotificationHealth {
   /// reminders. Zero with reminders pending means they were never scheduled.
   final int scheduledCount;
 
-  bool get healthy => supported && notificationsEnabled;
+  /// Android lets a single channel be silenced while the app as a whole still
+  /// reports notifications as allowed. Everything here — the alarm, the push,
+  /// the local test — goes through one channel, so this is the difference
+  /// between "blocked" and "nothing was sent".
+  final bool channelEnabled;
+
+  /// Whatever the OS calls this channel's importance, for when it is neither
+  /// plainly on nor plainly off.
+  final String channelState;
+
+  bool get healthy => supported && notificationsEnabled && channelEnabled;
 }
 
 /// Thin wrapper around `flutter_local_notifications` that exposes a single
@@ -45,17 +57,31 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._();
 
-  /// New id (v2) so Android recreates the channel: channel sound/vibration
-  /// cannot be changed after the first create on many devices.
-  static const String _reminderChannelId = 'aivy_reminders_v2';
+  /// The last thing that went wrong, kept so the health screen can show it.
+  /// Every failure in here used to go to debugPrint, which is invisible on a
+  /// phone — so a notification that never appeared had no explanation at all.
+  static String? lastError;
+
+  static void _note(Object error, String where) {
+    lastError = '$where: $error';
+    debugPrint('NotificationService: $where: $error');
+  }
+
+  /// v3, and deliberately without a custom sound.
+  ///
+  /// A channel's settings are fixed once Android has created it, so the only
+  /// way to change one is a new id. v2 carried a raw-resource sound, and on
+  /// some builds a channel whose sound URI will not resolve accepts
+  /// notifications and shows nothing — which is exactly the symptom here:
+  /// pushes arriving, the app reporting no error, and a silent screen. A
+  /// channel that is off cannot be switched back on in code either, and a new
+  /// id starts on. This drops the custom tone and takes the system's default
+  /// notification sound, which always resolves.
+  static const String _reminderChannelId = 'aivy_reminders_v3';
+  static const String _retiredReminderChannelId = 'aivy_reminders_v2';
   static const String _reminderChannelName = 'Reminders';
   static const String _reminderChannelDescription =
       'Scheduled reminders created from Aivy conversations.';
-
-  /// Bundled under `android/app/src/main/res/raw/aivy_reminder.mp3` so the
-  /// tone plays even when the system default notification sound is silent.
-  static const AndroidNotificationSound _reminderAndroidSound =
-      RawResourceAndroidNotificationSound('aivy_reminder');
 
   static const String _nudgeChannelId = 'aivy_nudges';
   static const String _nudgeChannelName = 'Aivy Nudges';
@@ -201,7 +227,6 @@ class NotificationService {
       category: AndroidNotificationCategory.reminder,
       subText: subtitle,
       playSound: true,
-      sound: _reminderAndroidSound,
     );
     final details = NotificationDetails(
       android: androidDetailsWithSubtitle,
@@ -219,14 +244,11 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         payload: reminderId,
       );
-    } on PlatformException catch (error, stackTrace) {
+    } on PlatformException catch (error) {
       // On Android 12+ exact alarms may be denied by the user. Fall back to
       // an inexact schedule so the reminder still fires, just not guaranteed
       // to the minute.
-      debugPrint(
-        'NotificationService: exact alarm rejected for "$reminderId" '
-        '($error). Falling back to inexact schedule.\n$stackTrace',
-      );
+      _note(error, 'exact alarm refused for "$reminderId", using inexact');
       await _plugin.zonedSchedule(
         notificationId,
         title,
@@ -236,6 +258,11 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: reminderId,
       );
+    } catch (error) {
+      // Anything else means no alarm was queued at all, which is the failure
+      // that leaves "alarms queued: 0" with reminders still due.
+      _note(error, 'scheduling "$reminderId"');
+      rethrow;
     }
   }
 
@@ -264,7 +291,6 @@ class NotificationService {
       category: AndroidNotificationCategory.reminder,
       subText: subtitle,
       playSound: true,
-      sound: _reminderAndroidSound,
     );
     final darwinDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -284,11 +310,9 @@ class NotificationService {
         ),
         payload: tag,
       );
-    } catch (error, stackTrace) {
-      debugPrint(
-        'NotificationService: failed to show reminder "$tag": '
-        '$error\n$stackTrace',
-      );
+    } catch (error) {
+      _note(error, 'showing "$tag"');
+      rethrow;
     }
   }
 
@@ -313,6 +337,8 @@ class NotificationService {
 
     var enabled = true;
     var exact = true;
+    var channelOn = true;
+    var channelState = 'not applicable';
     if (Platform.isAndroid) {
       final android = _plugin
           .resolvePlatformSpecificImplementation<
@@ -320,13 +346,39 @@ class NotificationService {
           >();
       enabled = await android?.areNotificationsEnabled() ?? false;
       exact = await android?.canScheduleExactNotifications() ?? false;
+
+      try {
+        final channels = await android?.getNotificationChannels() ?? [];
+        final mine = channels
+            .where((c) => c.id == _reminderChannelId)
+            .toList(growable: false);
+        if (mine.isEmpty) {
+          channelOn = false;
+          channelState = 'missing';
+        } else {
+          // Importance is a value class here, not an enum, so it is compared
+          // and reported by its number. Zero is a channel switched off.
+          final importance = mine.first.importance.value;
+          channelOn = importance > Importance.none.value;
+          channelState = switch (importance) {
+            <= 0 => 'off',
+            1 => 'minimum',
+            2 => 'low',
+            3 => 'default (silent pop-up)',
+            _ => 'high',
+          };
+        }
+      } catch (error) {
+        _note(error, 'reading channels');
+        channelState = 'could not read';
+      }
     }
 
     var pending = 0;
     try {
       pending = (await _plugin.pendingNotificationRequests()).length;
     } catch (error) {
-      debugPrint('NotificationService: could not read pending: $error');
+      _note(error, 'reading queued alarms');
     }
 
     return NotificationHealth(
@@ -334,6 +386,8 @@ class NotificationService {
       notificationsEnabled: enabled,
       canScheduleExactAlarms: exact,
       scheduledCount: pending,
+      channelEnabled: channelOn,
+      channelState: channelState,
     );
   }
 
@@ -370,10 +424,16 @@ class NotificationService {
       description: _reminderChannelDescription,
       importance: Importance.high,
       playSound: true,
-      sound: _reminderAndroidSound,
       enableVibration: true,
     );
     await androidPlugin.createNotificationChannel(channel);
+    // The old channel would otherwise sit in Settings forever, and a user
+    // looking for "Reminders" could well find the dead one.
+    try {
+      await androidPlugin.deleteNotificationChannel(_retiredReminderChannelId);
+    } catch (error) {
+      _note(error, 'removing the old channel');
+    }
   }
 
   Future<void> _ensureNudgeChannel() async {

@@ -23,7 +23,7 @@ const USERS = "users";
 const DEVICES = "devices";
 
 /** The high-importance channel the app creates at startup. */
-const REMINDER_CHANNEL = "aivy_reminders_v2";
+const REMINDER_CHANNEL = "aivy_reminders_v3";
 
 export interface PushMessage {
   title: string;

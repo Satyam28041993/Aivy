@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../features/reminders/data/reminder_alarm_sync.dart';
 import 'notification_service.dart';
 import 'push_registration.dart';
 
@@ -87,19 +88,25 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
   /// says "sent" and nothing appears, either FCM never delivered it or this
   /// phone cannot draw a notification at all. This answers that on its own.
   Future<void> _showLocal() async {
-    await NotificationService.instance.showReminderNow(
-      title: 'Aivy local test',
-      body: 'Drawn by the app itself, with no server involved.',
-      tag: 'local_test',
-    );
+    String outcome;
+    try {
+      await NotificationService.instance.showReminderNow(
+        title: 'Aivy local test',
+        body: 'Drawn by the app itself, with no server involved.',
+        tag: 'local_test',
+      );
+      outcome = 'Android accepted it without complaint. If nothing appeared, '
+          'the channel above is what to look at — that is the only thing left '
+          'between here and the screen.';
+    } catch (e) {
+      // The failure that used to vanish into a debug log.
+      outcome = 'Android refused it: $e';
+    }
     if (!mounted) {
       return;
     }
-    setState(() {
-      _result = 'Asked Android to show a notification right now. If this one '
-          'does not appear either, the problem is on the phone, not in '
-          'delivery.';
-    });
+    setState(() => _result = outcome);
+    await _refresh();
   }
 
   Future<void> _sendTest() async {
@@ -176,6 +183,18 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
                       'not a payment alert. This is the usual reason for silence.',
             ),
             _Check(
+              ok: h.channelEnabled,
+              title: h.channelEnabled
+                  ? 'Reminder channel is on (${h.channelState})'
+                  : 'Reminder channel is off (${h.channelState})',
+              detail: h.channelEnabled
+                  ? 'Alarms and pushes both go through this one channel.'
+                  : 'Android lets one channel be silenced while the app still '
+                      'reports notifications as allowed — and everything here '
+                      'uses this channel, so nothing shows. Settings → Apps → '
+                      'Aivy → Notifications → Reminders, and switch it on.',
+            ),
+            _Check(
               ok: h.canScheduleExactAlarms,
               title: h.canScheduleExactAlarms
                   ? 'Exact alarms allowed'
@@ -218,7 +237,9 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
             ),
             _Check(
               ok: h.scheduledCount >= _pendingReminders,
-              title: 'Alarms queued: ${h.scheduledCount}',
+              title: 'Alarms queued: ${h.scheduledCount} '
+                  '(tried ${ReminderAlarmSync.seen}, '
+                  'accepted ${ReminderAlarmSync.queued})',
               detail: _pendingReminders == 0
                   ? 'No reminders are due in the future, so there is nothing to '
                       'queue. Set one and this number should go up.'
@@ -254,6 +275,16 @@ class _NotificationHealthScreenState extends State<NotificationHealthScreen> {
           if (_result != null) ...[
             const SizedBox(height: 14),
             Text(_result!),
+          ],
+          if (NotificationService.lastError != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Last error — ${NotificationService.lastError}',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: const Color(0xFFEF4444), height: 1.35),
+            ),
           ],
           const SizedBox(height: 26),
           Text(
