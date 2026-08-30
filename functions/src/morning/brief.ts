@@ -222,6 +222,9 @@ function gmailGap(e: unknown, what: string): string {
 const BRIEF_INSTRUCTION = `You write one person's morning brief. Be concrete and short.
 
 ## Language
+Open with a greeting that matches the time of day given below — not "Good
+morning" in the evening.
+
 Section headings and the mail section: English.
 **News and Google Alerts: Hindi** — plain spoken Hindi in Devanagari, the way you
 would explain something to a friend, not translated newspaper Hindi.
@@ -259,8 +262,9 @@ Good: "Canva ka kehna hai ki AI ke bhaari kharche ki wajah se is saal unki
        valuation kam hui hai. Investors ka dabaav badh raha hai, aur ek article
        poochhta hai ki freelance design ke liye ab Canva akela kaafi hai ya nahi."
 
-If several articles under one term say the same thing, say it once. If a term
-brought nothing worth reading, leave that term out entirely.
+If several articles under one term say the same thing, say it once. A term whose
+articles are genuinely empty of content can be left out — but leaving out most
+of them is wrong. If alert mail was given to you, most terms should appear.
 
 ## News
 Only genuinely large stories, two or three at most, in Hindi. A product launch
@@ -273,8 +277,10 @@ One line per commitment, time first, in English. Say plainly if the day is empty
 Answer with JSON only, no prose around it:
 {"greeting":"one short line","sections":[{"kind":"mail|news|alerts|today","title":"...","emptyNote":"...","items":[{"headline":"...","detail":"...","group":"...","link":"..."}]}]}
 
-Sections in this order: mail, news, alerts, today. Keep each one present even
-when empty — items [] and an emptyNote. Omit detail, group and link when there
+Sections in this order: mail, news, alerts, today. **All four must be in your
+answer every single time**, even when a section has nothing: give it items [] and
+an emptyNote saying so. Dropping a section is never correct — the reader cannot
+tell an empty section from a broken one. Omit detail, group and link when there
 is nothing to put in them. Do not add a money section.`;
 
 function briefPrompt(input: GatheredInput, nowLabel: string): string {
@@ -394,6 +400,18 @@ export async function buildBrief(opts: {
         },
       ],
     };
+  }
+
+  // Which of the two happened is invisible from the screen: no alert mail
+  // arrived, or alert mail arrived and came back out as nothing. Saying so
+  // turns a silent empty section into something answerable.
+  const alertItems = written.sections
+    .filter((s) => s.kind === "alerts")
+    .reduce((n, s) => n + s.items.length, 0);
+  if (input.alerts.length > 0 && alertItems === 0) {
+    input.gaps.push(
+      `${input.alerts.length} alert mail(s) were read but none were summarised.`,
+    );
   }
 
   const brief: MorningBrief = {

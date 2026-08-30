@@ -50,8 +50,12 @@ class BriefSection {
   final List<BriefItem> items;
   final String? emptyNote;
 
-  /// A section with nothing in it and nothing to say is not worth a heading.
-  bool get worthShowing => items.isNotEmpty || (emptyNote?.isNotEmpty ?? false);
+  /// A named section always earns its heading.
+  ///
+  /// It used to be dropped when it had no items and no note, which is how the
+  /// whole Google Alerts section disappeared without a word — worse than an
+  /// empty one, because silence is indistinguishable from a bug.
+  bool get worthShowing => title.isNotEmpty;
 
   static BriefSection? fromMap(Map<String, dynamic> m) {
     final title = (m['title'] as String?)?.trim() ?? '';
@@ -69,7 +73,8 @@ class BriefSection {
       kind: (m['kind'] as String?)?.trim() ?? 'other',
       title: title,
       items: items,
-      emptyNote: (note == null || note.isEmpty) ? null : note,
+      // A section that says nothing still has to say that it has nothing.
+      emptyNote: (note == null || note.isEmpty) ? 'Nothing new.' : note,
     );
   }
 }
