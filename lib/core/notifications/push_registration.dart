@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -80,7 +81,7 @@ class PushRegistration {
       _messaging.onTokenRefresh.listen(
         (t) {
           lastToken = t;
-          return _save(userId, t);
+          unawaited(_save(userId, t));
         },
         onError: (Object e) => debugPrint('PushRegistration: refresh failed: $e'),
       );
