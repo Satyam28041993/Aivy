@@ -131,6 +131,24 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     );
   }
 
+  /// Puts the text in the box and opens the keyboard, but does not send it:
+  /// the user may want to ask it differently, and a message fired by a tap
+  /// they did not mean is worse than one they have to press send on.
+  void _applyPrefill() {
+    final text = widget.prefill?.value?.trim() ?? '';
+    if (text.isEmpty || !mounted) {
+      return;
+    }
+    setState(() {
+      _input.text = text;
+      _input.selection = TextSelection.collapsed(offset: text.length);
+    });
+    // Cleared so returning to this tab later does not re-fill the box with a
+    // question that was already asked.
+    widget.prefill?.value = null;
+    _inputFocus.requestFocus();
+  }
+
   void _repaintComposer() {
     if (mounted) {
       setState(() {});
