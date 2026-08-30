@@ -104,7 +104,7 @@ it("sends the mail and marks the draft committed", async () => {
   draft.current = pending(EMAIL);
   const res = await commitDraft("u1", "d1", { googleToken: "tok" });
   expect(res.ok).toBe(true);
-  expect(res.message).toContain("Rohan ko");
+  expect(res.message).toContain("Rohan");
   expect(gmailSendMock).toHaveBeenCalledWith("tok", {
     to: "rohan@example.com",
     subject: "Quotation",
@@ -170,7 +170,7 @@ describe("meeting", () => {
     const res = await commitDraft("u1", "d1", { googleToken: "tok" });
     // The reminder is the record that matters; Calendar is a bonus.
     expect(res.ok).toBe(true);
-    expect(res.message).toContain("Meeting set ho gayi");
+    expect(res.message).toContain("Meeting set");
     expect(res.message).toContain("Google permission");
   });
 

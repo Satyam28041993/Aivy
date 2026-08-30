@@ -58,17 +58,28 @@ class DeviceLocation {
       return _cached;
     }
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
+      // The service check is skipped on web: browsers have no such switch and
+      // the plugin reports it as disabled, which used to abort every fix before
+      // the browser was ever asked.
+      if (!kIsWeb && !await Geolocator.isLocationServiceEnabled()) {
         return _cached;
       }
-      final permission = await Geolocator.checkPermission();
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        // Asking here as well as at screen open: on the web the prompt only
+        // appears on a real user gesture, and the first message is one.
+        permission = await Geolocator.requestPermission();
+      }
       final granted = permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
       if (!granted) {
         return null;
       }
 
-      final last = await Geolocator.getLastKnownPosition();
+      // Not on web: browsers keep no last-known fix, and the plugin throws
+      // rather than returning null there.
+      final last = kIsWeb ? null : await Geolocator.getLastKnownPosition();
       if (last != null) {
         _remember(last);
         // Warm the cache for the next message without holding this one up.

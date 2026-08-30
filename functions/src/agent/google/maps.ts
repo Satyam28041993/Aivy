@@ -26,17 +26,16 @@ export class MapsApiError extends Error {
     this.name = "MapsApiError";
   }
 
-  get hindiMessage(): string {
+  get userMessage(): string {
     if (this.status === 0) {
       return (
-        "Maps abhi set nahi hai — Firebase Console me app_config/maps → mapsApiKey " +
-        "daalna hoga."
+        "Maps is not set up — add app_config/maps → mapsApiKey in the Firebase Console."
       );
     }
     if (this.status === 403 || this.status === 401) {
-      return "Maps key kaam nahi kar rahi — Cloud Console me Places (New) aur Routes API enable hain kya?";
+      return "The Maps key is not working — are Places (New) and Routes API enabled in Cloud Console?";
     }
-    return "Maps se jawaab nahi mila, thodi der baad try kijiye.";
+    return "No answer from Maps — try again shortly.";
   }
 }
 
@@ -176,7 +175,7 @@ export async function placesTextSearch(opts: {
     const hours = (p.currentOpeningHours ?? {}) as Record<string, unknown>;
     const rating = Number(p.rating);
     return {
-      name: `${display.text ?? "(bina naam)"}`,
+      name: `${display.text ?? "(unnamed)"}`,
       address: `${p.formattedAddress ?? ""}`,
       rating: Number.isFinite(rating) && rating > 0 ? rating : null,
       ratingCount: Number(p.userRatingCount ?? 0) || 0,

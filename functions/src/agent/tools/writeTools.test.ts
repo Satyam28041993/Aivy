@@ -105,14 +105,14 @@ describe("create_meeting", () => {
     expect(d.data.kind).toBe("meeting");
     const data = d.data as Extract<DraftData, { kind: "meeting" }>;
     // 11 AM, not 11 PM.
-    expect(data.whenLabel).toBe("Ravivar, 24 August, 11:00 AM");
+    expect(data.whenLabel).toBe("Sunday, 24 August, 11:00 AM");
     expect(data.agenda).toBe("new labels");
     expect(data.client?.name).toBe("Rohan Traders");
     expect(data.reminderLeadMinutes).toBe(15);
 
     const labels = d.lines.map((l) => l.label);
     expect(labels).toContain("Client");
-    expect(labels).toContain("Kab");
+    expect(labels).toContain("When");
     expect(labels).toContain("Regarding");
     expect(labels).toContain("Reminder");
   });
@@ -326,15 +326,20 @@ describe("record_payment_received", () => {
     expect(data.targets.map((t) => t.paymentId)).toEqual(["older", "newer"]);
   });
 
-  it("says so when the client has no open due", async () => {
+  it("records a standalone receipt when the client has no open due", async () => {
+    // Money arriving against no recorded due is still money arriving. Refusing
+    // would lose the fact; the card says plainly that nothing was settled.
     resolveClientMock.mockResolvedValue(single());
     openDuesMock.mockReturnValue([]);
     const res = await recordPaymentReceivedTool(CTX, {
       client_name: "rohan",
       amount: 1000,
     });
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toBe("nothing_found");
+    expect(res.ok).toBe(true);
+    const draft = lastDraft();
+    const data = draft.data as Extract<DraftData, { kind: "payment_received" }>;
+    expect(data.targets).toEqual([]);
+    expect(JSON.stringify(draft.lines)).toContain("No open due");
   });
 
   it("does not offer to create an unknown client", async () => {
@@ -377,5 +382,26 @@ describe("remember_fact", () => {
   it("needs something to remember", async () => {
     const res = await rememberFactTool(CTX, { category: "x" });
     expect(res.ok).toBe(false);
+  });
+});
+
+describe("repeating reminders", () => {
+  it("marks a 'every month' ask as the single reminder it actually is", async () => {
+    const res = await createReminderTool(CTX, {
+      title: "GST filing",
+      when_phrase: "har mahine 5 tarikh ko",
+    });
+    expect(res.ok).toBe(true);
+    expect(JSON.stringify(lastDraft().lines)).toContain("One-time only");
+    expect(res.ok && res.kind === "draft" && res.hint).toContain("not a repeating one");
+  });
+
+  it("leaves an ordinary reminder unmarked", async () => {
+    const res = await createReminderTool(CTX, {
+      title: "call Rohan",
+      when_phrase: "kal 5 baje",
+    });
+    expect(res.ok).toBe(true);
+    expect(JSON.stringify(lastDraft().lines)).not.toContain("One-time only");
   });
 });

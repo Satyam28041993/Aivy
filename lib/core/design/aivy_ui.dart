@@ -136,6 +136,10 @@ class AivyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = accent;
+    // The accent stripe is drawn as a positioned overlay rather than a Row
+    // child. A Row with CrossAxisAlignment.stretch has no height to stretch to
+    // inside a scroll view, so the whole card collapsed to nothing — every
+    // section on both screens rendered its heading and then blank space.
     final card = Container(
       decoration: BoxDecoration(
         color: AivyUi.surface,
@@ -144,15 +148,24 @@ class AivyCard extends StatelessWidget {
           color: a == null ? AivyUi.line : a.withValues(alpha: 0.35),
         ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AivyUi.radius - 1),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (a != null) Container(width: 3, color: a),
-            Expanded(child: Padding(padding: padding, child: child)),
-          ],
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: a == null
+                ? padding
+                : padding.add(const EdgeInsets.only(left: 5)),
+            child: child,
+          ),
+          if (a != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 3,
+              child: ColoredBox(color: a),
+            ),
+        ],
       ),
     );
     if (onTap == null) {

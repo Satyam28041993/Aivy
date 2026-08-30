@@ -27,8 +27,8 @@ import type { DraftCardLine } from "../draftTypes";
 import { dataResult, draftResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
 
 const NO_TOKEN =
-  "Google abhi connect nahi hai. Android app me More → Allow Google extras se " +
-  "permission de dijiye (web par ye kaam nahi karta).";
+  "Google is not connected. Grant permission from More → Allow Google extras in " +
+  "the Android app (this does not work on web).";
 
 function str(raw: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
@@ -55,9 +55,9 @@ function windowOf(raw: unknown, fallback: WindowName = "today"): WindowName {
 /** Turns a Google failure into something the model can say out loud. */
 function googleFailure(e: unknown): ToolResult {
   if (e instanceof GoogleApiError) {
-    return fail(e.isAuth ? "invalid" : "failed", e.hindiMessage);
+    return fail(e.isAuth ? "invalid" : "failed", e.userMessage);
   }
-  return fail("failed", "Google se baat nahi ho paayi.");
+  return fail("failed", "Could not reach Google.");
 }
 
 // ---------------------------------------------------------------------------
@@ -73,11 +73,11 @@ export async function createCalendarEventTool(
   }
   const summary = str(args.summary);
   if (!summary) {
-    return fail("needs_detail", "Calendar par kya likhun?");
+    return fail("needs_detail", "What should the event be called?");
   }
   const whenPhrase = str(args.when_phrase);
   if (!whenPhrase) {
-    return fail("needs_date", "Kab ka event hai?");
+    return fail("needs_date", "When is the event?");
   }
   const when = resolveWhen({
     phrase: whenPhrase,
@@ -87,7 +87,7 @@ export async function createCalendarEventTool(
     period: periodOf(args.day_period),
   });
   if (!when.iso || when.epochMs == null) {
-    return fail("needs_date", `"${whenPhrase}" se date samajh nahi aayi — dobara bataiye.`);
+    return fail("needs_date", `Could not read a date from "${whenPhrase}" — say it again?`);
   }
 
   const duration = typeof args.duration_minutes === "number"
@@ -100,14 +100,14 @@ export async function createCalendarEventTool(
 
   const lines: DraftCardLine[] = [
     { label: "Event", value: summary },
-    { label: "Kab", value: when.label ?? whenPhrase },
-    { label: "Kitni der", value: `${duration} min` },
+    { label: "When", value: when.label ?? whenPhrase },
+    { label: "Duration", value: `${duration} min` },
   ];
   if (attendees.length) {
     lines.push({ label: "Invite", value: attendees.join(", ") });
   }
   if (description) {
-    lines.push({ label: "Detail", value: description });
+    lines.push({ label: "Details", value: description });
   }
 
   const draft = await createDraft({
@@ -132,7 +132,7 @@ export async function createCalendarEventTool(
 
   return draftResult(
     draft,
-    "Calendar event ka draft taiyaar hai — confirm hone par hi Google Calendar me jaayega.",
+    "Calendar event drafted — it reaches Google Calendar only once confirmed.",
   );
 }
 
@@ -151,7 +151,7 @@ export async function sendEmailTool(
   const subject = str(args.subject);
   const body = str(args.body);
   if (!body) {
-    return fail("needs_detail", "Mail me likhna kya hai?");
+    return fail("needs_detail", "What should the email say?");
   }
 
   let to = str(args.to);
@@ -161,7 +161,7 @@ export async function sendEmailTool(
   if (!to.includes("@")) {
     const lookup = to || str(args.to_name);
     if (!lookup) {
-      return fail("needs_detail", "Mail kisko bhejna hai?");
+      return fail("needs_detail", "Who should I email?");
     }
     let contacts;
     try {
@@ -173,13 +173,13 @@ export async function sendEmailTool(
     if (withEmail.length === 0) {
       return fail(
         "client_not_found",
-        `"${lookup}" ka email contacts me nahi mila — address bata dijiye.`,
+        `No email for "${lookup}" in contacts — what is the address?`,
       );
     }
     if (withEmail.length > 1) {
       return fail(
         "needs_client_choice",
-        `"${lookup}" se ek se zyada contact match hue — kiska?`,
+        `"${lookup}" matches more than one contact — which one?`,
         withEmail.slice(0, 5).map((c) => ({
           id: c.emails[0]!,
           label: `${c.name} — ${c.emails[0]}`,
@@ -191,8 +191,8 @@ export async function sendEmailTool(
   }
 
   const lines: DraftCardLine[] = [
-    { label: "Kisko", value: toName ? `${toName} <${to}>` : to },
-    { label: "Subject", value: subject || "(bina subject)" },
+    { label: "To", value: toName ? `${toName} <${to}>` : to },
+    { label: "Subject", value: subject || "(no subject)" },
     { label: "Mail", value: body.length > 400 ? `${body.slice(0, 400)}…` : body },
   ];
 
@@ -208,7 +208,7 @@ export async function sendEmailTool(
 
   return draftResult(
     draft,
-    "Mail draft taiyaar hai — user ke confirm karne par hi jaayega. Padhkar sunaa dijiye.",
+    "Email drafted — it sends only once the user confirms. Read it back to them.",
   );
 }
 
@@ -227,7 +227,7 @@ export async function appendSheetRowTool(
     ? args.cells.map((c) => (c == null ? "" : String(c)))
     : [];
   if (cells.length === 0) {
-    return fail("needs_detail", "Sheet me kya likhna hai?");
+    return fail("needs_detail", "What should go in the row?");
   }
 
   const explicitId = str(args.spreadsheet_id) || null;
@@ -248,12 +248,12 @@ export async function appendSheetRowTool(
     if (!saved) {
       return fail(
         "needs_detail",
-        "Koi default Google Sheet set nahi hai — More → Google settings me sheet ID daal dijiye, " +
-          "ya sheet ka link bhej dijiye.",
+        "No default Google Sheet is set — add the sheet ID under More → Google settings, " +
+          "or send the sheet link.",
       );
     }
     targetId = saved;
-    targetLabel = "default sheet";
+    targetLabel = "Default sheet";
   }
 
   const lines: DraftCardLine[] = [
@@ -272,7 +272,7 @@ export async function appendSheetRowTool(
     data: { kind: "sheet_row", spreadsheetId: targetId, tab, cells },
   });
 
-  return draftResult(draft, "Sheet row ka draft taiyaar hai — confirm par likhi jaayegi.");
+  return draftResult(draft, "Sheet row drafted — it is written only once confirmed.");
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ export async function findContactTool(
   }
   const q = str(args.query);
   if (!q) {
-    return fail("needs_detail", "Kiska contact dhoondhna hai?");
+    return fail("needs_detail", "Whose contact should I look up?");
   }
   let rows;
   try {
@@ -377,7 +377,7 @@ export async function findContactTool(
     return googleFailure(e);
   }
   if (rows.length === 0) {
-    return fail("nothing_found", `"${q}" naam ka koi contact nahi mila.`);
+    return fail("nothing_found", `No contact found for "${q}".`);
   }
   return dataResult({
     count: rows.length,

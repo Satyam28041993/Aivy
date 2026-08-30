@@ -79,14 +79,14 @@ async function referenceClient(
   const name = rawName.trim();
   if (!name) {
     return {
-      failure: fail("needs_detail", "Client ka naam nahi mila — kis client ke liye hai?"),
+      failure: fail("needs_detail", "Which client is this for?"),
     };
   }
   if (looksLikeNoiseClientName(name)) {
     return {
       failure: fail(
         "needs_detail",
-        `"${name}" client ka naam nahi lag raha — sahi naam bataiye.`,
+        `"${name}" does not look like a client name — what is the correct name?`,
       ),
     };
   }
@@ -99,7 +99,7 @@ async function referenceClient(
     return {
       failure: fail(
         "needs_client_choice",
-        `"${name}" se ek se zyada client match hue — kaunsa?`,
+        `"${name}" matches more than one client — which one?`,
         res.candidates.map((c: AgentClient) => ({ id: c.id, label: c.name })),
       ),
     };
@@ -108,7 +108,7 @@ async function referenceClient(
     return {
       failure: fail(
         "client_not_found",
-        `"${name}" naam ka koi client nahi mila.`,
+        `No client named "${name}" was found.`,
       ),
     };
   }
@@ -123,7 +123,7 @@ function clientLine(ref: DraftClientRef | null): DraftCardLine[] {
   return [
     {
       label: "Client",
-      value: ref.createNew ? `${ref.name} (naya client banega)` : ref.name,
+      value: ref.createNew ? `${ref.name} (new client)` : ref.name,
     },
   ];
 }
@@ -138,7 +138,7 @@ export async function createMeetingTool(
 ): Promise<ToolResult> {
   const whenPhrase = str(args.when_phrase);
   if (!whenPhrase) {
-    return fail("needs_date", "Meeting kab hai? (jaise kal 11 baje)");
+    return fail("needs_date", "When is the meeting? (e.g. tomorrow 11 am)");
   }
   const when = resolveWhen({
     phrase: whenPhrase,
@@ -148,7 +148,7 @@ export async function createMeetingTool(
     period: periodOf(args.day_period),
   });
   if (!when.iso || when.epochMs == null) {
-    return fail("needs_date", `"${whenPhrase}" se date samajh nahi aayi — dobara bataiye.`);
+    return fail("needs_date", `Could not read a date from "${whenPhrase}" — say it again?`);
   }
 
   let clientRef: DraftClientRef | null = null;
@@ -172,14 +172,14 @@ export async function createMeetingTool(
 
   const lines: DraftCardLine[] = [
     ...clientLine(clientRef),
-    { label: "Kab", value: when.label ?? whenPhrase },
+    { label: "When", value: when.label ?? whenPhrase },
   ];
   if (agenda) {
     lines.push({ label: "Regarding", value: agenda });
   }
   lines.push({
     label: "Reminder",
-    value: `${lead} min pehle — ${reminderAt.toFormat("h:mm a")}`,
+    value: `${lead} min before — ${reminderAt.toFormat("h:mm a")}`,
   });
 
   // Only promise the calendar when this turn actually carries a Google token —
@@ -191,7 +191,7 @@ export async function createMeetingTool(
     ? Math.max(15, Math.min(12 * 60, args.duration_minutes))
     : 60;
   if (addToCalendar) {
-    lines.push({ label: "Calendar", value: `Google Calendar par bhi (${durationMinutes} min)` });
+    lines.push({ label: "Calendar", value: `Also on Google Calendar (${durationMinutes} min)` });
   }
 
   if (note) {
@@ -221,7 +221,7 @@ export async function createMeetingTool(
 
   return draftResult(
     draft,
-    "Meeting draft taiyaar hai (reminder bhi sath me). User se confirm maango — abhi save nahi hua.",
+    "Meeting draft ready, with its reminder. Ask the user to confirm — nothing is saved yet.",
   );
 }
 
@@ -237,11 +237,11 @@ export async function createReminderTool(
 ): Promise<ToolResult> {
   const title = str(args.title);
   if (!title) {
-    return fail("needs_detail", "Reminder kis cheez ka hai?");
+    return fail("needs_detail", "What is the reminder for?");
   }
   const whenPhrase = str(args.when_phrase);
   if (!whenPhrase) {
-    return fail("needs_date", "Kab yaad dilau?");
+    return fail("needs_date", "When should I remind you?");
   }
   const when = resolveWhen({
     phrase: whenPhrase,
@@ -251,7 +251,7 @@ export async function createReminderTool(
     period: periodOf(args.day_period),
   });
   if (!when.iso || when.epochMs == null) {
-    return fail("needs_date", `"${whenPhrase}" se time samajh nahi aaya — dobara bataiye.`);
+    return fail("needs_date", `Could not read a time from "${whenPhrase}" — say it again?`);
   }
 
   let clientRef: DraftClientRef | null = null;
@@ -270,13 +270,25 @@ export async function createReminderTool(
   const priority = ["high", "medium", "low"].includes(priorityRaw) ? priorityRaw : "medium";
   const note = str(args.note) || null;
 
+  // "every month on the 5th" sets one reminder, not a series. Saying so on the
+  // card beats a cheerful "set for every month" that quietly is not true.
+  const repeats =
+    /\b(har|every|each)\s+(mahine|month|hafte|week|din|day|saal|year)\b|\b(daily|weekly|monthly|roz|rozana)\b/i
+      .test(`${whenPhrase} ${title}`);
+
   const lines: DraftCardLine[] = [
-    { label: "Kaam", value: title },
+    { label: "Task", value: title },
     ...clientLine(clientRef),
-    { label: "Kab", value: when.label ?? whenPhrase },
+    { label: "When", value: when.label ?? whenPhrase },
   ];
   if (priority !== "medium") {
     lines.push({ label: "Priority", value: capitalizeWords(priority) });
+  }
+  if (repeats) {
+    lines.push({
+      label: "Heads up",
+      value: "One-time only — repeating reminders are not supported yet",
+    });
   }
   if (note) {
     lines.push({ label: "Note", value: note });
@@ -312,7 +324,13 @@ export async function createReminderTool(
     },
   });
 
-  return draftResult(draft, "Reminder draft taiyaar — confirm maango, abhi save nahi hua.");
+  return draftResult(
+    draft,
+    repeats
+        ? "Reminder drafted. It is ONE reminder, not a repeating one — say that " +
+            "plainly before they confirm."
+        : "Reminder drafted — ask them to confirm. Nothing is saved yet.",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +343,7 @@ export async function recordQuotationTool(
 ): Promise<ToolResult> {
   const amount = coerceAmount(args.amount);
   if (amount == null) {
-    return fail("needs_amount", "Quotation kitne ka tha?");
+    return fail("needs_amount", "What was the quotation amount?");
   }
   const resolved = await referenceClient(ctx, str(args.client_name), true);
   if ("failure" in resolved) {
@@ -378,7 +396,7 @@ export async function recordQuotationTool(
 
   return draftResult(
     draft,
-    "Quotation draft taiyaar (follow-up reminder bhi). Confirm maango — abhi save nahi hua.",
+    "Quotation drafted, with its follow-up reminder. Ask them to confirm — nothing is saved yet.",
   );
 }
 
@@ -392,7 +410,7 @@ export async function recordOrderTool(
 ): Promise<ToolResult> {
   const amount = coerceAmount(args.amount);
   if (amount == null) {
-    return fail("needs_amount", "Order kitne ka hai?");
+    return fail("needs_amount", "What is the order amount?");
   }
   const resolved = await referenceClient(ctx, str(args.client_name), true);
   if ("failure" in resolved) {
@@ -418,7 +436,7 @@ export async function recordOrderTool(
     data: { kind: "order", client: resolved.ref, amount, note },
   });
 
-  return draftResult(draft, "Order draft taiyaar — confirm maango.");
+  return draftResult(draft, "Order drafted — ask them to confirm.");
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +449,7 @@ export async function recordPaymentDueTool(
 ): Promise<ToolResult> {
   const amount = coerceAmount(args.amount);
   if (amount == null) {
-    return fail("needs_amount", "Kitne ka due hai?");
+    return fail("needs_amount", "How much is due?");
   }
   const resolved = await referenceClient(ctx, str(args.client_name), true);
   if ("failure" in resolved) {
@@ -479,7 +497,7 @@ export async function recordPaymentDueTool(
     },
   });
 
-  return draftResult(draft, "Payment due draft taiyaar — confirm maango.");
+  return draftResult(draft, "Payment due drafted — ask them to confirm.");
 }
 
 // ---------------------------------------------------------------------------
@@ -533,7 +551,7 @@ export async function recordPaymentReceivedTool(
 ): Promise<ToolResult> {
   const amount = coerceAmount(args.amount);
   if (amount == null) {
-    return fail("needs_amount", "Kitna payment aaya?");
+    return fail("needs_amount", "How much was received?");
   }
   // Settling against a client with no record at all makes no sense, so this one
   // does not offer to create.
@@ -555,13 +573,9 @@ export async function recordPaymentReceivedTool(
   const receivedLabel = when.label
     ?? formatWhenLabel(DateTime.fromMillis(receivedMs, { zone: ctx.timezone }), false);
 
+  // No open due is not a dead end. The money did arrive; recording it as a
+  // standalone receipt is right, and refusing would lose the fact entirely.
   const dues = await openDuesForClient(ctx.uid, resolved.ref.id, resolved.ref.name);
-  if (dues.length === 0) {
-    return fail(
-      "nothing_found",
-      `${resolved.ref.name} ka koi pending due nahi mila. Naya due record karun ya sirf receipt?`,
-    );
-  }
 
   // Prefer an exact-amount match, else settle oldest-first.
   const exact = dues.filter((d) => Math.abs(d.remaining - amount) < 0.01);
@@ -571,13 +585,14 @@ export async function recordPaymentReceivedTool(
   const lines: DraftCardLine[] = [
     ...clientLine(resolved.ref),
     { label: "Receive", value: formatInr(amount) },
-    { label: "Kab", value: receivedLabel },
+    { label: "When", value: receivedLabel },
     {
-      label: "Kis due par",
-      value:
-        targets.length === 1
-          ? targets[0]!.label
-          : `${targets.length} open dues — purane se adjust hoga`,
+      label: "Applied to",
+      value: targets.length === 0
+          ? "No open due — recorded on its own"
+          : targets.length === 1
+              ? targets[0]!.label
+              : `${targets.length} open dues — oldest first`,
     },
   ];
   if (note) {
@@ -603,7 +618,7 @@ export async function recordPaymentReceivedTool(
     },
   });
 
-  return draftResult(draft, "Payment receipt draft taiyaar — confirm maango.");
+  return draftResult(draft, "Receipt drafted — ask them to confirm.");
 }
 
 // ---------------------------------------------------------------------------
@@ -616,21 +631,21 @@ export async function rememberFactTool(
 ): Promise<ToolResult> {
   const fact = str(args.fact);
   if (!fact) {
-    return fail("needs_detail", "Kya yaad rakhna hai?");
+    return fail("needs_detail", "What should I remember?");
   }
   const category = str(args.category) || "general";
 
   const draft = await createDraft({
     uid: ctx.uid,
     kind: "remember_fact",
-    title: "Yaad rakhun",
+    title: "Remember this",
     icon: "🧠",
-    lines: [{ label: category === "general" ? "Baat" : capitalizeWords(category), value: fact }],
+    lines: [{ label: category === "general" ? "Note" : capitalizeWords(category), value: fact }],
     chatId: ctx.chatId,
     data: { kind: "remember_fact", category, fact },
   });
 
-  return draftResult(draft, "Yaad rakhne ka draft taiyaar — confirm maango.");
+  return draftResult(draft, "Ready to remember this — ask them to confirm.");
 }
 
 // ---------------------------------------------------------------------------
@@ -648,7 +663,7 @@ export async function cancelDraftTool(
   }
   const pending = await listPendingDrafts(ctx.uid, ctx.chatId, 1);
   if (pending.length === 0) {
-    return fail("nothing_found", "Cancel karne ke liye koi pending draft nahi hai.");
+    return fail("nothing_found", "There is no pending card to cancel.");
   }
   await markDraftStatus(ctx.uid, pending[0]!.id, "cancelled");
   return draftResultless("Draft cancel kar diya.");

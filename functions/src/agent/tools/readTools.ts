@@ -319,7 +319,7 @@ export async function findRecordsTool(
   if (!collection) {
     return fail(
       "invalid",
-      "type quotation / order / payment / reminder / meeting me se ek hona chahiye.",
+      "type must be one of quotation / order / payment / reminder / meeting.",
     );
   }
 
@@ -337,8 +337,24 @@ export async function findRecordsTool(
     rows = rows.filter((r) => r.client.toLowerCase().includes(name));
   }
 
+  // "How many orders are pending" is a counting question, and the model cannot
+  // count reliably across a truncated list — so the count comes back computed.
+  const wantedStatus = str(args.status).toLowerCase();
+  if (wantedStatus) {
+    rows = rows.filter((r) => (r.status ?? "").toLowerCase() === wantedStatus);
+  }
+
   rows.sort((a, b) => b.createdMs - a.createdMs);
   const total = rows.reduce((s, r) => s + r.amount, 0);
+
+  const byStatus: Record<string, { count: number; amount: number }> = {};
+  for (const r of rows) {
+    const key = (r.status ?? "").toLowerCase() || "unset";
+    const at = byStatus[key] ?? { count: 0, amount: 0 };
+    at.count += 1;
+    at.amount += r.amount;
+    byStatus[key] = at;
+  }
 
   return dataResult({
     type: typeRaw,
@@ -346,6 +362,7 @@ export async function findRecordsTool(
     windowLabel: w.label,
     count: rows.length,
     totalAmount: total,
+    byStatus,
     clients: [...new Set(rows.map((r) => r.client).filter(Boolean))],
     items: rows.slice(0, MAX_ROWS).map(({ createdMs: _c, ...r }) => r),
   });
@@ -446,11 +463,11 @@ export async function webSearchTool(
 ): Promise<ToolResult> {
   const q = str(args.query);
   if (!q) {
-    return fail("needs_detail", "Kya search karna hai?");
+    return fail("needs_detail", "What should I search for?");
   }
   const res = await runWebSearch(q);
   if (!res.success) {
-    return fail("failed", res.error ?? "Search abhi kaam nahi kar raha.");
+    return fail("failed", res.error ?? "Search is not working right now.");
   }
   return dataResult({
     query: res.query,

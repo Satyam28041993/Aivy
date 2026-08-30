@@ -104,7 +104,7 @@ describe("find_places", () => {
     placesMock.mockResolvedValue([]);
     const res = await findPlacesTool({ ...CTX, userCity: null }, { query: "printing press" });
     expect(res.ok === false && res.reason).toBe("needs_detail");
-    expect(res.ok === false && res.message).toContain("Kahan");
+    expect(res.ok === false && res.message).toContain("Which area");
   });
 
   it("passes a configuration problem through in plain words", async () => {
@@ -238,7 +238,7 @@ describe("saved places", () => {
     await savePlaceTool(LOCATED, { name: "Rohan Office" });
     const draft = createDraftMock.mock.calls.at(-1)![0];
     expect(draft.data.replacing).toBe(true);
-    expect(JSON.stringify(draft.lines)).toContain("purani jagah badal jaayegi");
+    expect(JSON.stringify(draft.lines)).toContain("replace the place");
   });
 
   it("saves without an address rather than failing", async () => {
@@ -290,7 +290,7 @@ describe("saved places", () => {
     });
     const data = res.ok && res.kind === "data" ? (res.data as Record<string, unknown>) : {};
     expect(data.to).toBe("Rohan Office");
-    expect(data.from).toBe("aapki current location");
+    expect(data.from).toBe("your current location");
   });
 
   it("lists and forgets", async () => {

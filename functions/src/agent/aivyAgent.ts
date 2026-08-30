@@ -188,7 +188,7 @@ export const aivyAgent = onCall(
         uid,
         err: e instanceof Error ? e.message : String(e),
       });
-      const sorry = "Abhi kuch gadbad ho gayi — dobara bhejiye.";
+      const sorry = "Something went wrong — please send that again.";
       await appendMessage(uid, chatId, { role: "assistant", text: sorry });
       await touchChat(uid, chatId, { lastMessage: sorry });
       return { chatId, reply: sorry, drafts: [], trace: [], failed: true };
@@ -260,7 +260,7 @@ export const aivyAgentCommit = onCall(
     // through the model would cost a full turn to accomplish nothing.
     if (str(payload.action) === "cancel") {
       await markDraftStatus(uid, draftId, "cancelled");
-      return { ok: true, message: "Theek hai, rehne diya.", createdIds: [] };
+      return { ok: true, message: "Okay, dropped it.", createdIds: [] };
     }
 
     const result = await commitDraft(uid, draftId, {

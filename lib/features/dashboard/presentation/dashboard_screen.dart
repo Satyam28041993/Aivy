@@ -91,7 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('Dashboard: completing ${r.id} failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ho nahi paaya — dobara try kijiye.')),
+          const SnackBar(content: Text('Could not update. Try again.')),
         );
       }
     } finally {
@@ -150,7 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onPressed: () => unawaited(AudioService.playReminder()),
                   icon:
                       const Icon(Icons.notifications_active_outlined, size: 16),
-                  label: const Text('Reminder ki awaaz sunein'),
+                  label: const Text('Test reminder sound'),
                   style: TextButton.styleFrom(foregroundColor: AivyUi.inkFaint),
                 ),
               ),
@@ -201,7 +201,7 @@ class _Greeting extends StatelessWidget {
         if (onAsk != null)
           IconButton(
             onPressed: onAsk,
-            tooltip: 'Aivy se poochhein',
+            tooltip: 'Ask Aivy',
             icon: Container(
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
@@ -264,8 +264,8 @@ class _MoneySection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AivySectionHeader(
-              title: 'Paisa',
-              action: groups.isEmpty ? null : 'Poora hisaab',
+              title: 'Money',
+              action: groups.isEmpty ? null : 'See all',
               onAction: onSeeAll,
             ),
             AivyCard(
@@ -282,7 +282,7 @@ class _MoneySection extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              hasOverdue ? 'Atka hua paisa' : 'Lena baaki',
+                              hasOverdue ? 'Overdue' : 'To collect',
                               style: AivyUi.soft(context),
                             ),
                             const SizedBox(height: 4),
@@ -302,7 +302,7 @@ class _MoneySection extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text('Kul pending', style: AivyUi.soft(context)),
+                              Text('Total pending', style: AivyUi.soft(context)),
                               const SizedBox(height: 2),
                               Text(
                                 AivyUi.inr(total),
@@ -350,7 +350,7 @@ class _MoneySection extends StatelessWidget {
                     }),
                     if (worst.length > 3)
                       Text(
-                        '+${worst.length - 3} aur client',
+                        '+${worst.length - 3} more clients',
                         style: AivyUi.soft(context),
                       ),
                   ] else if (!snap.hasData) ...[
@@ -358,7 +358,7 @@ class _MoneySection extends StatelessWidget {
                     const _Loading(),
                   ] else ...[
                     const SizedBox(height: 12),
-                    const AivyEmpty('Kisi ka paisa atka nahi hai.'),
+                    const AivyEmpty('Nothing overdue. All clear.'),
                   ],
                 ],
               ),
@@ -407,12 +407,12 @@ class _TodaySection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AivySectionHeader(title: 'Aaj ka kaam', count: due.length),
+            AivySectionHeader(title: 'Today', count: due.length),
             if (!snap.hasData)
               const AivyCard(child: _Loading())
             else if (due.isEmpty)
               const AivyCard(
-                child: AivyEmpty('Aaj kuch scheduled nahi hai. Aaram se.'),
+                child: AivyEmpty('Nothing scheduled today.'),
               )
             else
               AivyCard(
@@ -440,7 +440,7 @@ class _TodaySection extends StatelessWidget {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            '+${due.length - 6} aur',
+                            '+${due.length - 6} more',
                             style: AivyUi.soft(context),
                           ),
                         ),
@@ -523,7 +523,7 @@ class _TodayRow extends StatelessWidget {
                     ],
                     if (late) ...[
                       const SizedBox(width: 8),
-                      const AivyPill('Nikal gaya', color: AivyUi.warn),
+                      const AivyPill('Overdue', color: AivyUi.warn),
                     ],
                   ],
                 ),
@@ -540,7 +540,7 @@ class _TodayRow extends StatelessWidget {
           else
             IconButton(
               onPressed: onDone,
-              tooltip: 'Ho gaya',
+              tooltip: 'Mark done',
               visualDensity: VisualDensity.compact,
               icon: const Icon(
                 Icons.check_circle_outline,
@@ -603,8 +603,8 @@ class _DecisionsSection extends StatelessWidget {
               return const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AivySectionHeader(title: 'Dhyaan chahiye'),
-                  AivyCard(child: AivyEmpty('Kuch atka hua nahi hai.')),
+                  AivySectionHeader(title: 'Needs attention'),
+                  AivyCard(child: AivyEmpty('Nothing pending a decision.')),
                 ],
               );
             }
@@ -613,9 +613,9 @@ class _DecisionsSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 AivySectionHeader(
-                  title: 'Dhyaan chahiye',
+                  title: 'Needs attention',
                   count: chase.length + stale.length,
-                  action: 'Sab dekhein',
+                  action: 'See all',
                   onAction: onSeeAll,
                 ),
                 if (chase.isNotEmpty)
@@ -634,7 +634,7 @@ class _DecisionsSection extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '${chase.length} quotation ka follow-up baaki',
+                              '${chase.length} quotation follow-ups due',
                               style: AivyUi.body(context)
                                   .copyWith(fontWeight: FontWeight.w600),
                             ),
@@ -650,7 +650,7 @@ class _DecisionsSection extends StatelessWidget {
                                       child: Text(
                                         q.clientName?.trim().isNotEmpty == true
                                             ? q.clientName!
-                                            : 'Bina naam ka client',
+                                            : 'Unnamed client',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: AivyUi.soft(context),
@@ -686,7 +686,7 @@ class _DecisionsSection extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${stale.length} order ek hafte se pending hai',
+                            '${stale.length} orders pending over a week',
                             style: AivyUi.body(context),
                           ),
                         ),
@@ -744,12 +744,12 @@ class _WeekSection extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const AivySectionHeader(title: 'Is hafte'),
+                const AivySectionHeader(title: 'This week'),
                 Row(
                   children: [
                     Expanded(
                       child: _Stat(
-                        label: 'Quotation',
+                        label: 'Quotations',
                         value: '${quotes.length}',
                         sub: quotes.isEmpty
                             ? '—'
@@ -762,7 +762,7 @@ class _WeekSection extends StatelessWidget {
                     const SizedBox(width: AivyUi.gap),
                     Expanded(
                       child: _Stat(
-                        label: 'Order',
+                        label: 'Orders',
                         value: '${orders.length}',
                         sub: orders.isEmpty
                             ? '—'
@@ -841,10 +841,10 @@ class _AskAivy extends StatelessWidget {
   final VoidCallback? onAsk;
 
   static const List<String> _prompts = [
-    'Aaj kisko call karna hai?',
-    'Koi important cheez hai kya?',
-    'Kisko quotation diya?',
-    'Kitna paisa pending hai?',
+    'Who do I call today?',
+    'Anything important?',
+    'Recent quotations?',
+    'How much is pending?',
   ];
 
   @override
@@ -852,7 +852,7 @@ class _AskAivy extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const AivySectionHeader(title: 'Aivy se poochhein'),
+        const AivySectionHeader(title: 'Ask Aivy'),
         Wrap(
           spacing: 8,
           runSpacing: 8,

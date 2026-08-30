@@ -91,7 +91,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       debugPrint('Reports: action on $id failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ho nahi paaya — dobara try kijiye.')),
+          const SnackBar(content: Text('Could not update. Try again.')),
         );
       }
     } finally {
@@ -157,7 +157,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       child: TextButton.icon(
                         onPressed: widget.onOpenChat,
                         icon: const Icon(Icons.auto_awesome, size: 16),
-                        label: const Text('Aivy se poochhein'),
+                        label: const Text('Ask Aivy'),
                         style: TextButton.styleFrom(
                           foregroundColor: AivyUi.brand,
                         ),
@@ -189,11 +189,11 @@ class _Header extends StatelessWidget {
   final ValueChanged<_Lens> onLens;
 
   static const Map<_Lens, String> _labels = {
-    _Lens.all: 'Sab',
-    _Lens.money: 'Paisa',
-    _Lens.orders: 'Order',
-    _Lens.quotes: 'Quotation',
-    _Lens.work: 'Kaam',
+    _Lens.all: 'All',
+    _Lens.money: 'Money',
+    _Lens.orders: 'Orders',
+    _Lens.quotes: 'Quotations',
+    _Lens.work: 'Tasks',
   };
 
   @override
@@ -209,7 +209,7 @@ class _Header extends StatelessWidget {
             controller: controller,
             style: AivyUi.body(context),
             decoration: InputDecoration(
-              hintText: 'Client, amount, kaam — kuch bhi dhoondhiye',
+              hintText: 'Search client, amount, anything',
               hintStyle: AivyUi.soft(context),
               prefixIcon: const Icon(Icons.search, size: 19, color: AivyUi.inkFaint),
               suffixIcon: controller.text.isEmpty
@@ -325,11 +325,11 @@ class _MoneyRecords extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AivySectionHeader(title: 'Pending paisa', count: rows.length),
+            AivySectionHeader(title: 'Pending money', count: rows.length),
             if (!snap.hasData)
               const AivyCard(child: _Loading())
             else if (rows.isEmpty)
-              const AivyCard(child: AivyEmpty('Koi pending payment nahi.'))
+              const AivyCard(child: AivyEmpty('No pending payments.'))
             else
               AivyCard(
                 child: Column(
@@ -337,7 +337,7 @@ class _MoneyRecords extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text('Kul', style: AivyUi.soft(context)),
+                        Text('Total', style: AivyUi.soft(context)),
                         const Spacer(),
                         Text(
                           AivyUi.inrExact(total),
@@ -420,7 +420,7 @@ class _DueRow extends StatelessWidget {
     final left = record.remainingAmount ?? record.amount ?? 0;
     final isLate = due != null && due < DateTime.now().millisecondsSinceEpoch;
     final when = due == null
-        ? 'Tareekh nahi'
+        ? 'No due date'
         : DateFormat('d MMM yyyy').format(DateTime.fromMillisecondsSinceEpoch(due));
 
     return Padding(
@@ -492,7 +492,7 @@ class _OrderRecords extends StatelessWidget {
             if (!snap.hasData)
               const AivyCard(child: _Loading())
             else if (rows.isEmpty)
-              const AivyCard(child: AivyEmpty('Koi order nahi mila.'))
+              const AivyCard(child: AivyEmpty('No orders found.'))
             else
               AivyCard(
                 child: Column(
@@ -522,7 +522,7 @@ class _OrderRecords extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          '+${rows.length - 25} aur — dhoondhne ke liye upar search kijiye',
+                          '+${rows.length - 25} more — use search above',
                           style: AivyUi.soft(context),
                         ),
                       ),
@@ -565,7 +565,7 @@ class _OrderRow extends StatelessWidget {
                 Text(
                   order.clientName?.trim().isNotEmpty == true
                       ? order.clientName!
-                      : 'Bina naam ka client',
+                      : 'Unnamed client',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AivyUi.body(context),
@@ -623,7 +623,7 @@ class _QuotationRecords extends StatelessWidget {
             if (!snap.hasData)
               const AivyCard(child: _Loading())
             else if (rows.isEmpty)
-              const AivyCard(child: AivyEmpty('Koi quotation nahi mila.'))
+              const AivyCard(child: AivyEmpty('No quotations found.'))
             else
               AivyCard(
                 child: Column(
@@ -640,7 +640,7 @@ class _QuotationRecords extends StatelessWidget {
                                   Text(
                                     q.clientName?.trim().isNotEmpty == true
                                         ? q.clientName!
-                                        : 'Bina naam ka client',
+                                        : 'Unnamed client',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AivyUi.body(context),
@@ -677,7 +677,7 @@ class _QuotationRecords extends StatelessWidget {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            '+${rows.length - 25} aur',
+                            '+${rows.length - 25} more',
                             style: AivyUi.soft(context),
                           ),
                         ),
@@ -733,11 +733,11 @@ class _WorkRecords extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AivySectionHeader(title: 'Kaam', count: total),
+                AivySectionHeader(title: 'Tasks & reminders', count: total),
                 if (loading)
                   const AivyCard(child: _Loading())
                 else if (total == 0)
-                  const AivyCard(child: AivyEmpty('Kuch pending nahi hai.'))
+                  const AivyCard(child: AivyEmpty('Nothing pending.'))
                 else
                   AivyCard(
                     child: Column(
@@ -833,7 +833,7 @@ class _WorkRow extends StatelessWidget {
                     ),
                     if (overdue) ...[
                       const SizedBox(width: 8),
-                      const AivyPill('Nikal gaya', color: AivyUi.warn),
+                      const AivyPill('Overdue', color: AivyUi.warn),
                     ],
                   ],
                 ),
@@ -849,7 +849,7 @@ class _WorkRow extends StatelessWidget {
           else
             IconButton(
               onPressed: onDone,
-              tooltip: 'Ho gaya',
+              tooltip: 'Mark done',
               visualDensity: VisualDensity.compact,
               icon: const Icon(
                 Icons.check_circle_outline,

@@ -53,7 +53,7 @@ describe("configuration", () => {
     const calls = stubFetch([{ json: {} }]);
     const err = await placesTextSearch({ query: "printing press" }).catch((e) => e);
     expect(err).toBeInstanceOf(MapsApiError);
-    expect((err as MapsApiError).hindiMessage).toContain("app_config/maps");
+    expect((err as MapsApiError).userMessage).toContain("app_config/maps");
     expect(calls).toHaveLength(0);
   });
 
@@ -143,7 +143,7 @@ describe("routes", () => {
   it("names a key problem apart from a broken call", async () => {
     stubFetch([{ status: 403, text: "API not enabled" }]);
     const err = await computeRoute({ origin: "a", destination: "b" }).catch((e) => e);
-    expect((err as MapsApiError).hindiMessage).toContain("Routes API");
+    expect((err as MapsApiError).userMessage).toContain("Routes API");
   });
 });
 

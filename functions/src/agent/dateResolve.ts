@@ -46,7 +46,7 @@ export interface ResolveWhenResult {
   iso: string | null;
   /** Epoch millis for the resolved instant. */
   epochMs: number | null;
-  /** Human line for the confirm card, e.g. "Somvar, 24 August, 11:00 AM". */
+  /** Human line for the confirm card, e.g. "Monday, 24 August, 11:00 AM". */
   label: string | null;
   /** True when the phrase carried an explicit clock. */
   hasExplicitTime: boolean;
@@ -84,15 +84,20 @@ const ENGLISH_WEEKDAYS: Record<string, number> = {
   sunday: 7,
 };
 
-const WEEKDAY_LABELS_HI = [
+/**
+ * Cards are read, not spoken, and the app reads in English — "Sunday, 30
+ * August" rather than "Ravivar". Hindi weekday *input* is still understood;
+ * this is only how a resolved date is written back.
+ */
+const WEEKDAY_LABELS = [
   "",
-  "Somvar",
-  "Mangalvar",
-  "Budhvar",
-  "Guruvar",
-  "Shukravar",
-  "Shanivar",
-  "Ravivar",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
 ];
 
 const MONTHS: Record<string, number> = {
@@ -450,9 +455,9 @@ function readDay(
   return null;
 }
 
-/** "Somvar, 24 August, 11:00 AM" — spelled out so mistakes are obvious. */
+/** "Monday, 24 August, 11:00 AM" — spelled out so mistakes are obvious. */
 export function formatWhenLabel(dt: DateTime, withTime: boolean): string {
-  const weekday = WEEKDAY_LABELS_HI[dt.weekday] ?? dt.weekdayLong ?? "";
+  const weekday = WEEKDAY_LABELS[dt.weekday] ?? dt.weekdayLong ?? "";
   const datePart = dt.toFormat("d MMMM");
   if (!withTime) {
     return `${weekday}, ${datePart}`;

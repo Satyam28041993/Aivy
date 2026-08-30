@@ -259,8 +259,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   if (!reply) {
     reply = drafts.length
-      ? "Ye taiyaar hai — dekh lijiye, sahi ho to confirm kar dijiye."
-      : "Samajh nahi paayi, thoda aur bataiye?";
+      ? "Here it is — check it and confirm if it looks right."
+      : "I did not catch that — say a bit more?";
   }
 
   return { reply, drafts, trace, newContents, hops };

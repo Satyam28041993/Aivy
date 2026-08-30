@@ -180,18 +180,18 @@ async function commitMeeting(
         durationMinutes: d.durationMinutes ?? 60,
         timezone: "UTC",
       });
-      calendarNote = " Google Calendar par bhi daal diya.";
+      calendarNote = " Added to Google Calendar too.";
     } catch (e) {
       calendarNote =
         e instanceof GoogleApiError && e.isAuth
-          ? " (Calendar par nahi daal paayi — Google permission chahiye.)"
-          : " (Calendar par nahi daal paayi.)";
+          ? " (Could not add to Calendar — Google permission needed.)"
+          : " (Could not add to Calendar.)";
     }
   }
 
   return {
     ok: true,
-    message: `Meeting set ho gayi — ${d.whenLabel}${who}.${calendarNote}`,
+    message: `Meeting set — ${d.whenLabel}${who}.${calendarNote}`,
     createdIds: ids,
     summary: `meeting ${client?.name ?? ""} ${d.whenLabel} (${d.agenda || "no agenda"})`.trim(),
   };
@@ -210,7 +210,7 @@ async function commitReminder(uid: string, d: ReminderDraftData): Promise<Commit
   });
   return {
     ok: true,
-    message: `Reminder lag gaya — ${d.whenLabel}.`,
+    message: `Reminder set — ${d.whenLabel}.`,
     createdIds: [id],
     summary: `reminder "${d.title}" ${d.whenLabel}`,
   };
@@ -245,7 +245,7 @@ async function commitQuotation(uid: string, d: QuotationDraftData): Promise<Comm
 
   return {
     ok: true,
-    message: `Quotation record ho gaya — ${client.name}, follow-up ${d.followUpLabel}.`,
+    message: `Quotation recorded — ${client.name}, follow-up ${d.followUpLabel}.`,
     createdIds: [ref.id, reminderId],
     summary: `quotation ${client.name} ${d.amount}`,
   };
@@ -268,7 +268,7 @@ async function commitOrder(uid: string, d: OrderDraftData): Promise<CommitResult
   });
   return {
     ok: true,
-    message: `Order record ho gaya — ${client.name}.`,
+    message: `Order recorded — ${client.name}.`,
     createdIds: [ref.id],
     summary: `order ${client.name} ${d.amount}`,
   };
@@ -306,7 +306,7 @@ async function commitPaymentDue(uid: string, d: PaymentDueDraftData): Promise<Co
 
   return {
     ok: true,
-    message: `Due record ho gaya — ${client.name}, ${d.dueLabel}.`,
+    message: `Due recorded — ${client.name}, due ${d.dueLabel}.`,
     createdIds: [ref.id],
     summary: `payment due ${client.name} ${d.amount}`,
   };
@@ -391,7 +391,7 @@ async function commitPaymentReceived(
   const extra = leftover > 0.01 ? ` (${leftover} advance rakha)` : "";
   return {
     ok: true,
-    message: `Payment receive ho gaya — ${client.name}${extra}.`,
+    message: `Payment recorded — ${client.name}${extra}.`,
     createdIds: [receiptRef.id, ...touched],
     summary: `payment received ${client.name} ${d.amount}`,
   };
@@ -419,7 +419,7 @@ async function commitRememberFact(
     );
   return {
     ok: true,
-    message: "Yaad rakh liya.",
+    message: "Got it, I'll remember that.",
     createdIds: [],
     summary: `remembered: ${d.fact}`,
   };
@@ -440,7 +440,7 @@ function needsGoogle(): CommitResult {
   return {
     ok: false,
     message:
-      "Google connect nahi hai — Android app me More → Allow Google extras se permission dijiye.",
+      "Google is not connected — grant permission from More → Allow Google extras in the Android app.",
     createdIds: [],
     summary: "",
   };
@@ -449,8 +449,8 @@ function needsGoogle(): CommitResult {
 function googleFailed(e: unknown, what: string): CommitResult {
   const message =
     e instanceof GoogleApiError
-      ? `${what} nahi ho paaya — ${e.hindiMessage}`
-      : `${what} nahi ho paaya.`;
+      ? `${what} failed — ${e.userMessage}`
+      : `${what} failed.`;
   return { ok: false, message, createdIds: [], summary: "" };
 }
 
@@ -472,7 +472,7 @@ async function commitCalendarEvent(
     });
     return {
       ok: true,
-      message: `Calendar par daal diya — ${d.whenLabel}.`,
+      message: `Added to Calendar — ${d.whenLabel}.`,
       createdIds: ref.id ? [ref.id] : [],
       summary: `calendar event "${d.summary}" ${d.whenLabel}`,
     };
@@ -494,15 +494,15 @@ async function commitEmail(
       subject: d.subject,
       body: d.body,
     });
-    const who = d.toName ? `${d.toName} ko` : `${d.to} par`;
+    const who = d.toName ? d.toName : d.to;
     return {
       ok: true,
-      message: `Mail bhej diya — ${who}.`,
+      message: `Email sent — ${who}.`,
       createdIds: id ? [id] : [],
       summary: `email to ${d.toName ?? d.to}: ${d.subject}`,
     };
   } catch (e) {
-    return googleFailed(e, "Mail");
+    return googleFailed(e, "Email");
   }
 }
 
@@ -522,7 +522,7 @@ async function commitSheetRow(
   if (!spreadsheetId) {
     return {
       ok: false,
-      message: "Koi default Google Sheet set nahi hai.",
+      message: "No default Google Sheet is set.",
       createdIds: [],
       summary: "",
     };
@@ -535,7 +535,7 @@ async function commitSheetRow(
     });
     return {
       ok: true,
-      message: "Sheet me row add kar di.",
+      message: "Row added to the sheet.",
       createdIds: [],
       summary: `sheet row: ${d.cells.join(" | ")}`,
     };
@@ -557,7 +557,7 @@ async function commitSavedPlace(
   const where = place.address ? ` — ${place.address}` : "";
   return {
     ok: true,
-    message: `"${place.name}" save ho gayi${where}. Jab bhi maangenge, link de dungi.`,
+    message: `Saved "${place.name}"${where}. Ask me anytime and I'll send the link.`,
     createdIds: [place.id],
     summary: `saved place ${place.name}`,
   };
@@ -571,18 +571,18 @@ export async function commitDraft(
 ): Promise<CommitResult> {
   const draft: AgentDraft | null = await getDraft(uid, draftId);
   if (!draft) {
-    return { ok: false, message: "Draft nahi mila.", createdIds: [], summary: "" };
+    return { ok: false, message: "Draft not found.", createdIds: [], summary: "" };
   }
   if (draft.status === "committed") {
     return {
       ok: true,
-      message: "Ye pehle hi save ho chuka hai.",
+      message: "This was already saved.",
       createdIds: draft.resultIds ?? [],
       summary: "",
     };
   }
   if (draft.status === "cancelled") {
-    return { ok: false, message: "Ye draft cancel ho chuka hai.", createdIds: [], summary: "" };
+    return { ok: false, message: "This draft was cancelled.", createdIds: [], summary: "" };
   }
 
   let result: CommitResult;
@@ -621,7 +621,7 @@ export async function commitDraft(
       result = await commitSavedPlace(uid, draft.data);
       break;
     default:
-      return { ok: false, message: "Is draft ka type samajh nahi aaya.", createdIds: [], summary: "" };
+      return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };
   }
 
   if (result.ok) {

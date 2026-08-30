@@ -173,7 +173,7 @@ describe("scenario: the meeting from the original brief", () => {
 
     expect(res.drafts).toHaveLength(1);
     const data = draftData(0, "meeting");
-    expect(data.whenLabel).toBe("Ravivar, 24 August, 11:00 AM");
+    expect(data.whenLabel).toBe("Sunday, 24 August, 11:00 AM");
     expect(data.client?.name).toBe("Rohan Traders");
     expect(data.agenda).toBe("new labels");
     // A meeting brings its own nudge without being asked.
@@ -181,7 +181,7 @@ describe("scenario: the meeting from the original brief", () => {
 
     const labels = draftLines(0).map((l) => l.label);
     expect(labels).toEqual(
-      expect.arrayContaining(["Client", "Kab", "Regarding", "Reminder"]),
+      expect.arrayContaining(["Client", "When", "Regarding", "Reminder"]),
     );
 
     // The model must not be told this is saved.

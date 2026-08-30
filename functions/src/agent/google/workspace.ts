@@ -36,14 +36,14 @@ export class GoogleApiError extends Error {
   }
 
   /** Something to say to the user, in the app's voice. */
-  get hindiMessage(): string {
+  get userMessage(): string {
     if (this.isAuth) {
-      return "Google ki permission chahiye — More → Allow Google extras se dubara allow kar dijiye.";
+      return "Google permission needed — allow it again from More → Allow Google extras.";
     }
     if (this.status === 404) {
-      return "Google me wo cheez nahi mili.";
+      return "Google could not find that.";
     }
-    return "Google se baat nahi ho paayi, thodi der baad try kijiye.";
+    return "Could not reach Google — try again shortly.";
   }
 }
 
@@ -149,7 +149,7 @@ export async function calendarListEvents(
     const end = (item.end ?? {}) as Record<string, string>;
     return {
       id: `${item.id ?? ""}`,
-      summary: `${item.summary ?? "(bina naam ka event)"}`,
+      summary: `${item.summary ?? "(untitled event)"}`,
       startIso: start.dateTime ?? start.date ?? "",
       endIso: end.dateTime ?? end.date ?? "",
       allDay: !start.dateTime && Boolean(start.date),

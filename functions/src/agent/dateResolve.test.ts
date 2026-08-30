@@ -51,7 +51,7 @@ describe("bug #1 — 'kal 11 baje' must be 11 AM, not 11 PM", () => {
     const dt = local(r.iso)!;
     expect(dt.hour).toBe(11);
     expect(dt.day).toBe(24);
-    expect(r.label).toBe("Ravivar, 24 August, 11:00 AM");
+    expect(r.label).toBe("Sunday, 24 August, 11:00 AM");
   });
 
   it("still reads 'kal 6 baje' as the evening", () => {
@@ -231,11 +231,11 @@ describe("empty and unreadable input", () => {
 
 describe("labels are spelled out for the confirm card", () => {
   it("includes weekday, date and time", () => {
-    expect(resolve("kal 11 baje").label).toBe("Ravivar, 24 August, 11:00 AM");
+    expect(resolve("kal 11 baje").label).toBe("Sunday, 24 August, 11:00 AM");
   });
 
   it("omits the clock when none was given", () => {
-    expect(resolve("somvar").label).toContain("Somvar, 25 August");
+    expect(resolve("somvar").label).toContain("Monday, 25 August");
   });
 });
 

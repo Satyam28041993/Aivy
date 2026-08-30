@@ -30,7 +30,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  // Tab order: Aivy, Aaj (dashboard), Records (reports), More.
+  // Tab order: Aivy, Today (dashboard), Records (reports), More.
   static const int _tabAgent = 0;
   static const int _tabReports = 2;
 
@@ -205,7 +205,7 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Aaj',
+              label: 'Today',
             ),
             NavigationDestination(
               icon: Icon(Icons.bar_chart_outlined),

@@ -224,7 +224,7 @@ describe("errors", () => {
     const err = await gmailSend("tok", { to: "a@b.com", subject: "x", body: "y" }).catch((e) => e);
     expect(err).toBeInstanceOf(GoogleApiError);
     expect((err as GoogleApiError).isAuth).toBe(true);
-    expect((err as GoogleApiError).hindiMessage).toContain("Allow Google extras");
+    expect((err as GoogleApiError).userMessage).toContain("Allow Google extras");
 
     stubFetch([{ status: 500, text: "server" }]);
     const err2 = await gmailSend("tok", { to: "a@b.com", subject: "x", body: "y" }).catch((e) => e);

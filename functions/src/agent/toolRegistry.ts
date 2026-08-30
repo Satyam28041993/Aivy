@@ -385,8 +385,9 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: "find_records",
     description:
       "Look up past records — quotations, orders, payments, reminders, meetings. " +
-      "Use when the user asks what they did: 'kisko quotation diya', " +
-      "'is mahine kitne order aaye'.",
+      "Use when the user asks what they did: 'who did I quote', 'how many orders " +
+      "this month', 'how many orders are pending'. The result carries a per-status " +
+      "breakdown, so counting questions are answered from it rather than guessed.",
     parameters: {
       type: "object",
       properties: {
@@ -396,6 +397,12 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         },
         client_name: CLIENT_NAME,
         window: WINDOW,
+        status: {
+          type: "string",
+          description:
+            "Narrow to one status, e.g. 'pending' or 'dispatched' for orders. " +
+            "Omit to get every status with counts.",
+        },
       },
       required: ["type"],
     },
