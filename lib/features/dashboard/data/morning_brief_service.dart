@@ -32,6 +32,9 @@ class MorningBriefService {
         // resolver both do — so sending anything else would only disagree
         // with them.
         'timezone': 'Asia/Kolkata',
+        // The server cannot tell a browser from a phone that simply has not
+        // granted Google, and the two need different things said about them.
+        'platform': kIsWeb ? 'web' : 'android',
         if (token != null) 'googleAccessToken': token,
         if (force) 'force': true,
       });

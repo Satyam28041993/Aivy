@@ -149,6 +149,8 @@ export async function gather(
   uid: string,
   timezone: string,
   googleToken: string | null,
+  /** What the request came from, so a missing token can be explained. */
+  platform: string = "",
 ): Promise<GatheredInput> {
   const gaps: string[] = [];
   let important: GmailSummaryRow[] = [];
@@ -179,7 +181,15 @@ export async function gather(
     important = imp;
     alerts = alr;
   } else {
-    gaps.push("Google is not connected on this device, so mail and alerts are missing.");
+    // "Not connected" reads as something the user forgot to do. On the web
+    // there is nothing to do — Gmail needs the Android sign-in — and telling
+    // them to go and connect it would send them looking for a button that
+    // does not exist.
+    gaps.push(
+      platform === "web"
+        ? "Mail and Google Alerts need the Android app; the browser cannot read them."
+        : "Google is not connected on this device, so mail and alerts are missing.",
+    );
   }
 
   let news: GatheredInput["news"] = [];
@@ -336,11 +346,12 @@ export async function buildBrief(opts: {
   timezone: string;
   googleToken: string | null;
   geminiKey: string;
+  platform?: string;
   nowMs?: number;
 }): Promise<MorningBrief> {
   const nowMs = opts.nowMs ?? Date.now();
   const zone = opts.timezone || "Asia/Kolkata";
-  const input = await gather(opts.uid, zone, opts.googleToken);
+  const input = await gather(opts.uid, zone, opts.googleToken, opts.platform ?? "");
   const nowLabel = DateTime.fromMillis(nowMs, { zone }).toFormat("cccc, d LLLL, h:mm a");
 
   let written: { greeting: string; sections: BriefSection[] } | null = null;

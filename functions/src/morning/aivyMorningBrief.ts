@@ -38,6 +38,7 @@ export const aivyMorningBrief = onCall(
     // token the agent turns forward.
     const googleToken = str(payload.googleAccessToken) || null;
     const force = payload.force === true;
+    const platform = str(payload.platform);
 
     const dateKey = dateKeyFor(timezone);
     if (!force) {
@@ -53,7 +54,7 @@ export const aivyMorningBrief = onCall(
     }
 
     try {
-      const brief = await buildBrief({ uid, timezone, googleToken, geminiKey: key });
+      const brief = await buildBrief({ uid, timezone, googleToken, geminiKey: key, platform });
       return { brief, cached: false };
     } catch (e) {
       logger.error("aivyMorningBrief failed", {
