@@ -63,18 +63,12 @@ Gmail, and the web build cannot read it at all. The morning brief is built when
 the app opens for this reason, not because a cron would have been harder.
 
 **`continue-on-error` on Functions deploy is trap 1 in a different coat.**
-`cursor/ci-hosting-success-despite-functions-b268` still wants that. The run
-stays green while the server did not update. Do not merge it.
+A leftover branch tried that. The run stays green while the server did not
+update. Do not put it back.
 
-**A leftover branch that signs with a different key.**
-`claude/git-pull-aro-fxj5gh` still carries `aivy-qa.keystore`. Live signs with
-`aivy-debug.keystore`. Merging it would change the fingerprint Google sign-in
-is registered against.
-
-**The Cursor Cloud overlay on `main` is not this file.** `main` is 63 commits
-behind and still has the old short AGENTS.md (Flutter path, anonymous-token
-curl). An agent that reads AGENTS.md before checking out the live branch is
-reading a different document. Checkout the live branch first.
+**Do not bring in a second keystore.** A leftover branch carried
+`aivy-qa.keystore`. Live signs with `aivy-debug.keystore`. A different
+fingerprint would break Google sign-in.
 
 ## How the app is put together
 
@@ -96,12 +90,12 @@ reading a different document. Checkout the live branch first.
 
 ## Where things stand
 
-_Last updated: after restoring the environment notes this file had overwritten._
+_Last updated: after finishing the branch cleanup._
 
-Ten remote branches that were already on the live branch (or that were the
-thrown-away chat-projects copy on a 55-commit-old base) have been deleted.
-The live branch itself did not change. What is left, and what `main` should
-do, is in Known gaps below — waiting on the user.
+The leftover remotes are gone — the six the user left for a decision, plus the
+cleanup-report copy that pointed at the same commit as live. `main` has been
+fast-forwarded to the live branch, so the working agreement and the old short
+environment file are no longer two different documents.
 
 **Working and tested in the live app**
 
@@ -174,15 +168,6 @@ do, is in Known gaps below — waiting on the user.
 - `functions/src/morning/money.ts` is **parked, not dead**. Bank and UPI parsing
   with tests, removed from the brief at the user's request until the shape is
   settled. Do not delete it; it is coming back.
-- **Leftover branches — user decides, do not merge or delete:**
-  `cursor/app-review-full-5a06` (docs review of old `main`, Chat/WhatsApp tabs
-  that are gone), `cursor/ci-hosting-success-despite-functions-b268`
-  (`continue-on-error` on Functions — see traps), `cursor/premium-voice-live-a5fe`
-  and the two `claude/gemini-voice-chat-review-*` branches (Voice Home, already
-  removed), `claude/git-pull-aro-fxj5gh` (conflicts; leftover unique work is a
-  second keystore).
-- **`main` is 63 commits behind** the live branch and can fast-forward. Do not
-  fast-forward it without the user saying so.
 - **Dead code found, not deleted.** Voice callables (`aivyVoiceAsk`,
   `elevenLabsTts`, `googleSpeechSynthesize`) have no Flutter caller since the
   voice home went. `AivyProcessService.analyzeInput` / `analyzeVoice` /
