@@ -17,11 +17,19 @@ class MorningBriefCard extends StatelessWidget {
     required this.loading,
     required this.onRetry,
     this.onAskAbout,
+    this.onOpenProject,
   });
 
   final MorningBrief? brief;
   final bool loading;
   final VoidCallback onRetry;
+
+  /// Opens the whole project or task behind a line, by its id.
+  ///
+  /// The brief gives each one a sentence, which is right for a morning and
+  /// wrong the moment you want to know what has actually been happening — so
+  /// the sentence is a way in rather than the whole answer.
+  final ValueChanged<String>? onOpenProject;
 
   /// Opens Aivy with a question about one item already written. Offered on the
   /// two sections that exist to be followed up — news and alerts — and not on
@@ -115,6 +123,7 @@ class MorningBriefCard extends StatelessWidget {
           onAskAbout: const {'news', 'alerts'}.contains(section.kind)
               ? onAskAbout
               : null,
+          onOpenProject: onOpenProject,
         ));
     }
 
@@ -145,11 +154,13 @@ class _Section extends StatelessWidget {
     required this.icon,
     required this.section,
     this.onAskAbout,
+    this.onOpenProject,
   });
 
   final IconData icon;
   final BriefSection section;
   final ValueChanged<String>? onAskAbout;
+  final ValueChanged<String>? onOpenProject;
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +194,12 @@ class _Section extends StatelessWidget {
             style: const TextStyle(color: AivyUi.inkFaint, fontSize: 13, height: 1.35),
           )
         else ...[
-          for (final item in loose) _Item(item: item, onAskAbout: onAskAbout),
+          for (final item in loose)
+            _Item(
+              item: item,
+              onAskAbout: onAskAbout,
+              onOpenProject: onOpenProject,
+            ),
           for (final entry in groups.entries) ...[
             Padding(
               padding: const EdgeInsets.only(top: 6, bottom: 2),
@@ -204,6 +220,7 @@ class _Section extends StatelessWidget {
                 // it — "Canva ai" is what he wants to ask about.
                 topic: entry.key,
                 onAskAbout: onAskAbout,
+                onOpenProject: onOpenProject,
               ),
           ],
         ],
@@ -234,14 +251,23 @@ class _Item extends StatelessWidget {
     this.indented = false,
     this.topic,
     this.onAskAbout,
+    this.onOpenProject,
   });
 
   final BriefItem item;
   final bool indented;
 
+  final ValueChanged<String>? onOpenProject;
+
   /// What to ask Aivy about, when it is not simply the headline.
   final String? topic;
   final ValueChanged<String>? onAskAbout;
+
+  /// A line that stands for a project or task, with somewhere to open it.
+  String? get _projectId {
+    final id = item.refId;
+    return (id != null && id.isNotEmpty && onOpenProject != null) ? id : null;
+  }
 
   Future<void> _open(BuildContext context) async {
     final url = item.link;
@@ -302,6 +328,15 @@ class _Item extends StatelessWidget {
                     color: AivyUi.inkFaint,
                   ),
                 ),
+              if (_projectId != null)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6, top: 1),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: AivyUi.inkFaint,
+                  ),
+                ),
               if (onAskAbout != null)
                 _AskAivyButton(
                   onTap: () => onAskAbout!(topic ?? item.headline),
@@ -324,6 +359,14 @@ class _Item extends StatelessWidget {
       ),
     );
 
+    final projectId = _projectId;
+    if (projectId != null) {
+      return InkWell(
+        onTap: () => onOpenProject!(projectId),
+        borderRadius: BorderRadius.circular(6),
+        child: row,
+      );
+    }
     if (item.link == null) {
       return row;
     }

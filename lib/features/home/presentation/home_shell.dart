@@ -156,6 +156,21 @@ class _HomeShellState extends State<HomeShell> {
     setState(() => _currentIndex = _tabAgent);
   }
 
+  /// The same jump for a project or task.
+  ///
+  /// Deliberately a different sentence from the one a news item gets: there is
+  /// no mail behind a project and nothing on the web about it, so asking for
+  /// sources would send Aivy looking for something that does not exist. What
+  /// is wanted here is its status, which she already holds.
+  void _askAivyAboutWork(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    _agentPrefill.value = '"$trimmed" ka kya haal hai?';
+    setState(() => _currentIndex = _tabAgent);
+  }
+
   void _openReportsTab() {
     setState(() {
       _currentIndex = _tabReports;
@@ -179,6 +194,7 @@ class _HomeShellState extends State<HomeShell> {
         onOpenChat: _openAgentTab,
         onOpenReports: _openReportsTab,
         onAskAbout: _askAivyAbout,
+        onAskAboutWork: _askAivyAboutWork,
       ),
       ReportsScreen(
         userId: widget.userId,

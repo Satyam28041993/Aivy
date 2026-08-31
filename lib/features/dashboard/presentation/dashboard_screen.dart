@@ -8,6 +8,7 @@ import '../../../core/design/aivy_ui.dart';
 import '../data/morning_brief_service.dart';
 import '../models/morning_brief.dart';
 import 'widgets/morning_brief_card.dart';
+import '../../projects/presentation/project_detail_sheet.dart';
 import '../../chat/data/aivy_process_service.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../clients/data/client_repository.dart';
@@ -38,6 +39,7 @@ class DashboardScreen extends StatefulWidget {
     this.onOpenChat,
     this.onOpenReports,
     this.onAskAbout,
+    this.onAskAboutWork,
   });
 
   final String userId;
@@ -50,6 +52,10 @@ class DashboardScreen extends StatefulWidget {
   /// "Ask Aivy about this" from a brief item — jumps to the chat with the
   /// question already written out.
   final ValueChanged<String>? onAskAbout;
+
+  /// The same jump for a project or task, which needs a different question:
+  /// a news item wants the web searched, a project wants its own status.
+  final ValueChanged<String>? onAskAboutWork;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -89,6 +95,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _aivyProcess.dispose();
     super.dispose();
+  }
+
+  /// Opens the whole project or task behind a line of the brief.
+  ///
+  /// The brief gives each one a sentence, which is the right length for a
+  /// morning and the wrong length the moment you want to know when something
+  /// actually changed.
+  void _openProject(String projectId) {
+    unawaited(
+      ProjectDetailSheet.open(
+        context,
+        userId: widget.userId,
+        projectId: projectId,
+        onAskAbout: widget.onAskAboutWork,
+      ),
+    );
   }
 
   Future<void> _loadBrief({bool force = false}) async {
@@ -160,6 +182,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 loading: _briefLoading,
                 onRetry: () => _loadBrief(force: true),
                 onAskAbout: widget.onAskAbout,
+                onOpenProject: _openProject,
               ),
               if (_brief != null || _briefLoading) const SizedBox(height: 22),
               _MoneySection(

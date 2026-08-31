@@ -72,7 +72,7 @@ the app opens for this reason, not because a cron would have been harder.
 
 ## Where things stand
 
-_Last updated: after adding tasks (server side) and putting work in the brief._
+_Last updated: after tasks, work in the brief, and the detail sheet._
 
 **Working and tested in the live app**
 
@@ -108,13 +108,26 @@ _Last updated: after adding tasks (server side) and putting work in the brief._
   appended *after* the model has written the rest: these are counts and dates
   that are already right, and two sections have been lost before to model output
   arriving in a shape the parser did not expect.
+- **The detail sheet** (`lib/features/projects/`). Tapping a work line in the
+  brief opens the whole thing: steps with their states, and a **history** —
+  every change, when it happened. `updatedAtMs` cannot answer "kab kya update
+  kiya", because current state is what history was overwritten into, so every
+  change now appends a line to `projects/{id}/events`
+  (`functions/src/agent/projectEvents.ts`), best-effort — a failed event must
+  never cost the change it describes. The sheet is **read-only**; the button at
+  the bottom hands you to Aivy, which is the only path that also writes the
+  reminders, the draft card and the history line.
 
 **Known gaps — pick these up next**
 
-- **Tasks and projects have no screen.** Everything works by talking; there is
-  nothing to browse. Build it browse-only, one screen with both — tasks by
-  deadline on top, projects below — because creating and editing must stay in
-  chat or the same data ends up half-written two different ways.
+- **There is still no browse list.** The detail sheet opens one project or task
+  from the brief, so anything not in today's brief — closed work, a project with
+  nothing due — cannot be reached at all. Next: one screen in Records with both,
+  tasks by deadline on top, projects below, opening the same sheet. Keep it
+  browse-only; creating and editing must stay in chat or the same data ends up
+  half-written two different ways.
+- **History starts from now.** Projects and tasks created before this have no
+  events, and the sheet says so rather than showing an empty box.
 - **Repeating reminders are not real.** "Every month on the 5th" sets one
   reminder. The card says so honestly rather than pretending. A task with no
   deadline has the same shape of gap: it saves, but nothing ever rings for it,

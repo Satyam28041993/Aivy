@@ -9,6 +9,7 @@ class BriefItem {
     this.group,
     this.link,
     this.tone,
+    this.refId,
   });
 
   final String headline;
@@ -24,6 +25,12 @@ class BriefItem {
   /// wrong for finding the one thing that is overdue. Colour is the cheapest
   /// way to let a person spot that before they have read a word.
   final String? tone;
+
+  /// The project or task this line stands for, when it stands for one.
+  ///
+  /// Only the work sections carry it. Its presence is what makes a line
+  /// openable, so a mail or a headline stays a mail or a headline.
+  final String? refId;
 
   static BriefItem? fromMap(Map<String, dynamic> m) {
     final headline = (m['headline'] as String?)?.trim() ?? '';
@@ -41,6 +48,7 @@ class BriefItem {
       group: text('group'),
       link: text('link'),
       tone: text('tone'),
+      refId: text('refId'),
     );
   }
 }

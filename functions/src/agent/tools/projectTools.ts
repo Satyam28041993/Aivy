@@ -42,6 +42,7 @@ import {
   type ProjectStatus,
 } from "../projectStore";
 import { normalizeName } from "../nameNormalize";
+import { logProjectEvent } from "../projectEvents";
 import { cancelReminders } from "../reminderCancel";
 import { draftResult, dataResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
 import type { DraftCardLine } from "../draftTypes";
@@ -197,6 +198,12 @@ export async function createProjectTool(
     clientName: str(args.client_name) || null,
     note: str(args.note) || null,
   });
+  await logProjectEvent(
+    ctx.uid,
+    project.id,
+    "created",
+    project.clientName ? `Project opened for ${project.clientName}` : "Project opened",
+  );
   return dataResult({
     created: project.name,
     ...(project.clientName ? { client: project.clientName } : {}),
@@ -499,6 +506,23 @@ export async function updateProjectItemTool(
     alarmOff = (await cancelReminders(ctx.uid, [item.reminderId])) > 0;
   }
 
+  const changes: string[] = [];
+  if (patch.status) {
+    changes.push(statusLabel(patch.status).toLowerCase());
+  }
+  if (patch.dueMs) {
+    changes.push(`due ${whenLabel(patch.dueMs, ctx.timezone)}`);
+  }
+  if (note && !patch.status && !patch.dueMs) {
+    changes.push(note);
+  }
+  await logProjectEvent(
+    ctx.uid,
+    project.id,
+    patch.status ? "status" : patch.dueMs ? "due" : "note",
+    `${item.title} — ${changes.join(", ")}`,
+  );
+
   return dataResult({
     project: project.name,
     item: item.title,
@@ -683,6 +707,13 @@ export async function closeProjectTool(
         .map((i) => i.reminderId),
     ]);
   }
+
+  await logProjectEvent(
+    ctx.uid,
+    project.id,
+    status === "active" ? "status" : "closed",
+    status === "active" ? "Reopened" : `Closed as ${status.replace("_", " ")}`,
+  );
 
   return dataResult({
     project: project.name,

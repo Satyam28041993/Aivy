@@ -23,6 +23,7 @@ import { DateTime } from "luxon";
 
 import { createClient } from "./clientResolve";
 import { addItems, createProject, setProjectReminders } from "./projectStore";
+import { logProjectEvent } from "./projectEvents";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { savePlace } from "./placesStore";
 import { normalizeName } from "./nameNormalize";
@@ -489,6 +490,13 @@ async function commitProjectItems(
   const saved = await addItems(uid, d.projectId, withReminders);
   const dated = saved.filter((i) => i.reminderId).length;
 
+  await logProjectEvent(
+    uid,
+    d.projectId,
+    "items_added",
+    `Added ${saved.length} item(s): ${saved.map((i) => i.title).join(", ")}`,
+  );
+
   return {
     ok: true,
     message:
@@ -582,6 +590,14 @@ async function commitTask(uid: string, d: TaskDraftData): Promise<CommitResult> 
       });
     }
   }
+
+  const opened = [
+    "Task created",
+    forWhom ? `for ${forWhom}` : "",
+    d.dueLabel ? `due ${d.dueLabel}` : "no deadline",
+    steps.length > 0 ? `${steps.length} step(s): ${steps.map((i) => i.title).join(", ")}` : "",
+  ].filter(Boolean);
+  await logProjectEvent(uid, project.id, "created", opened.join(" · "));
 
   const parts = [`Task saved — ${project.name}`];
   if (steps.length > 0) {

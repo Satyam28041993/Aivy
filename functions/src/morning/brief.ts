@@ -63,6 +63,12 @@ export interface BriefItem {
    * weight, and a person scanning their morning reads colour before words.
    */
   tone?: string;
+  /**
+   * The project or task this line stands for, so tapping it can open the whole
+   * thing. Only the work sections carry it; a mail or a headline has a link
+   * instead.
+   */
+  refId?: string;
 }
 
 export interface MorningBrief {
@@ -318,6 +324,7 @@ export async function workSections(
       const when = dueWords(due, zone, nowMs);
       taskRows.push({
         item: {
+          refId: p.id,
           headline: p.name,
           detail: joinDetail([
             p.clientName || null,
@@ -334,6 +341,7 @@ export async function workSections(
     const nextDue = sum.next ? dueWords(sum.next.dueMs, zone, nowMs) : null;
     projectRows.push({
       item: {
+        refId: p.id,
         headline: p.name,
         detail:
           joinDetail([
