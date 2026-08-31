@@ -583,13 +583,32 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       itemBuilder: (context, index) {
         if (index < _messages.length) {
           final msg = _messages[index];
-          return AgentMessageBubble(
+          // The date sits above the first message of each day, so every time
+          // below it says which day it belongs to. A chat that ran past
+          // midnight has two "7:19 PM"s in it otherwise.
+          final newDay = index == 0
+              ? msg.createdAtMs > 0
+              : AgentDayDivider.needed(
+                  _messages[index - 1].createdAtMs,
+                  msg.createdAtMs,
+                );
+          final bubble = AgentMessageBubble(
             message: msg,
             busyDraftId: _busyDraftId,
             draftOverrides: _draftStatus,
             onConfirmDraft: _confirmDraft,
             onEditDraft: _editDraft,
             onCancelDraft: _cancelDraft,
+          );
+          if (!newDay) {
+            return bubble;
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AgentDayDivider(atMs: msg.createdAtMs),
+              bubble,
+            ],
           );
         }
         final afterMessages = index - _messages.length;

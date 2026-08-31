@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/agent_models.dart';
@@ -142,7 +143,89 @@ class AgentMessageBubble extends StatelessWidget {
                   children: [for (final l in links) _LinkChip(link: l)],
                 ),
               ),
+            // Inside the bubble and along its bottom edge, the way every
+            // messaging app puts it — close enough to read as belonging to
+            // this message, faint enough to stay out of the sentence.
+            if (message.createdAtMs > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    DateFormat('h:mm a').format(message.createdAt),
+                    style: TextStyle(
+                      color: isUser
+                          ? Colors.white.withValues(alpha: 0.62)
+                          : const Color(0xFF7A8699),
+                      fontSize: 11,
+                      height: 1.1,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Today", "Yesterday", or the date — between one day's messages and the next.
+///
+/// A time on its own is ambiguous the moment a conversation runs past
+/// midnight: "7:19 PM" says nothing about which evening. This is the line that
+/// makes every timestamp above it unambiguous.
+class AgentDayDivider extends StatelessWidget {
+  const AgentDayDivider({super.key, required this.atMs});
+
+  final int atMs;
+
+  /// True when these two messages fall on different local days.
+  static bool needed(int previousMs, int currentMs) {
+    if (previousMs <= 0 || currentMs <= 0) {
+      return false;
+    }
+    final a = DateTime.fromMillisecondsSinceEpoch(previousMs);
+    final b = DateTime.fromMillisecondsSinceEpoch(currentMs);
+    return a.year != b.year || a.month != b.month || a.day != b.day;
+  }
+
+  static String label(int atMs, {DateTime? now}) {
+    final at = DateTime.fromMillisecondsSinceEpoch(atMs);
+    final today = now ?? DateTime.now();
+    final days = DateTime(today.year, today.month, today.day)
+        .difference(DateTime(at.year, at.month, at.day))
+        .inDays;
+    if (days == 0) return 'Today';
+    if (days == 1) return 'Yesterday';
+    // Within the week the weekday is the fastest thing to read; beyond it,
+    // only the date means anything.
+    if (days > 1 && days < 7) return DateFormat('EEEE').format(at);
+    return DateFormat('d MMMM y').format(at);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B29),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+          ),
+          child: Text(
+            label(atMs),
+            style: const TextStyle(
+              color: Color(0xFF9AA6BC),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
         ),
       ),
     );
