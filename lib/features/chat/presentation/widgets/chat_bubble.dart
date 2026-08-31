@@ -9,6 +9,7 @@ import 'package:just_audio/just_audio.dart';
 import '../../../../core/voice/aivy_chat_voice_coordinator.dart';
 import '../../models/chat_message.dart';
 import '../../utils/aivy_response_formatter.dart';
+import '../../../projects/presentation/widgets/project_confirm_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ChatBubble extends StatefulWidget {
@@ -995,6 +996,14 @@ class _ChatBubbleState extends State<ChatBubble> {
 
     final aivy = message.aivyData;
     final sources = aivy != null ? aivy['sources'] as List<dynamic>? : null;
+    final projectItems = <Map<String, dynamic>>[];
+    if (aivy != null && aivy['projectDraft'] == true && aivy['items'] is List) {
+      for (final e in aivy['items'] as List) {
+        if (e is Map) {
+          projectItems.add(Map<String, dynamic>.from(e));
+        }
+      }
+    }
 
     final padded = Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -1005,6 +1014,12 @@ class _ChatBubbleState extends State<ChatBubble> {
           metaRow,
           const SizedBox(height: 6),
           wrappedContent,
+          if (projectItems.isNotEmpty)
+            ProjectConfirmCard(
+              projectName: '${aivy?['projectName'] ?? ''}',
+              client: '${aivy?['client'] ?? ''}',
+              items: projectItems,
+            ),
           if (sources != null && sources.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Divider(color: Colors.white12, height: 1),

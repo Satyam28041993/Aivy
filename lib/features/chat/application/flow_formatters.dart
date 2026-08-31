@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../projects/utils/project_confirm.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../../structured_actions/models/structured_action.dart';
 import '../utils/aivy_response_formatter.dart';
@@ -30,6 +31,9 @@ String formatConfirmSummary(
           : _inferFlowCategoryId(draft);
   if (fcid.startsWith('reminder_')) {
     return formatReminderSummary(data, draft);
+  }
+  if (fcid == kProjectFlowCategoryId || draft.type == 'project') {
+    return formatProjectConfirmSummary(data);
   }
   if (fcid.startsWith('payment_')) {
     return formatPaymentSummary(draft, flowCategoryId: fcid);

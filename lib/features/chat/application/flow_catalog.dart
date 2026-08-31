@@ -191,6 +191,9 @@ String flowCategoryIdFor(String category, String sub) => '${category}_$sub';
 
 /// [StructuredAction.subType] for payment is `payment_due` / `payment_received`; keys must match [flowCategoryIdFor] ids.
 String flowCategoryIdFromActionTypes(String type, String subType) {
+  if (type == 'project') {
+    return 'project_items';
+  }
   if (type == 'followup' &&
       (subType == 'payment' || subType == 'payment_followup')) {
     return 'followup_payment';

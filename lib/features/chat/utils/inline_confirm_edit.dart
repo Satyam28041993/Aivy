@@ -12,6 +12,13 @@ Map<String, dynamic>? tryParseInlineEdit(String text, Map<String, dynamic> draft
   var next = Map<String, dynamic>.from(draft);
   var changed = false;
 
+  if ((draft['flowCategoryId'] as String? ?? '') == 'project_items') {
+    final projectEdit = _tryProjectInlineEdit(t, next);
+    if (projectEdit != null) {
+      return projectEdit;
+    }
+  }
+
   final ns = _tryNameSwap(t);
   if (ns != null) {
     next['name'] = ns;
@@ -107,4 +114,69 @@ double? _parseAmount(String t) {
     return null;
   }
   return double.tryParse(m.group(1)!.replaceAll(',', ''));
+}
+
+Map<String, dynamic>? _tryProjectInlineEdit(
+  String t,
+  Map<String, dynamic> draft,
+) {
+  final next = Map<String, dynamic>.from(draft);
+  var changed = false;
+  final nameM = RegExp(
+    r'^(?:project\s+)?(?:naam|name)\s*[:\-]?\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(t);
+  if (nameM != null) {
+    final n = nameM.group(1)!.trim();
+    next['name'] = n;
+    next['projectName'] = n;
+    changed = true;
+  }
+  final clientM = RegExp(
+    r'^client\s*[:\-]?\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(t);
+  if (clientM != null) {
+    next['client'] = clientM.group(1)!.trim();
+    changed = true;
+  }
+  final itemM = RegExp(
+    r'^item\s+(\d+)\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(t);
+  if (itemM != null) {
+    final idx = int.parse(itemM.group(1)!) - 1;
+    final rest = itemM.group(2)!.trim().toLowerCase();
+    final rawItems = next['items'];
+    if (rawItems is List && idx >= 0 && idx < rawItems.length) {
+      final items = [
+        for (final e in rawItems)
+          if (e is Map) Map<String, dynamic>.from(e) else e,
+      ];
+      if (items[idx] is Map<String, dynamic>) {
+        final item = Map<String, dynamic>.from(items[idx] as Map);
+        if (rest.contains('waiting')) {
+          item['status'] = 'waiting_on_them';
+        } else if (RegExp(r'\b(done|complete)\b').hasMatch(rest)) {
+          item['status'] = 'done';
+        } else if (RegExp(r'\b(pending|open)\b').hasMatch(rest)) {
+          item['status'] = 'pending';
+        } else if (RegExp(r'\b(cancel)\b').hasMatch(rest)) {
+          item['status'] = 'cancelled';
+        }
+        final due = ReminderTimeParser.resolveScheduledTimeFromPlainText(
+          itemM.group(2)!.trim(),
+        );
+        if (due != null) {
+          item['dueAtMs'] = due.millisecondsSinceEpoch;
+          item['dueAtIso'] = due.toIso8601String();
+          item['dueLabel'] = ReminderTimeParser.formatReminderTime(due);
+        }
+        items[idx] = item;
+        next['items'] = items;
+        changed = true;
+      }
+    }
+  }
+  return changed ? next : null;
 }

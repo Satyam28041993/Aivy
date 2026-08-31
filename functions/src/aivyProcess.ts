@@ -41,6 +41,10 @@ import {
 } from "./intentDetection";
 import { transcribeFromFirebaseStorageUrl } from "./googleSpeechCloud";
 import { runWebSearch, type SearchResultItem } from "./webSearch";
+import {
+  tryHandleProjectTurn,
+  type ProjectDraftPayload,
+} from "./projects";
 
 // Declared so Firebase binds the secret into process.env.GEMINI_API_KEY
 // at runtime; we still read it via process.env per the integration spec.
@@ -48,7 +52,7 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const geminiEndpoint =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-export const __version = "v68_ai_reminder_persist_intent_en";
+export const __version = "v69_chat_projects";
 
 async function fetchGeminiGenerateContentWithRetry(
   geminiKey: string,
@@ -214,6 +218,8 @@ type AivyProcessResponse = {
   data?: AivyDataPayload;
   /** When true, clients may show a dispatch confirmation chip. */
   showBadge?: boolean;
+  /** Confirmable project extract — client must save before Firestore write. */
+  projectDraft?: ProjectDraftPayload;
 };
 
 type AivyDataIntent =
@@ -235,6 +241,10 @@ type AivyPgplIntent =
   | "select_order_for_dispatch"
   | "manual_payment_reminder"
   | "order_payment_received"
+  | "project_extract"
+  | "project_query"
+  | "project_today"
+  | "project_update"
   | "general";
 
 type AivyProcessIntent = AivyPgplIntent | AivyDataIntent;
@@ -2655,6 +2665,56 @@ export const aivyProcess = onCall(
             romanGeminiKey,
           );
         }
+      }
+
+      const projectTurn = await tryHandleProjectTurn({
+        uid,
+        text: effectiveText,
+        clock: {
+          timezone: timeContext.timezone,
+          nowIso: timeContext.nowIso,
+        },
+        geminiKey: process.env.GEMINI_API_KEY || "",
+      });
+      if (projectTurn) {
+        const intent: AivyPgplIntent =
+          projectTurn.mode === "extract"
+            ? "project_extract"
+            : projectTurn.mode === "query"
+              ? "project_query"
+              : projectTurn.mode === "today"
+                ? "project_today"
+                : "project_update";
+        const projectResp: AivyProcessResponse = {
+          ...pgplFields({ intent }),
+          contextType: "task",
+          category: "work",
+          memoryCategory: "task",
+          clientName: projectTurn.projectDraft?.client ?? "",
+          summary: projectTurn.userReply,
+          keyPoints: [],
+          actionItems: [],
+          followUpSuggestions: [],
+          reminderSuggestions: [],
+          assistantReply: projectTurn.userReply,
+          userReply: projectTurn.userReply,
+          data: projectTurn.data,
+          projectDraft: projectTurn.projectDraft,
+        };
+        logger.info("aivyProcess completed (project turn)", {
+          uid,
+          mode: projectTurn.mode,
+          items: projectTurn.projectDraft?.items.length ?? 0,
+        });
+        return finalizeAivyResponse(
+          uid,
+          effectiveUserProfile,
+          sessionMemoryLines,
+          effectiveText,
+          projectResp,
+          transcript,
+          romanGeminiKey,
+        );
       }
 
       const paidManual = await tryManualCollectionReminder(

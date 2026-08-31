@@ -12,6 +12,7 @@ import '../data/aivy_process_service.dart';
 import '../data/chat_flow_state.dart';
 import '../data/chat_repository.dart';
 import '../models/chat_message.dart';
+import '../../projects/application/project_cloud_confirm.dart';
 import 'widgets/category_selector_bottom_sheet.dart';
 import 'widgets/subcategory_selector_bottom_sheet.dart';
 
@@ -377,6 +378,17 @@ class ControlledFlowCoordinator {
           text,
           clientIntent: ci == null || ci.isEmpty ? null : ci,
         );
+        final applied = await ProjectCloudConfirm.tryApply(
+          ai: ai,
+          userId: userId,
+          chatId: chatId,
+          entryId: entryId,
+          repository: repository,
+          state: flow.stateService,
+        );
+        if (applied) {
+          return;
+        }
         final ttsUrl = await AssistantGoogleVoiceCompletion.maybeSynthesizeTtsUrl(
           voice: googleVoice,
           response: ai,

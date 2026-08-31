@@ -17,6 +17,9 @@ import '../../chat/utils/aivy_response_formatter.dart';
 import '../../clients/data/client_repository.dart';
 import '../../clients/models/client.dart';
 import '../../payments/data/payment_repository.dart';
+import '../../projects/data/project_repository.dart';
+import '../../projects/models/project_models.dart';
+import '../../projects/utils/project_confirm.dart';
 import '../../reminders/data/reminder_repository.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../models/client_insights_summary.dart';
@@ -37,13 +40,13 @@ class DashboardScreen extends StatefulWidget {
     required this.userId,
     this.activeChatId,
     this.onOpenChat,
-    this.onOpenMeetings,
+    this.onOpenProjects,
   });
 
   final String userId;
   final String? activeChatId;
   final VoidCallback? onOpenChat;
-  final VoidCallback? onOpenMeetings;
+  final VoidCallback? onOpenProjects;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -58,6 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   late final ClientRepository _clients;
   late final PaymentRepository _payments;
   late final ReminderRepository _reminders;
+  late final ProjectRepository _projects;
   late UserTextPipeline _textPipeline;
   late final TextEditingController _inputController;
   late final FocusNode _inputFocus;
@@ -90,6 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
     _reminders = ReminderRepository();
+    _projects = ProjectRepository();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_aivyProcess.syncClientStats());
       unawaited(_aivyProcess.fetchDashboardStats());
@@ -682,7 +687,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         _fadeSlide(
                           index: 0,
                           child: DashboardHeader(
-                            onMeetingsPressed: widget.onOpenMeetings,
+                            onProjectsPressed: widget.onOpenProjects,
                             onNotificationsPressed: () {},
                             onProfilePressed: () {},
                           ),
@@ -746,34 +751,68 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       startOfToday,
                                     );
 
-                                    final loading =
-                                        !qSnap.hasData ||
-                                        !rSnap.hasData ||
-                                        !fSnap.hasData;
-
-                                    if (qSnap.hasError) {
-                                      return Text('${qSnap.error}');
-                                    }
-                                    if (rSnap.hasError) {
-                                      return Text('${rSnap.error}');
-                                    }
-                                    if (fSnap.hasError) {
-                                      return Text('${fSnap.error}');
-                                    }
-
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        if (loading)
-                                          const Center(
-                                            child: Padding(
-                                              padding: EdgeInsets.all(24),
-                                              child:
-                                                  CircularProgressIndicator(),
+                                    return StreamBuilder<List<ProjectItemRecord>>(
+                                      stream: _projects.watchOpenItems(
+                                        widget.userId,
+                                      ),
+                                      builder: (context, pSnap) {
+                                        final projectToday = todayProjectRows(
+                                          openItems:
+                                              pSnap.data ??
+                                              const <ProjectItemRecord>[],
+                                          startOfToday: startOfToday,
+                                          startOfTomorrow: startOfTomorrow,
+                                        );
+                                        final projectGlance = [
+                                          for (final i in projectToday)
+                                            TodayGlanceRow(
+                                              title:
+                                                  '${i.projectName}: ${i.title}',
+                                              timeLabel: i.status ==
+                                                      'waiting_on_them'
+                                                  ? 'Waiting on them'
+                                                  : (i.dueAtMs == null
+                                                      ? 'Today'
+                                                      : _timeFormat.format(
+                                                          DateTime.fromMillisecondsSinceEpoch(
+                                                            i.dueAtMs!,
+                                                          ),
+                                                        )),
+                                              indicatorColor:
+                                                  i.status == 'waiting_on_them'
+                                                  ? const Color(0xFFF97316)
+                                                  : const Color(0xFFA78BFA),
                                             ),
-                                          )
-                                        else ...[
+                                        ];
+
+                                        final loading =
+                                            !qSnap.hasData ||
+                                            !rSnap.hasData ||
+                                            !fSnap.hasData;
+
+                                        if (qSnap.hasError) {
+                                          return Text('${qSnap.error}');
+                                        }
+                                        if (rSnap.hasError) {
+                                          return Text('${rSnap.error}');
+                                        }
+                                        if (fSnap.hasError) {
+                                          return Text('${fSnap.error}');
+                                        }
+
+                                        return Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (loading)
+                                              const Center(
+                                                child: Padding(
+                                                  padding: EdgeInsets.all(24),
+                                                  child:
+                                                      CircularProgressIndicator(),
+                                                ),
+                                              )
+                                            else ...[
                                           LayoutBuilder(
                                             builder: (context, constraints) {
                                               final w = constraints.maxWidth;
@@ -1148,12 +1187,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                                           _fadeSlide(
                                             index: 5,
                                             child: TodayAtGlanceList(
-                                              todayReminders: todayReminderRows,
+                                              todayReminders: [
+                                                ...todayReminderRows,
+                                                ...projectGlance,
+                                              ],
                                               overdueFollowUps: overdueRows,
                                             ),
                                           ),
                                         ],
                                       ],
+                                    );
+                                      },
                                     );
                                   },
                                 );
@@ -1177,7 +1221,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 controller: _inputController,
                                 focusNode: _inputFocus,
                                 enabled: !_isHomeCommandBusy,
-                                onMic: _goChat,
                                 onSend: _submitHomeCommand,
                               ),
                               const SizedBox(height: 8),

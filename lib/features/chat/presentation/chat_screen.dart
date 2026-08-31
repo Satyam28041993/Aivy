@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+// Voice capture methods stay in this file but are unwired from the composer.
+// ignore_for_file: unused_element
+
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1054,7 +1057,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_isNativeDictating || _handsFreeListening) _buildDictationStrip(),
                       StreamBuilder<ChatFlowState>(
                         stream:
                             _repository.watchChatFlowState(widget.userId),
@@ -1235,7 +1237,7 @@ class _ChatScreenState extends State<ChatScreen> {
       controller: _textController,
       focusNode: _inputFocus,
       enabled: !_isSending && !_controlledFlow.confirmSaveBusy.value,
-      hintText: 'Type anything: meeting notes, reminders, tasks...',
+      hintText: 'Type anything: project notes, reminders, tasks...',
       onSend: () {
         if (_isSending) {
           return;
@@ -1244,10 +1246,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _sendMessage();
         }
       },
-      onMicDown: _onMicDown,
-      onMicUp: _onMicUp,
-      onHandsFreeTap: kIsWeb ? null : _toggleHandsFreeVoice,
-      handsFreeListening: _handsFreeListening,
     );
   }
 }

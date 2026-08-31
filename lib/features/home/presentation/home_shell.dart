@@ -4,15 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../../chat/data/chat_repository.dart';
 import '../../chat/presentation/chat_screen.dart';
-import '../../chat/presentation/meeting_recorder_screen.dart';
 import '../../dashboard/data/agent_nudge_service.dart';
 import '../../dashboard/data/passive_nudge_coordinator.dart';
 import '../../dashboard/models/agent_insights.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../dashboard/presentation/reports_screen.dart';
+import '../../projects/presentation/projects_browse_screen.dart';
 import '../../whatsapp/data/whatsapp_inbox_repository.dart';
 import '../../whatsapp/presentation/whatsapp_conversations_screen.dart';
-import 'aivy_voice_home_screen.dart';
 import 'more_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -141,21 +140,14 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openChatTab() {
     setState(() {
-      _currentIndex = 1;
+      _currentIndex = 0;
     });
   }
 
-  void _openMeetings() {
-    final chatId = _activeChatId;
-    if (chatId == null) {
-      return;
-    }
+  void _openProjects() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => MeetingRecorderScreen(
-          userId: widget.userId,
-          activeChatId: chatId,
-        ),
+        builder: (context) => ProjectsBrowseScreen(userId: widget.userId),
       ),
     );
   }
@@ -164,15 +156,14 @@ class _HomeShellState extends State<HomeShell> {
     final theme = Theme.of(context);
     switch (_currentIndex) {
       case 0:
-      case 1:
-      case 3:
-        return null;
       case 2:
+        return null;
+      case 1:
         return AppBar(
           title: const Text('WhatsApp Inbox'),
           backgroundColor: theme.colorScheme.surface,
         );
-      case 4:
+      case 3:
         return AppBar(
           title: const Text('Reports'),
           backgroundColor: theme.colorScheme.surface,
@@ -186,7 +177,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         );
-      case 5:
+      case 4:
       default:
         return AppBar(
           title: const Text('More'),
@@ -198,12 +189,9 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isVoiceHome = _currentIndex == 0;
-    final isChat = _currentIndex == 1;
-    final isJarvisNav = isVoiceHome || isChat;
+    final isChat = _currentIndex == 0;
 
     final screens = [
-      AivyVoiceHomeScreen(userId: widget.userId),
       ChatScreen(
         userId: widget.userId,
         activeChatId: _activeChatId,
@@ -219,7 +207,7 @@ class _HomeShellState extends State<HomeShell> {
         userId: widget.userId,
         activeChatId: _activeChatId,
         onOpenChat: _openChatTab,
-        onOpenMeetings: _openMeetings,
+        onOpenProjects: _openProjects,
       ),
       ReportsScreen(
         key: ValueKey<int>(_reportsResyncTick),
@@ -230,8 +218,8 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
-      extendBodyBehindAppBar: isVoiceHome || _currentIndex == 3,
-      backgroundColor: (isChat || isVoiceHome)
+      extendBodyBehindAppBar: _currentIndex == 2,
+      backgroundColor: isChat
           ? const Color(0xFF030712)
           : theme.scaffoldBackgroundColor,
       appBar: _buildAppBar(context),
@@ -247,14 +235,14 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor: isJarvisNav
+          backgroundColor: isChat
               ? const Color(0xFF0E0E14)
               : theme.colorScheme.surface,
-          indicatorColor: isJarvisNav
+          indicatorColor: isChat
               ? const Color(0xFF6366F1).withValues(alpha: 0.35)
               : theme.colorScheme.secondaryContainer,
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (!isJarvisNav) {
+            if (!isChat) {
               return theme.textTheme.labelMedium;
             }
             if (states.contains(WidgetState.selected)) {
@@ -269,7 +257,7 @@ class _HomeShellState extends State<HomeShell> {
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final base = theme.iconTheme;
-            if (!isJarvisNav) {
+            if (!isChat) {
               return base.copyWith(color: theme.colorScheme.onSurfaceVariant);
             }
             if (states.contains(WidgetState.selected)) {
@@ -287,11 +275,6 @@ class _HomeShellState extends State<HomeShell> {
             });
           },
           destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
             NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline),
               selectedIcon: Icon(Icons.chat_bubble),

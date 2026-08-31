@@ -5,10 +5,12 @@ import 'assistant_google_voice_completion.dart';
 import 'controlled_chat_flow.dart';
 import '../data/aivy_process_service.dart';
 import '../data/chat_repository.dart';
+import '../data/chat_state_service.dart';
 import '../models/aivy_ai_response.dart';
 import '../utils/aivy_response_formatter.dart';
 import '../utils/intent_detection.dart';
 import '../utils/smart_command_expand.dart';
+import '../../projects/application/project_cloud_confirm.dart';
 import '../../reminders/utils/reminder_context_parser.dart';
 
 /// Shared text-message routing used by [ChatScreen] and the Home dashboard.
@@ -125,6 +127,17 @@ class UserTextPipeline {
       text,
       clientIntent: routedIntent?.name,
     );
+    final applied = await ProjectCloudConfirm.tryApply(
+      ai: aiResponse,
+      userId: userId,
+      chatId: chatId,
+      entryId: entryId,
+      repository: _repository,
+      state: ChatStateService(),
+    );
+    if (applied) {
+      return;
+    }
     final ttsUrl = await AssistantGoogleVoiceCompletion.maybeSynthesizeTtsUrl(
       voice: _googleVoice,
       response: aiResponse,

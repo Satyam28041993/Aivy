@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// Top row: branding, optional meetings action, notifications, profile.
+/// Top row: branding, optional projects action, notifications, profile.
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
-    this.onMeetingsPressed,
+    this.onProjectsPressed,
     this.onNotificationsPressed,
     this.onProfilePressed,
     this.hasNotificationDot = true,
   });
 
-  final VoidCallback? onMeetingsPressed;
+  final VoidCallback? onProjectsPressed;
   final VoidCallback? onNotificationsPressed;
   final VoidCallback? onProfilePressed;
   final bool hasNotificationDot;
@@ -59,11 +59,11 @@ class DashboardHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (onMeetingsPressed != null)
+          if (onProjectsPressed != null)
             IconButton(
-              onPressed: onMeetingsPressed,
-              tooltip: 'Meetings',
-              icon: const Icon(Icons.mic_rounded),
+              onPressed: onProjectsPressed,
+              tooltip: 'Projects',
+              icon: const Icon(Icons.account_tree_outlined),
             ),
           IconButton(
             onPressed: onNotificationsPressed,

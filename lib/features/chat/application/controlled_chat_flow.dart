@@ -8,6 +8,8 @@ import '../../contacts/data/contact_service.dart';
 import '../../dashboard/models/order_record.dart';
 import '../../payments/data/payment_repository.dart';
 import '../../payments/models/payment_record.dart';
+import '../../projects/utils/project_confirm.dart';
+import '../../projects/utils/project_intent.dart';
 import '../../reminders/data/reminder_repository.dart';
 import '../../reminders/utils/reminder_time_parser.dart';
 import '../../structured_actions/data/structured_action_repository.dart';
@@ -938,6 +940,12 @@ class ControlledChatFlow {
         return ProcessResult.categoryFlow(getGreeting());
       }
 
+      if (looksLikeProjectTurn(t)) {
+        _log('INTENT', 'project');
+        _logCloudFallbackBlockCheck('idle_branch_cloudRun_project', flow);
+        return ProcessResult.cloudRun(t, intent: 'query');
+      }
+
       final recvDirect = tryParsePaymentReceivedDirect(t);
       if (recvDirect != null) {
         final res =
@@ -1358,7 +1366,12 @@ class ControlledChatFlow {
     if (low == 'edit' || low == '2' || low == 'badlo') {
       final fcidEdit = (m['flowCategoryId'] as String? ?? '').trim();
       late final String editMsg;
-      if (fcidEdit == 'reminder_task') {
+      if (fcidEdit == kProjectFlowCategoryId) {
+        editMsg = 'Kya badalna hai?\n\n'
+            '• Project naam: “naam Pune”\n'
+            '• Client: “client Sharma”\n'
+            '• Item: “item 2 waiting on them” ya “item 1 Tuesday”';
+      } else if (fcidEdit == 'reminder_task') {
         editMsg = 'Kya badalna hai?\n\n'
             '1. Task\n'
             '2. Deadline\n'

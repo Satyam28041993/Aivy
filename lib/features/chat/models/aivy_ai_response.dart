@@ -18,6 +18,7 @@ class AivyAiResponse {
     this.createdTaskIds = const [],
     this.data,
     this.showBadge = false,
+    this.projectDraft,
   });
 
   /// Backend PGPL / rule classifier: `job_new`, `job_dispatch`, `order_create`,
@@ -59,6 +60,9 @@ class AivyAiResponse {
   /// When true, UI may show a dispatch confirmation chip (e.g. after order dispatch).
   final bool showBadge;
 
+  /// Confirmable project extract from `aivyProcess` (`project_extract`).
+  final Map<String, dynamic>? projectDraft;
+
   factory AivyAiResponse.fromJson(Map<String, dynamic> json) {
     final summary = (json['summary'] as String? ?? '').trim();
     final keyPoints = _readStringList(json['keyPoints']);
@@ -86,6 +90,16 @@ class AivyAiResponse {
         ? Map<String, dynamic>.from(dataRaw)
         : null;
     final showBadge = json['showBadge'] == true;
+    Map<String, dynamic>? projectDraft;
+    final pdRaw = json['projectDraft'];
+    if (pdRaw is Map) {
+      projectDraft = Map<String, dynamic>.from(pdRaw);
+    } else if (dataMap != null && dataMap['items'] is List) {
+      final kind = dataMap['analyticsKind']?.toString();
+      if (kind == 'project_extract' || dataMap['projectDraft'] == true) {
+        projectDraft = Map<String, dynamic>.from(dataMap);
+      }
+    }
 
     return AivyAiResponse(
       contextType: (json['contextType'] as String? ?? 'note').trim(),
@@ -108,6 +122,7 @@ class AivyAiResponse {
       createdTaskIds: createdTaskIds,
       data: dataMap,
       showBadge: showBadge,
+      projectDraft: projectDraft,
     );
   }
 
@@ -136,6 +151,7 @@ class AivyAiResponse {
       if (createdTaskIds.isNotEmpty) 'createdTaskIds': createdTaskIds,
       if (data != null) 'data': data,
       if (showBadge) 'showBadge': true,
+      if (projectDraft != null) 'projectDraft': projectDraft,
     };
   }
 
@@ -159,6 +175,10 @@ class AivyAiResponse {
       'dispatches_today',
       'total_orders_month',
       'quotation_value_today',
+      'project_extract',
+      'project_query',
+      'project_today',
+      'project_update',
     };
     if (valid.contains(v)) {
       return v;

@@ -7,6 +7,8 @@ import '../../reminders/data/reminder_repository.dart';
 import '../../reminders/data/reminder_save_validator.dart';
 import '../../reminders/utils/reminder_doc_classification.dart';
 import '../../reminders/utils/reminder_time_parser.dart';
+import '../../projects/data/project_repository.dart';
+import '../../projects/utils/project_confirm.dart';
 import '../../structured_actions/data/structured_action_repository.dart';
 import '../../structured_actions/models/structured_action.dart';
 import '../../structured_actions/utils/name_normalize.dart';
@@ -99,17 +101,20 @@ class FlowSaveRouter {
     ReminderRepository? reminders,
     PaymentRepository? payments,
     ChatRepository? ledger,
+    ProjectRepository? projects,
   })  : _structured = structured ?? StructuredActionRepository(),
         _reminders = reminders ?? ReminderRepository(),
         _payments = payments ?? PaymentRepository(),
         _ledger = ledger,
-        _orders = ledger ?? ChatRepository();
+        _orders = ledger ?? ChatRepository(),
+        _projects = projects ?? ProjectRepository();
 
   final StructuredActionRepository _structured;
   final ReminderRepository _reminders;
   final PaymentRepository _payments;
   final ChatRepository? _ledger;
   final ChatRepository _orders;
+  final ProjectRepository _projects;
 
   static String? _ledgerSourceCollection(String? lastActionType) {
     switch (lastActionType) {
@@ -126,6 +131,8 @@ class FlowSaveRouter {
       case 'quotation_created':
       case 'quotation_followup_updated':
         return 'quotations';
+      case 'project_items_created':
+        return 'project_items';
       default:
         return null;
     }
@@ -236,6 +243,8 @@ class FlowSaveRouter {
       outcome = await _savePersonalTaskReminder(userId, confirmMap);
     } else if (fcid == 'personal_birthday') {
       outcome = await _savePersonalBirthdayReminders(userId, confirmMap);
+    } else if (fcid == kProjectFlowCategoryId) {
+      outcome = await _saveProjectItems(userId, confirmMap);
     } else {
       outcome = await _saveStructuredCrm(
         userId: userId,
@@ -246,6 +255,94 @@ class FlowSaveRouter {
 
     await _persistLedger(userId, confirmMap, outcome);
     return outcome;
+  }
+
+  Future<FlowSaveOutcome> _saveProjectItems(
+    String userId,
+    Map<String, dynamic> m,
+  ) async {
+    final items = projectItemsFromMap(m);
+    if (items.isEmpty) {
+      return const FlowSaveOutcome(
+        message: 'Koi project item nahi mila — dump dubara bhejo.',
+      );
+    }
+    final name =
+        (m['projectName'] as String? ?? m['name'] as String? ?? '').trim();
+    if (name.isEmpty) {
+      return const FlowSaveOutcome(
+        message: 'Project naam missing — Edit karke naam likho.',
+      );
+    }
+    final client = (m['client'] as String? ?? '').trim();
+    final existingId = (m['projectId'] as String? ?? '').trim();
+    var project = existingId.isNotEmpty
+        ? await _projects.getProject(userId, existingId)
+        : await _projects.findByNameOrClient(userId, name);
+    project ??= await _projects.createProject(
+      uid: userId,
+      name: name,
+      client: client,
+      notes: (m['sourceText'] as String? ?? '').trim(),
+    );
+
+    final saved = await _projects.addItems(
+      uid: userId,
+      project: project,
+      items: items,
+    );
+    var reminderCount = 0;
+    for (var i = 0; i < saved.length; i++) {
+      final item = saved[i];
+      final dueMs = item.dueAtMs ??
+          (items.length > i ? (items[i]['dueAtMs'] as num?)?.toInt() : null);
+      if (dueMs == null || dueMs <= 0) {
+        continue;
+      }
+      final waiting = item.waitingOn;
+      final isWait = item.status == 'waiting_on_them' || item.kind == 'followup';
+      final title = isWait
+          ? (waiting.isNotEmpty
+              ? '${project.name}: $waiting se ${item.title}'
+              : '${project.name}: ${item.title} (waiting on them)')
+          : '${project.name}: ${item.title}';
+      try {
+        final rid = await _reminders.createReminder(
+          userId: userId,
+          title: title,
+          scheduledAt: DateTime.fromMillisecondsSinceEpoch(dueMs),
+          type: isWait ? 'followup' : 'task',
+          subType: 'project_item',
+          note: item.notes.isNotEmpty ? item.notes : item.kind,
+          clientName: client.isNotEmpty ? client : project.name,
+          extraFields: {
+            'projectId': project.id,
+            'projectItemId': item.id,
+            'isFollowUp': isWait,
+          },
+        );
+        reminderCount++;
+        await _projects.setItemReminderId(
+          uid: userId,
+          itemId: item.id,
+          reminderId: rid,
+        );
+      } catch (e, st) {
+        debugPrint('FlowSaveRouter: project item reminder failed: $e\n$st');
+      }
+    }
+    final waitN =
+        saved.where((s) => s.status == 'waiting_on_them').length;
+    final bits = <String>[
+      '${project.name}: ${saved.length} items save ho gaye.',
+      if (waitN > 0) '$waitN waiting on them.',
+      if (reminderCount > 0) '$reminderCount reminder lagaye (same notifications).',
+    ];
+    return FlowSaveOutcome(
+      message: bits.join(' '),
+      lastActionId: project.id,
+      lastActionType: 'project_items_created',
+    );
   }
 
   Future<FlowSaveOutcome> _saveOrderNew(

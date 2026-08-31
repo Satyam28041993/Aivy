@@ -10,6 +10,7 @@ import '../../../core/notifications/notifications_screen.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/models/chat_session.dart';
 import '../../contacts/presentation/contacts_list_screen.dart';
+import '../../projects/presentation/projects_browse_screen.dart';
 import '../../whatsapp/data/whatsapp_inbox_repository.dart';
 import '../../whatsapp/presentation/whatsapp_coexistence_diagnostics_screen.dart';
 import '../../whatsapp/presentation/whatsapp_connect_screen.dart';
@@ -199,6 +200,19 @@ class _MoreScreenState extends State<MoreScreen> {
         ),
         const SizedBox(height: 12),
         ListTile(
+          leading: const Icon(Icons.account_tree_outlined),
+          title: const Text('Projects'),
+          subtitle: const Text('Browse threads — create and update via Chat'),
+          onTap: () {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (context) =>
+                    ProjectsBrowseScreen(userId: widget.userId),
+              ),
+            );
+          },
+        ),
+        ListTile(
           leading: const Icon(Icons.notifications_outlined),
           title: const Text('In-app notifications'),
           subtitle: const Text('Payment reminders and follow-ups from the server'),
@@ -222,23 +236,6 @@ class _MoreScreenState extends State<MoreScreen> {
                 snap.connectionState == ConnectionState.waiting && !snap.hasData
                     ? 'Loading…'
                     : '$n threads',
-              ),
-            );
-          },
-        ),
-        StreamBuilder(
-          stream: _repo.watchMeetingSessions(widget.userId, limit: 20),
-          builder: (context, snap) {
-            final list = snap.data ?? const [];
-            return ListTile(
-              leading: const Icon(Icons.mic_none_rounded),
-              title: const Text('Meeting sessions'),
-              subtitle: Text(
-                snap.connectionState == ConnectionState.waiting && !snap.hasData
-                    ? 'Loading…'
-                    : list.isEmpty
-                    ? 'None yet — record a meeting from Home'
-                    : '${list.length} recent (live)',
               ),
             );
           },

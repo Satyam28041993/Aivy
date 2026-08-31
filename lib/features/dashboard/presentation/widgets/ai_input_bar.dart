@@ -229,11 +229,9 @@ class _AiInputBarState extends State<AiInputBar> {
                       ),
                     ),
                   )
-                else
+                else if (widget.onMic != null)
                   IconButton(
-                    onPressed: widget.enabled && widget.onMic != null
-                        ? widget.onMic
-                        : null,
+                    onPressed: widget.enabled ? widget.onMic : null,
                     tooltip: 'Voice',
                     icon: Icon(
                       Icons.mic_rounded,
