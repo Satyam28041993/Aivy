@@ -355,9 +355,14 @@ function readDay(
     }
   }
 
-  // "2 din baad" / "do din ke baad" / "after 3 days" / "3 din pehle"
+  // "2 din baad" / "do din ke baad" / "2 din me" / "3 din pehle"
+  //
+  // "me" and "tak" belong here as much as "baad" does. A deadline is nearly
+  // always said as "2 din me" or "2 din tak", not "2 din baad", and leaving
+  // them out meant the commonest way of giving a deadline resolved to no date
+  // at all.
   const relDays = hint.match(
-    /\b([a-z]+|\d{1,3})\s*din\s*(?:ke\s*)?(baad|bad|pehle|pahle)\b/,
+    /\b([a-z]+|\d{1,3})\s*dino?n?\s*(?:ke\s*)?(baad|bad|me|mein|mai|main|andar|tak|pehle|pahle)\b/,
   );
   if (relDays) {
     const n = wordOrDigitCount(relDays[1]!);
@@ -367,7 +372,7 @@ function readDay(
       return { date: dt.startOf("day"), matched: "relative_days" };
     }
   }
-  const afterDays = hint.match(/\bafter\s+(\d{1,3})\s*days?\b/);
+  const afterDays = hint.match(/\b(?:in|within|after)\s+(\d{1,3})\s*days?\b/);
   if (afterDays) {
     const n = parseInt(afterDays[1]!, 10);
     if (n > 0) {
@@ -391,6 +396,27 @@ function readDay(
   }
   if (/\b(is|isi|this)\s*(hafte|hafta|week)\b/.test(hint)) {
     return { date: now.startOf("day"), matched: "this_week" };
+  }
+
+  // "2 hafte me" / "do hafte baad" / "in 3 weeks" — the same shape as days.
+  // Checked after "agle hafte" so that phrase keeps its own reading.
+  const relWeeks = hint.match(
+    /\b([a-z]+|\d{1,3})\s*(?:hafte|hafta|hafton|weeks?)\s*(?:ke\s*)?(baad|bad|me|mein|mai|main|andar|tak|pehle|pahle)\b/,
+  );
+  if (relWeeks) {
+    const n = wordOrDigitCount(relWeeks[1]!);
+    if (n != null && n > 0) {
+      const backwards = /pehle|pahle/.test(relWeeks[2]!);
+      const dt = backwards ? now.minus({ weeks: n }) : now.plus({ weeks: n });
+      return { date: dt.startOf("day"), matched: "relative_weeks" };
+    }
+  }
+  const afterWeeks = hint.match(/\b(?:in|within|after)\s+(\d{1,3})\s*weeks?\b/);
+  if (afterWeeks) {
+    const n = parseInt(afterWeeks[1]!, 10);
+    if (n > 0) {
+      return { date: now.plus({ weeks: n }).startOf("day"), matched: "relative_weeks" };
+    }
   }
 
   // "agle mahine" / "pichhle mahine"

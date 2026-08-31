@@ -150,6 +150,44 @@ describe("newly supported phrases", () => {
   });
 });
 
+/**
+ * How a deadline actually gets said.
+ *
+ * "2 din baad" was understood; "2 din me" was not, and "2 din me" is what a
+ * person says when a director gives them two days. The phrase resolved to no
+ * date at all, so the task saved with no deadline and no reminder while the
+ * reply claimed it had one.
+ */
+describe("deadlines said as a span of time", () => {
+  it("reads '2 din me' the same as '2 din baad'", () => {
+    expect(local(resolve("2 din me").iso)!.day).toBe(25);
+    expect(local(resolve("2 din mein").iso)!.day).toBe(25);
+    expect(local(resolve("do din me").iso)!.day).toBe(25);
+  });
+
+  it("reads 'tak' and 'andar' as the same deadline", () => {
+    expect(local(resolve("2 din tak").iso)!.day).toBe(25);
+    expect(local(resolve("2 din ke andar").iso)!.day).toBe(25);
+  });
+
+  it("reads the English forms", () => {
+    expect(local(resolve("in 2 days").iso)!.day).toBe(25);
+    expect(local(resolve("within 2 days").iso)!.day).toBe(25);
+    expect(local(resolve("after 2 days").iso)!.day).toBe(25);
+  });
+
+  it("still reads backwards for 'pehle'", () => {
+    expect(local(resolve("2 din pehle", { tense: "past" }).iso)!.day).toBe(21);
+  });
+
+  it("reads weeks the same way", () => {
+    expect(local(resolve("2 hafte me").iso)!.day).toBe(6);
+    expect(local(resolve("in 2 weeks").iso)!.day).toBe(6);
+    // "agle hafte" keeps its own meaning and is not read as a count.
+    expect(local(resolve("agle hafte").iso)!.day).toBe(30);
+  });
+});
+
 describe("phrases the old parser already handled", () => {
   it("resolves relative day counts", () => {
     expect(local(resolve("2 din baad").iso)!.day).toBe(25);

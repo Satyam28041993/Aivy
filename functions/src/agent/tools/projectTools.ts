@@ -258,6 +258,16 @@ export async function createTaskTool(
         period: (str(args.day_period) || undefined) as DayPeriod | undefined,
       })
     : null;
+  // A phrase that could not be read must not become "no deadline". The card
+  // would say one thing while the reply said another — which is exactly what
+  // happened with "2 din me": the model announced a deadline, the card showed
+  // none, and the task saved without the reminder that was the whole point.
+  if (phrase && when?.epochMs == null) {
+    return fail(
+      "needs_detail",
+      `I could not work out when "${phrase}" is — give me a date or a number of days.`,
+    );
+  }
   const dueMs = when?.epochMs ?? 0;
 
   const nowMs = Date.parse(ctx.nowIso) || Date.now();
@@ -368,12 +378,25 @@ export async function addProjectItemsTool(
         dueMs: when?.epochMs ?? 0,
         whenLabel: when?.label ?? "",
         note: str(r.note),
+        /** They gave a date for this one, whether or not it could be read. */
+        gaveDate: phrase.length > 0,
       };
     })
     .filter((r) => r.title.length > 0);
 
   if (parsed.length === 0) {
     return fail("needs_detail", "None of those had anything to do — say them again?");
+  }
+
+  // Same rule as create_task: a date that could not be read is said out loud,
+  // not quietly dropped. An item silently losing its date loses its reminder,
+  // and nothing on the card shows that it happened.
+  const unreadable = parsed.filter((p) => p.gaveDate && p.dueMs === 0).map((p) => p.title);
+  if (unreadable.length > 0) {
+    return fail(
+      "needs_detail",
+      `I could not work out the date for: ${unreadable.join(", ")}. When are those due?`,
+    );
   }
 
   const lines: DraftCardLine[] = parsed.map((p) => ({
