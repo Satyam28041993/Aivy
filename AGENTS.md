@@ -1,62 +1,114 @@
-# AGENTS.md
+# Aivy — working agreement
 
-## Cursor Cloud specific instructions
+One file, read by every assistant that touches this repo: Claude Code reads it
+through `CLAUDE.md`, Cursor reads it directly. **Whoever finishes a piece of work
+updates the "Where things stand" section below before pushing.** That is the
+whole mechanism — it only works if it is done every time.
 
-Aivy is a **Flutter** app (root: `lib/`, targets Android + Flutter Web) with a
-**Firebase Cloud Functions** backend (`functions/`, TypeScript, Node 22). The
-client talks to a live Firebase project (`aivy-5c031`); there is no Firebase
-emulator config in `firebase.json`.
+## Rule zero: branch from the live branch
 
-### Toolchain (already provisioned in the VM snapshot)
-- Flutter SDK (stable) is installed at `~/flutter` and added to `PATH` via
-  `~/.bashrc`. If `flutter` is not found in a non-interactive shell, use the
-  absolute path `~/flutter/bin/flutter`.
-- Node 22 (via nvm) and Java 21 are preinstalled. The update script runs
-  `npm install` in `functions/` and `flutter pub get` at the root.
+Active branch: **`claude/page-voice-process-review-enhkhh`**
 
-### Lint / test / build / run
-- Backend (`functions/`): `npm run build` (tsc), `npm test` (Vitest, tests are
-  colocated `*.test.ts` in `src/`). See `functions/package.json` for all scripts.
-- Flutter app (root): `flutter analyze` (lint — currently reports pre-existing
-  info/warning issues but no errors), `flutter test`.
-- Run the app in dev mode for web: `flutter run -d web-server --web-port 8080
-  --web-hostname 0.0.0.0` (the web-server device compiles on first request, so
-  the first page load takes ~15-60s). A Chrome device is also available via
-  `flutter run -d chrome`.
+Start every task from that branch's head. Not from `main`, not from an older
+branch, not from whatever a tool opened last week.
 
-### Non-obvious gotchas
-- **Auth requires Google OAuth.** The README mentions "anonymous auth", but the
-  current code (`lib/core/auth/aivy_auth_controller.dart`) explicitly signs out
-  anonymous users. The only sign-in path is "Continue with Google", so
-  exercising any signed-in flow (chat, dashboard, reminders, payments) needs a
-  real Google account. There is no test/demo bypass.
-- **Backend secrets are not in the repo.** `GEMINI_API_KEY` (core AI, note: code
-  uses Google Gemini, not OpenAI despite the README) and optional integration
-  keys live in Firebase Secret Manager / `functions/.env` (gitignored). Vitest
-  tests do not need them, but deploying/running functions live does.
-- The app points at the live cloud project (no emulator), so deploying functions
-  or writing Firestore requires Firebase credentials that are not present by
-  default.
+This has already cost us once. A project feature was built on a base 55 commits
+behind; it was wired into a chat pipeline that had been deleted, and merging it
+would have brought the retired Chat screen back. The work was sound and had to
+be thrown away. Archived at commit `ae5e88e`, branch
+`cursor/chat-projects-no-voice-5a06` — delete that branch, do not merge it.
 
-### Exercising the live backend without Google OAuth
-Because the UI is Google-OAuth-only, the fastest way to test the deployed
-`aivyProcess` (and other callables) end-to-end is to mint an **anonymous**
-Firebase ID token directly (anonymous sign-in is enabled on the project even
-though the app signs anonymous users out), then call the callable over HTTPS:
+## The traps in this repo
 
-```bash
-API_KEY="AIzaSyD9kg-3Q5Etl9GQ_EJqvw2MQvyogCDeCqw"   # public web key (firebase_options.dart)
-ID_TOKEN=$(curl -s -X POST \
-  "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$API_KEY" \
-  -H "Content-Type: application/json" -d '{"returnSecureToken":true}' \
-  | python3 -c "import sys,json;print(json.load(sys.stdin)['idToken'])")
+Each of these cost real time. They are here so they cost it once.
 
-curl -s -X POST "https://us-central1-aivy-5c031.cloudfunctions.net/aivyProcess" \
-  -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
-  -d '{"data":{"text":"Remind me to call Sam tomorrow at 5pm","timezone":"UTC","nowIso":"2026-01-01T00:00:00.000Z"}}'
-```
+**Deploying without the server.** `Deploy Web` has a `deploy_functions` input.
+It now defaults to true, but if you dispatch the workflow by API, pass it
+explicitly. A run that skips the functions still reports success, because a
+skipped step is not a failed one — so hosting updates, the server does not, and
+nothing says so.
 
-The callable request body must be wrapped in `{"data":{...}}` and the response
-comes back as `{"result":{...}}`. `aivyProcess` only checks that a request is
-authenticated (`request.auth`), so an anonymous token is sufficient. This hits
-live Gemini + Firestore under a throwaway anonymous uid.
+**A new callable is created private.** The Firebase CLI sets a callable's
+invoker policy only when it *creates* the function. Add every new callable to
+the `for svc in ...` list in `.github/workflows/deploy-web.yml`, or it will be
+unreachable and the browser will report it as a CORS error.
+
+**Notification channels are immutable.** Android fixes a channel's settings at
+creation. The live channel is `aivy_reminders_v3` and it deliberately has **no
+custom sound** — `v2` named a raw resource, and a channel whose sound will not
+resolve accepts notifications and shows nothing. If a channel must change,
+change its id.
+
+**Android needs one keystore.** `android/app/aivy-debug.keystore` is committed
+on purpose and is what every build signs with. Google sign-in is registered
+against its fingerprint. Do not regenerate it.
+
+**Firestore rejects `undefined`.** Not "ignores" — rejects, and the write throws.
+Omit the key instead. `stripUndefined` in `chatStore.ts` guards the chat path;
+nothing guards the others.
+
+**Gmail is Android-only.** The server holds no Google refresh token — only the
+access token the app forwards with a request. So nothing on a schedule can read
+Gmail, and the web build cannot read it at all. The morning brief is built when
+the app opens for this reason, not because a cron would have been harder.
+
+## How the app is put together
+
+- **`aivyAgent`** is the live pipeline: Gemini function-calling over the tools in
+  `functions/src/agent/toolRegistry.ts`. Writes create a draft; nothing is saved
+  until the user confirms the card. `aivyProcess` is the older chat pipeline,
+  still deployed, not where new work goes.
+- **Tabs**: Aivy · Today · Records · More. The voice home, the old Chat screen
+  and the WhatsApp screens were removed; WhatsApp's *backend* still runs.
+- **Design**: `lib/core/design/aivy_ui.dart`. Use `AivyCard`, `AivySectionHeader`,
+  `AivyPill`. Colour carries meaning — red late, amber a decision, green settled,
+  violet Aivy. A screen that reaches for `Theme.of(context)` defaults will look
+  like a different app.
+- **Reminders** are the one delivery path. Anything with a date should become a
+  reminder rather than growing a second mechanism: the phone alarm and the
+  server push both already work off them.
+- **Language**: the app and Aivy's replies are English. The user writes Hinglish.
+  The morning brief's news and Google Alerts sections are Hindi, deliberately.
+
+## Where things stand
+
+_Last updated: after adding projects (server side)._
+
+**Working and tested in the live app**
+
+- Reminders — created by talking, alarm on the phone, push with the app closed
+- Morning brief on Today — mail, news (Hindi), Google Alerts by term (Hindi),
+  today's commitments; built once a day on open, pull-to-refresh rebuilds
+- Occasions — birthdays and anniversaries, warned 15/10/5/1 days ahead and on
+  the day, every year
+- Saved places, Maps search and directions, live location
+- Google: Calendar, Gmail, Sheets, Contacts — Android only
+- Dashboard and Records, dark throughout
+
+**Just built, not yet exercised by the user**
+
+- **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
+  A project holds whatever that job needs — no fixed pipeline, because every job
+  is shaped differently. Items carry a kind, a date and a status, and
+  `waiting_on_them` is a first-class state: half this trade is waiting on a
+  client, and calling that "pending" makes both the feeling and the answer wrong.
+  Dated items become reminders. Works entirely through chat.
+
+**Known gaps — pick these up next**
+
+- **Projects has no screen.** Everything works by talking; there is nothing to
+  browse. Build it browse-only: creating and editing stay in chat, or the same
+  data ends up half-written two different ways.
+- **Repeating reminders are not real.** "Every month on the 5th" sets one
+  reminder. The card says so honestly rather than pretending.
+- `functions/src/morning/money.ts` is **parked, not dead**. Bank and UPI parsing
+  with tests, removed from the brief at the user's request until the shape is
+  settled. Do not delete it; it is coming back.
+- `claude/git-pull-aro-fxj5gh` diverges from the active branch and will conflict.
+
+## Before you push
+
+- `cd functions && npx tsc --noEmit -p tsconfig.json && npx vitest run`
+- Flutter has no SDK in the Claude Code environment — CI is the only compiler.
+  `Checks` runs `flutter analyze` and `flutter test`; it fails on errors.
+- Update **Where things stand** above.
