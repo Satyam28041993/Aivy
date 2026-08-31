@@ -83,6 +83,33 @@ jobs:
           npm run build
           firebase deploy --only functions --project aivy-5c031 --non-interactive
 
+      # Functions whose source has gone stay deployed and keep answering.
+      #
+      # `firebase deploy --only functions --force` would delete anything missing
+      # from source automatically, and that is exactly what makes it wrong here:
+      # one forgotten export, one branch deployed by mistake, and a live callable
+      # is gone with no prompt. This repo has already lost days to a deploy step
+      # that did something invisible. So retirements are named, one at a time,
+      # and adding to this list is a deliberate act.
+      #
+      # The step is idempotent: a name that is already gone is reported and
+      # skipped, so it stays green after the first successful run. Once a name
+      # has been through a green deploy it can be dropped from the list.
+      - name: Delete retired functions
+        if: ${{ inputs.deploy_functions }}
+        run: |
+          for fn in aivyProcess markOrderDispatched aivyVoiceAsk elevenLabsTts \
+                    googleSpeechSynthesize userSendWhatsapp testWhatsapp \
+                    translateWaPreview; do
+            echo "--- $fn"
+            if firebase functions:delete "$fn" \
+                 --region us-central1 --project aivy-5c031 --force 2>&1; then
+              echo "deleted $fn"
+            else
+              echo "$fn was not there — nothing to do"
+            fi
+          done
+
       # The Firebase CLI only sets a callable's invoker policy when it *creates*
       # the function. These three were created by a deploy that could not set it,
       # so every later deploy is an update and silently leaves them private —

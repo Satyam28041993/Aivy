@@ -29,6 +29,13 @@ explicitly. A run that skips the functions still reports success, because a
 skipped step is not a failed one — so hosting updates, the server does not, and
 nothing says so.
 
+**Deleting a function from the source does not undeploy it.** It keeps
+answering, so an old callable can still reply to something that was meant to
+reach the new one. `Deploy Web` has a **Delete retired functions** step with a
+named list — add a name there when you retire a callable. It is deliberately
+not `firebase deploy --force`, which deletes anything missing from source: one
+forgotten export would take a live function with it, silently.
+
 **A new callable is created private.** The Firebase CLI sets a callable's
 invoker policy only when it *creates* the function. Add every new callable to
 the `for svc in ...` list in `.github/workflows/deploy-web.yml`, or it will be
@@ -90,12 +97,25 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after finishing the branch cleanup._
+_Last updated: after deleting the retired pipelines._
 
-The leftover remotes are gone — the six the user left for a decision, plus the
-cleanup-report copy that pointed at the same commit as live. `main` has been
-fast-forwarded to the live branch, so the working agreement and the old short
-environment file are no longer two different documents.
+The leftover remotes are gone and `main` has been fast-forwarded to the live
+branch, so the working agreement and the old short environment file are no
+longer two different documents.
+
+**12,228 lines of retired code deleted.** `aivyProcess.ts` (7,580) was the whole
+pre-agent chat pipeline; the only thing still reaching into it was
+`getUserMemory`, now `agent/userMemory.ts`. The voice callables
+(`aivyVoiceAsk`, `googleSpeechCloud`, `elevenLabsTts`) and the WhatsApp
+screens' send callables went with their screens — the WhatsApp *webhook*
+backend is untouched. `ChatRepository` went from 1,611 lines to 375: sixteen of
+its eighty members had a caller. Each deletion was decided by counting callers
+and following the call graph, not by reading names — `paymentSettlement`,
+`webSearch` and `readNudgeState` all looked equally orphaned and are all live.
+
+**Nothing voice-related is left in the app.** `audio_service.dart` plays the
+reminder sound and is not speech; `firebase_storage` and `storage.rules` are
+unused today and kept for whatever voice is built next.
 
 **Working and tested in the live app**
 
@@ -168,13 +188,13 @@ environment file are no longer two different documents.
 - `functions/src/morning/money.ts` is **parked, not dead**. Bank and UPI parsing
   with tests, removed from the brief at the user's request until the shape is
   settled. Do not delete it; it is coming back.
-- **Dead code found, not deleted.** Voice callables (`aivyVoiceAsk`,
-  `elevenLabsTts`, `googleSpeechSynthesize`) have no Flutter caller since the
-  voice home went. `AivyProcessService.analyzeInput` / `analyzeVoice` /
-  `translateForWhatsappPreview` have no caller since the Chat screen went
-  (dashboard still uses that class for stats). WhatsApp UI callables
-  (`userSendWhatsapp`, `testWhatsapp`) have no Flutter caller; the WhatsApp
-  *backend* still runs. `ChatRepository.uploadVoiceFile` has no caller.
+- **`More` still lists dead ends.** "Meeting sessions" says "record a meeting
+  from Home" and there is no Home screen; "Chat sessions" counts threads from a
+  screen that no longer exists. They render live data, so they were left alone —
+  but they are a product decision waiting to be made, not working features.
+- **`aivy_ai_response.dart` is mostly unused.** `ReminderSuggestion` inside it
+  is live, which is why the file stayed. The rest of its classes have no
+  reader.
 
 ## The machines this runs on
 
