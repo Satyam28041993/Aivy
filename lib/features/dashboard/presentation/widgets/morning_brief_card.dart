@@ -34,6 +34,8 @@ class MorningBriefCard extends StatelessWidget {
     'alerts': Icons.notifications_none_rounded,
     'today': Icons.today_rounded,
     'money': Icons.currency_rupee_rounded,
+    'tasks': Icons.check_circle_outline_rounded,
+    'projects': Icons.work_outline_rounded,
   };
 
   @override
@@ -210,6 +212,22 @@ class _Section extends StatelessWidget {
   }
 }
 
+/// Red is late, amber is due, green is settled — the same meanings these
+/// colours carry everywhere else in the app. A line with no tone keeps the
+/// faint grey dot, so colour stays rare enough to mean something.
+Color _toneColour(String? tone) {
+  switch (tone) {
+    case 'late':
+      return AivyUi.danger;
+    case 'due':
+      return AivyUi.warn;
+    case 'ok':
+      return AivyUi.ok;
+    default:
+      return AivyUi.inkFaint;
+  }
+}
+
 class _Item extends StatelessWidget {
   const _Item({
     required this.item,
@@ -251,14 +269,14 @@ class _Item extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 6, right: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 8),
                 child: SizedBox(
                   width: 4,
                   height: 4,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AivyUi.inkFaint,
+                      color: _toneColour(item.tone),
                       shape: BoxShape.circle,
                     ),
                   ),

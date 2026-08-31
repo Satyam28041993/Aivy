@@ -18,6 +18,7 @@ export type DraftKind =
   | "payment_received"
   | "remember_fact"
   | "project_items"
+  | "task"
   | "calendar_event"
   | "email"
   | "sheet_row"
@@ -174,6 +175,35 @@ export interface ProjectItemsDraftData {
   items: ProjectItemDraftLine[];
 }
 
+/**
+ * A small piece of work, whole, on one card.
+ *
+ * Projects are opened and then filled, which suits work that arrives over
+ * weeks. A task arrives in one sentence — "Mandar sir ne PPT aur app bola, 2
+ * din me" — and splitting that into create-then-add would mean two cards for
+ * something said once, which is how a feature stops being used. So everything
+ * it needs is resolved before the card is drawn, and confirming it writes the
+ * task, its steps and its reminders together.
+ */
+export interface TaskDraftData {
+  kind: "task";
+  name: string;
+  /** Who asked for it, or who it is for. Empty when it is nobody's but his own. */
+  forWhom: string;
+  area: "work" | "personal";
+  /** 0 when it carries no deadline — allowed, and then it only ever appears in the list. */
+  dueMs: number;
+  dueLabel: string;
+  /**
+   * A nudge partway to the deadline, already moved to a civil hour. 0 when the
+   * deadline is too close to fit one in — a reminder on the day it is due and
+   * another two hours earlier is nagging, not help.
+   */
+  nudgeMs: number;
+  note: string;
+  steps: ProjectItemDraftLine[];
+}
+
 export interface RememberFactDraftData {
   kind: "remember_fact";
   category: string;
@@ -194,6 +224,7 @@ export type DraftData =
   | PaymentReceivedDraftData
   | RememberFactDraftData
   | ProjectItemsDraftData
+  | TaskDraftData
   | CalendarEventDraftData
   | EmailDraftData
   | SheetRowDraftData

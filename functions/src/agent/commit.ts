@@ -22,7 +22,7 @@ import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 
 import { createClient } from "./clientResolve";
-import { addItems } from "./projectStore";
+import { addItems, createProject, setProjectReminders } from "./projectStore";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { savePlace } from "./placesStore";
 import { normalizeName } from "./nameNormalize";
@@ -50,6 +50,7 @@ import type {
   ReminderDraftData,
   RememberFactDraftData,
   ProjectItemsDraftData,
+  TaskDraftData,
   SavedPlaceDraftData,
   SheetRowDraftData,
 } from "./draftTypes";
@@ -499,6 +500,109 @@ async function commitProjectItems(
   };
 }
 
+/**
+ * A task, its steps and its reminders, written together.
+ *
+ * The order matters on failure. The task doc goes first, because a task with no
+ * alarm is still a task he can be told about, while an alarm pointing at
+ * nothing is a notification he cannot act on. Reminders are best-effort for the
+ * same reason items' reminders are: losing the whole save because a write to
+ * one collection failed would be the worse trade by a distance.
+ */
+async function commitTask(uid: string, d: TaskDraftData): Promise<CommitResult> {
+  const project = await createProject(uid, {
+    name: d.name,
+    clientName: d.forWhom || null,
+    note: d.note || null,
+    kind: "task",
+    area: d.area,
+    dueMs: d.dueMs,
+  });
+
+  const steps = d.steps.length > 0 ? await addItems(uid, project.id, d.steps.map((st) => ({
+    title: st.title,
+    kind: (st.kind || "task") as never,
+    status: (st.status || "open") as never,
+    dueMs: 0,
+    note: st.note,
+  }))) : [];
+
+  const forWhom = d.forWhom.trim();
+  const reminderIds: string[] = [];
+
+  if (d.dueMs > Date.now()) {
+    try {
+      reminderIds.push(
+        await writeReminder(uid, {
+          title: d.name,
+          scheduledMs: d.dueMs,
+          type: "reminder",
+          subType: "task_due",
+          note: forWhom ? `Due now — for ${forWhom}` : "Due now",
+          clientName: forWhom || null,
+          priority: "high",
+          extra: { projectId: project.id, projectName: project.name, isTask: true },
+        }),
+      );
+    } catch (e) {
+      logger.warn("commitTask: deadline reminder failed", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  if (d.nudgeMs > Date.now() && d.nudgeMs < d.dueMs) {
+    try {
+      reminderIds.push(
+        await writeReminder(uid, {
+          title: d.name,
+          scheduledMs: d.nudgeMs,
+          type: "reminder",
+          subType: "task_nudge",
+          note: d.dueLabel ? `Due ${d.dueLabel} — how much is done?` : "How much is done?",
+          clientName: forWhom || null,
+          extra: { projectId: project.id, projectName: project.name, isTask: true },
+        }),
+      );
+    } catch (e) {
+      logger.warn("commitTask: nudge reminder failed", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  if (reminderIds.length > 0) {
+    try {
+      await setProjectReminders(uid, project.id, reminderIds);
+    } catch (e) {
+      // Only costs the ability to cancel them on close, which is worth a log
+      // and not worth failing the save for.
+      logger.warn("commitTask: could not attach reminders", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  const parts = [`Task saved — ${project.name}`];
+  if (steps.length > 0) {
+    parts.push(`${steps.length} step${steps.length === 1 ? "" : "s"}`);
+  }
+  parts.push(
+    reminderIds.length === 0
+      ? "no reminder, since it has no date"
+      : reminderIds.length === 1
+        ? "reminder set"
+        : "reminder set, plus a check-in on the way",
+  );
+
+  return {
+    ok: true,
+    message: `${parts.join(", ")}.`,
+    createdIds: [project.id, ...steps.map((i) => i.id)],
+    summary: `task ${project.name}${forWhom ? ` for ${forWhom}` : ""}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Google Workspace
 // ---------------------------------------------------------------------------
@@ -696,6 +800,9 @@ export async function commitDraft(
       break;
     case "project_items":
       result = await commitProjectItems(uid, draft.data);
+      break;
+    case "task":
+      result = await commitTask(uid, draft.data);
       break;
     default:
       return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };

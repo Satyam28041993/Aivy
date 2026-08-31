@@ -47,3 +47,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .firebase/
+
+# vitest scratch, created by running the function tests from the repo root
+node_modules/

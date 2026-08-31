@@ -12,6 +12,15 @@
  * this trade is waiting on somebody else — an approval, a rate confirmation, a
  * PO — and folding that into "pending" makes a person feel behind on work that
  * is not theirs to do, and makes "what is stuck" unanswerable.
+ *
+ * The same store also holds *tasks* — the small work that arrives verbally and
+ * is gone in two days: a deck a director asked for, a film to book with your
+ * wife. A task is not a different thing underneath; it is a name with a
+ * deadline and a short list of steps, which is a project with fewer parts. So
+ * it lives here under `kind: "task"` rather than in a second collection, and
+ * every reader, reminder and status answer already written works on it
+ * unchanged. A second collection would have meant writing all of that twice
+ * and keeping the two halves in step forever.
  */
 
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -19,6 +28,17 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { normalizeName } from "./nameNormalize";
 
 export type ProjectStatus = "active" | "won" | "lost" | "on_hold" | "done";
+
+/**
+ * A long piece of work, or a short one.
+ *
+ * Only presentation and pacing differ: a project is paced by its items' own
+ * dates, a task by one deadline on the whole thing.
+ */
+export type ProjectKind = "project" | "task";
+
+/** Which half of life this belongs to. It decides colour and wording, never behaviour. */
+export type ProjectArea = "work" | "personal";
 
 export type ItemStatus = "open" | "waiting_on_them" | "done" | "dropped";
 
@@ -38,12 +58,48 @@ export interface Project {
   id: string;
   name: string;
   nameKey: string;
+  /**
+   * Who it is for: the client on a project, and on a task whoever asked for it
+   * — a director, a wife, or nobody. One slot rather than two, because a
+   * second field meaning nearly the same thing is a field filled in half the
+   * time.
+   */
   clientName: string;
   status: ProjectStatus;
   /** Anything worth carrying that is not an item — site address, contact, terms. */
   note: string;
+  /** Written on every doc from now on; absent on the ones written before tasks existed. */
+  kind?: ProjectKind;
+  area?: ProjectArea;
+  /** Deadline for the whole thing. 0 on a project, which its items pace instead. */
+  dueMs?: number;
+  /** Reminders belonging to the deadline itself, so closing it can cancel them. */
+  reminderIds?: string[];
   createdAtMs: number;
   updatedAtMs: number;
+}
+
+/**
+ * Docs written before tasks existed carry no `kind`, and every one of them is a
+ * project. Reading through these rather than the raw fields is what lets this
+ * ship without a migration.
+ */
+export function kindOf(p: Project): ProjectKind {
+  return p.kind === "task" ? "task" : "project";
+}
+
+export function areaOf(p: Project): ProjectArea {
+  return p.area === "personal" ? "personal" : "work";
+}
+
+export function dueOf(p: Project): number {
+  const ms = Number(p.dueMs ?? 0);
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
+/** Still wants attention — as opposed to won, lost or done. */
+export function isLive(p: Project): boolean {
+  return p.status === "active" || p.status === "on_hold";
 }
 
 export interface ProjectItem {
@@ -73,7 +129,15 @@ export const OPEN_ITEM_STATUSES: readonly ItemStatus[] = ["open", "waiting_on_th
 
 export async function createProject(
   uid: string,
-  input: { name: string; clientName?: string | null; note?: string | null },
+  input: {
+    name: string;
+    clientName?: string | null;
+    note?: string | null;
+    kind?: ProjectKind | null;
+    area?: ProjectArea | null;
+    dueMs?: number | null;
+    reminderIds?: string[] | null;
+  },
 ): Promise<Project> {
   const name = input.name.trim();
   const now = Date.now();
@@ -85,6 +149,10 @@ export async function createProject(
     clientName: (input.clientName ?? "").trim(),
     status: "active",
     note: (input.note ?? "").trim(),
+    kind: input.kind === "task" ? "task" : "project",
+    area: input.area === "personal" ? "personal" : "work",
+    dueMs: input.dueMs && input.dueMs > 0 ? input.dueMs : 0,
+    reminderIds: input.reminderIds ?? [],
     createdAtMs: now,
     updatedAtMs: now,
   };
@@ -94,14 +162,20 @@ export async function createProject(
 
 export async function listProjects(
   uid: string,
-  opts: { status?: ProjectStatus; limit?: number } = {},
+  opts: { status?: ProjectStatus; kind?: ProjectKind; limit?: number } = {},
 ): Promise<Project[]> {
   let q = projectsRef(uid).limit(opts.limit ?? 50);
   if (opts.status) {
     q = q.where("status", "==", opts.status) as typeof q;
   }
   const snap = await q.get();
-  const rows = snap.docs.map((d) => d.data() as Project);
+  let rows = snap.docs.map((d) => d.data() as Project);
+  // Kind is filtered here rather than in the query: the older docs have no
+  // `kind` field at all, so a `where` on it would silently drop every project
+  // written before tasks existed.
+  if (opts.kind) {
+    rows = rows.filter((p) => kindOf(p) === opts.kind);
+  }
   // Most recently touched first: the project being worked on is the one being
   // asked about.
   return rows.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
@@ -247,6 +321,18 @@ export async function updateItem(
   const now = Date.now();
   await itemsRef(uid, projectId).doc(itemId).update({ ...patch, updatedAtMs: now });
   await projectsRef(uid).doc(projectId).update({ updatedAtMs: now });
+}
+
+/** Attaches the deadline's reminders once they exist, so closing can cancel them. */
+export async function setProjectReminders(
+  uid: string,
+  projectId: string,
+  reminderIds: string[],
+): Promise<void> {
+  await projectsRef(uid).doc(projectId).update({
+    reminderIds,
+    updatedAtMs: Date.now(),
+  });
 }
 
 export async function setProjectStatus(

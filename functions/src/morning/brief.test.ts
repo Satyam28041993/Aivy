@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dateKeyFor, parseBrief } from "./brief";
+import { dateKeyFor, dueWords, parseBrief } from "./brief";
 
 /**
  * The cache key decides whether a morning is rebuilt or handed back, so it has
@@ -82,5 +82,50 @@ describe("parseBrief", () => {
 
   it("returns null on something that is not JSON at all", () => {
     expect(parseBrief("sorry, I cannot help with that")).toBeNull();
+  });
+});
+
+/**
+ * The one line of the brief a person acts on before reading anything else.
+ *
+ * Lateness is counted in whole local days, not in elapsed hours: something due
+ * at nine last night is a day late this morning, and calling it "11 hours late"
+ * is both true and useless.
+ */
+describe("dueWords", () => {
+  const IST = "Asia/Kolkata";
+  const now = Date.parse("2026-09-10T08:00:00+05:30");
+
+  it("calls today today, and tomorrow tomorrow", () => {
+    expect(dueWords(Date.parse("2026-09-10T18:00:00+05:30"), IST, now)).toEqual({
+      text: "due today",
+      tone: "due",
+    });
+    expect(dueWords(Date.parse("2026-09-11T09:00:00+05:30"), IST, now)).toEqual({
+      text: "due tomorrow",
+      tone: "due",
+    });
+  });
+
+  it("counts lateness in days, and marks it", () => {
+    // Due last night at nine: a day late this morning, not eleven hours.
+    expect(dueWords(Date.parse("2026-09-09T21:00:00+05:30"), IST, now)).toEqual({
+      text: "1 day late",
+      tone: "late",
+    });
+    expect(dueWords(Date.parse("2026-09-07T10:00:00+05:30"), IST, now)).toEqual({
+      text: "3 days late",
+      tone: "late",
+    });
+  });
+
+  it("gives a plain date further out, with no colour", () => {
+    const out = dueWords(Date.parse("2026-09-18T10:00:00+05:30"), IST, now);
+    expect(out.text).toBe("due 18 Sep");
+    expect(out.tone).toBeUndefined();
+  });
+
+  it("says so when there is no date, rather than inventing one", () => {
+    expect(dueWords(0, IST, now)).toEqual({ text: "no date" });
   });
 });

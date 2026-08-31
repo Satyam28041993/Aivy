@@ -61,6 +61,10 @@ const USER_COLLECTIONS = [
   "contacts",
   "places",
   "memory_logs",
+  // Written by the agent and missed here until tasks landed: a reset that
+  // leaves projects behind is not a reset.
+  "projects",
+  "occasions",
 ] as const;
 
 /** Docs under `users/{uid}/meta` that are state, not settings. */

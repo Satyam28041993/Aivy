@@ -72,7 +72,7 @@ the app opens for this reason, not because a cron would have been harder.
 
 ## Where things stand
 
-_Last updated: after adding projects (server side)._
+_Last updated: after adding tasks (server side) and putting work in the brief._
 
 **Working and tested in the live app**
 
@@ -93,14 +93,32 @@ _Last updated: after adding projects (server side)._
   `waiting_on_them` is a first-class state: half this trade is waiting on a
   client, and calling that "pending" makes both the feeling and the answer wrong.
   Dated items become reminders. Works entirely through chat.
+- **Tasks** — the small and medium work, business or personal: a deck a director
+  wants in two days, a film to book with his wife. Same collection as projects
+  under `kind: "task"`, so every reader, reminder and status answer written for
+  projects works on them unchanged; a second collection would have meant writing
+  all of it twice. `create_task` saves the whole thing from one sentence — name,
+  who it is for, deadline, steps — on one card, because splitting that into
+  create-then-add is how a feature stops being used. A deadline gets its own
+  reminder plus a halfway check-in, and marking a step done or closing a task
+  early **cancels its reminders** (`agent/reminderCancel.ts`) — a task that keeps
+  ringing after it is finished teaches him to ignore the ones that matter.
+- **Work in the morning brief** — "Your tasks" and "Projects" sections, late
+  first, red for late and amber for due. Built straight from Firestore and
+  appended *after* the model has written the rest: these are counts and dates
+  that are already right, and two sections have been lost before to model output
+  arriving in a shape the parser did not expect.
 
 **Known gaps — pick these up next**
 
-- **Projects has no screen.** Everything works by talking; there is nothing to
-  browse. Build it browse-only: creating and editing stay in chat, or the same
-  data ends up half-written two different ways.
+- **Tasks and projects have no screen.** Everything works by talking; there is
+  nothing to browse. Build it browse-only, one screen with both — tasks by
+  deadline on top, projects below — because creating and editing must stay in
+  chat or the same data ends up half-written two different ways.
 - **Repeating reminders are not real.** "Every month on the 5th" sets one
-  reminder. The card says so honestly rather than pretending.
+  reminder. The card says so honestly rather than pretending. A task with no
+  deadline has the same shape of gap: it saves, but nothing ever rings for it,
+  so it only surfaces in the brief's list.
 - `functions/src/morning/money.ts` is **parked, not dead**. Bank and UPI parsing
   with tests, removed from the brief at the user's request until the shape is
   settled. Do not delete it; it is coming back.

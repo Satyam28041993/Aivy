@@ -13,6 +13,13 @@
  *
  * Money was here and has been taken out on request — the reading code and its
  * tests are kept, since it is coming back once the shape of it is settled.
+ *
+ * Work — tasks and projects — is added after the model has written the rest,
+ * and never passed through it. Those sections are counts and dates already
+ * correct in Firestore, so handing them to a model can only make them wrong.
+ * Twice now a section has been lost because model output did not come back in
+ * the shape the parser expected, and neither time was the reader told. What
+ * cannot be summarised wrongly should not be summarised.
  */
 
 import { getFirestore } from "firebase-admin/firestore";
@@ -20,6 +27,14 @@ import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 
 import { gmailSearch, GoogleApiError, type GmailSummaryRow } from "../agent/google/workspace";
+import {
+  dueOf,
+  isLive,
+  kindOf,
+  listItems,
+  listProjects,
+  summarise,
+} from "../agent/projectStore";
 import { runWebSearch } from "../webSearch";
 
 const MODEL = "gemini-2.5-flash";
@@ -42,6 +57,12 @@ export interface BriefItem {
   /** Grouping label inside a section — the Google Alert term, mostly. */
   group?: string;
   link?: string;
+  /**
+   * "late" | "due" | "ok" — colours the line's marker and nothing else. Late
+   * work has to be findable at a glance in a card that is otherwise all one
+   * weight, and a person scanning their morning reads colour before words.
+   */
+  tone?: string;
 }
 
 export interface MorningBrief {
@@ -112,6 +133,12 @@ async function todaysCommitments(uid: string, timezone: string): Promise<string[
       // Anything still open from before today belongs in today's list: a task
       // missed on Friday does not stop being owed on Monday.
       const label = ms < start ? `overdue since ${when.toFormat("d LLL")}` : when.toFormat("h:mm a");
+      // A task's own deadline and check-in have a section of their own below.
+      // Listing them here too would show the same job twice in one card.
+      const subType = `${r.subType ?? ""}`;
+      if (subType === "task_due" || subType === "task_nudge") {
+        continue;
+      }
       const who = `${r.clientName ?? ""}`.trim();
       out.push(
         `${r.title ?? "Reminder"} — ${label}${who ? ` (${who})` : ""} [${r.subType ?? r.type ?? "task"}]`,
@@ -213,6 +240,133 @@ function gmailGap(e: unknown, what: string): string {
     return `Google sign-in expired, so ${what} could not be read.`;
   }
   return `Could not read ${what}.`;
+}
+
+// ---------------------------------------------------------------------------
+// Work — tasks and projects, straight from Firestore
+// ---------------------------------------------------------------------------
+
+/** How a deadline reads on the morning it is being read. */
+export function dueWords(dueMs: number, zone: string, nowMs: number): { text: string; tone?: string } {
+  if (dueMs <= 0) {
+    return { text: "no date" };
+  }
+  const due = DateTime.fromMillis(dueMs, { zone }).startOf("day");
+  const today = DateTime.fromMillis(nowMs, { zone }).startOf("day");
+  const days = Math.round(due.diff(today, "days").days);
+
+  if (days < 0) {
+    const n = Math.abs(days);
+    return { text: n === 1 ? "1 day late" : `${n} days late`, tone: "late" };
+  }
+  if (days === 0) {
+    return { text: "due today", tone: "due" };
+  }
+  if (days === 1) {
+    return { text: "due tomorrow", tone: "due" };
+  }
+  return { text: `due ${DateTime.fromMillis(dueMs, { zone }).toFormat("d LLL")}` };
+}
+
+function joinDetail(parts: Array<string | null | undefined>): string | undefined {
+  const kept = parts.map((p) => (p ?? "").trim()).filter(Boolean);
+  return kept.length > 0 ? kept.join(" · ") : undefined;
+}
+
+/**
+ * The two sections that answer "what is on me today" without a model.
+ *
+ * Tasks are ordered late first, then soonest — which is the order they will be
+ * worried about, not the order they were created. Projects are summarised by
+ * count rather than listed item by item: a project with fourteen open items is
+ * not a morning read, and `project_status` exists for when it is.
+ */
+export async function workSections(
+  uid: string,
+  timezone: string,
+  nowMs: number,
+  gaps: string[],
+): Promise<BriefSection[]> {
+  const zone = timezone || "Asia/Kolkata";
+  let live: Awaited<ReturnType<typeof listProjects>> = [];
+  try {
+    live = (await listProjects(uid, { limit: 60 })).filter(isLive);
+  } catch (e) {
+    logger.warn("brief: projects read failed", {
+      err: e instanceof Error ? e.message : String(e),
+    });
+    gaps.push("Tasks and projects could not be read.");
+    return [];
+  }
+
+  const taskRows: Array<{ item: BriefItem; sortKey: number }> = [];
+  const projectRows: Array<{ item: BriefItem; sortKey: number }> = [];
+
+  for (const p of live) {
+    let items: Awaited<ReturnType<typeof listItems>> = [];
+    try {
+      items = await listItems(uid, p.id, 100);
+    } catch {
+      // One unreadable project is not worth losing the section over.
+      items = [];
+    }
+    const sum = summarise(p, items, nowMs);
+    const openCount = sum.open.length + sum.waiting.length;
+
+    if (kindOf(p) === "task") {
+      const due = dueOf(p);
+      const when = dueWords(due, zone, nowMs);
+      taskRows.push({
+        item: {
+          headline: p.name,
+          detail: joinDetail([
+            p.clientName || null,
+            when.text,
+            openCount > 0 ? `${openCount} step${openCount === 1 ? "" : "s"} left` : null,
+          ]),
+          tone: when.tone,
+        },
+        sortKey: due > 0 ? due : Number.MAX_SAFE_INTEGER,
+      });
+      continue;
+    }
+
+    const nextDue = sum.next ? dueWords(sum.next.dueMs, zone, nowMs) : null;
+    projectRows.push({
+      item: {
+        headline: p.name,
+        detail:
+          joinDetail([
+            p.clientName || null,
+            sum.overdue.length > 0 ? `${sum.overdue.length} late` : null,
+            sum.open.length > 0 ? `${sum.open.length} pending` : null,
+            sum.waiting.length > 0 ? `${sum.waiting.length} waiting on them` : null,
+            sum.next ? `next: ${sum.next.title} (${nextDue?.text})` : null,
+          ]) ?? "all clear",
+        tone: sum.overdue.length > 0 ? "late" : undefined,
+      },
+      sortKey: sum.next?.dueMs && sum.next.dueMs > 0 ? sum.next.dueMs : Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  // Late work sorts to the top of the tasks list by having the smallest date.
+  taskRows.sort((a, b) => a.sortKey - b.sortKey);
+  projectRows.sort((a, b) => a.sortKey - b.sortKey);
+
+  return [
+    {
+      kind: "tasks",
+      title: "Your tasks",
+      items: taskRows.slice(0, 8).map((r) => r.item),
+      emptyNote: "Nothing running. Tell me about one and I will track it.",
+    },
+    {
+      kind: "projects",
+      title: "Projects",
+      items: projectRows.slice(0, 6).map((r) => r.item),
+      emptyNote: "No projects open.",
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -441,11 +595,15 @@ export async function buildBrief(opts: {
     );
   }
 
+  // Appended, not merged: whatever the model did or failed to do with the rest
+  // of the morning, what is on him today is read from Firestore and is right.
+  const work = await workSections(opts.uid, zone, nowMs, input.gaps);
+
   const brief: MorningBrief = {
     dateKey: dateKeyFor(zone, nowMs),
     builtAtMs: nowMs,
     greeting: written.greeting,
-    sections: written.sections,
+    sections: [...written.sections, ...work],
     gaps: input.gaps,
   };
 

@@ -8,6 +8,7 @@ class BriefItem {
     this.detail,
     this.group,
     this.link,
+    this.tone,
   });
 
   final String headline;
@@ -16,6 +17,13 @@ class BriefItem {
   /// Grouping inside a section, which is what makes the alerts readable.
   final String? group;
   final String? link;
+
+  /// 'late', 'due' or 'ok' — colours this line's marker and nothing else.
+  ///
+  /// The card is deliberately all one weight, which is right for reading and
+  /// wrong for finding the one thing that is overdue. Colour is the cheapest
+  /// way to let a person spot that before they have read a word.
+  final String? tone;
 
   static BriefItem? fromMap(Map<String, dynamic> m) {
     final headline = (m['headline'] as String?)?.trim() ?? '';
@@ -32,6 +40,7 @@ class BriefItem {
       detail: text('detail'),
       group: text('group'),
       link: text('link'),
+      tone: text('tone'),
     );
   }
 }

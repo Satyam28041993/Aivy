@@ -52,6 +52,7 @@ import {
   addProjectItemsTool,
   closeProjectTool,
   createProjectTool,
+  createTaskTool,
   listProjectsTool,
   projectStatusTool,
   updateProjectItemTool,
@@ -605,7 +606,9 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     description:
       "Open a project — a piece of work that runs for weeks and has many steps: " +
       "a client job, a site, a tender. Use when they say 'naya project mila', " +
-      "'Pune ka kaam shuru hua'. Do not use for a single task; that is a reminder.",
+      "'Pune ka kaam shuru hua'. Not for small work with one deadline — that is " +
+      "create_task — and not for a single thing to be reminded of, which is " +
+      "create_reminder.",
     parameters: {
       type: "object",
       properties: {
@@ -618,6 +621,54 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
           type: "string",
           description: "Anything worth carrying: site address, contact, terms.",
         },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "create_task",
+    description:
+      "A small or medium piece of work with one deadline, saved whole in one " +
+      "go: the name, who asked for it, when it is due, and any steps. Use for " +
+      "'Mandar sir ne security label ka PPT aur app bola, 2 din me', 'next week " +
+      "Ruchi ke sath movie jaana hai', 'ye report Friday tak deni hai'. " +
+      "Work and personal both belong here. " +
+      "Choose between the three: create_reminder when there is nothing to track " +
+      "and they only want to be told at a time; create_task when it has steps, " +
+      "or somebody is waiting on it, or they will want to say how far along it " +
+      "is; create_project only for work running for weeks with many parts. " +
+      "Never ask which of the three it is — decide, and they will correct the " +
+      "card if it is wrong.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description:
+            "The work itself, short — 'Security label PPT aur app', 'Movie with Ruchi'.",
+        },
+        for_whom: {
+          type: "string",
+          description:
+            "Who asked for it or who it is for — 'Mandar sir', 'Ruchi'. Leave out " +
+            "when it is only their own.",
+        },
+        area: {
+          type: "string",
+          enum: ["work", "personal"],
+          description: "Personal for family, home and their own life. Defaults to work.",
+        },
+        steps: {
+          type: "array",
+          description:
+            "The parts of it, if they named any — 'PPT banana', 'app ready karna'. " +
+            "Leave out when it is one undivided thing.",
+          items: { type: "string" },
+        },
+        when_phrase: WHEN_PHRASE,
+        when_tense: WHEN_TENSE,
+        day_period: DAY_PERIOD,
+        note: { type: "string", description: "Anything else worth carrying." },
       },
       required: ["name"],
     },
@@ -679,8 +730,10 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "update_project_item",
     description:
-      "Move one item along — done, waiting on them, a new date, or a note. Use " +
-      "for 'sample bhej diya', 'rate abhi unke paas hai', 'meeting Monday ho gayi'.",
+      "Move one step of a project or task along — done, waiting on them, a new " +
+      "date, or a note. Use for 'sample bhej diya', 'rate abhi unke paas hai', " +
+      "'PPT ho gaya', 'app abhi baaki hai'. Marking a step done also calls off " +
+      "its reminder, so use it whenever they say something is finished.",
     parameters: {
       type: "object",
       properties: {
@@ -700,9 +753,9 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "project_status",
     description:
-      "Where a project stands — what is done, what is open, what is stuck with " +
-      "the client, what is late, what is next. Use for 'Pune project ka kya haal " +
-      "hai', 'kya pending hai'.",
+      "Where one project or task stands — what is done, what is open, what is " +
+      "stuck with somebody else, what is late, what is next. Use for 'Pune " +
+      "project ka kya haal hai', 'PPT wala kaam kahan tak pahuncha'.",
     parameters: {
       type: "object",
       properties: { project: { type: "string" } },
@@ -712,18 +765,34 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "list_projects",
     description:
-      "Every project with its open count and what is next. Use for 'kaun kaun se " +
-      "project chal rahe hai'.",
+      "Projects and tasks, with what is open, what is late and what is next. " +
+      "Use for 'kaun kaun se project chal rahe hai', 'mere kya kaam pending hai', " +
+      "and — with for_whom — for 'Mandar sir ka kya pending hai', which is the " +
+      "question asked just before reporting back to somebody.",
     parameters: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["active", "won", "lost", "on_hold", "done"] },
+        kind: {
+          type: "string",
+          enum: ["task", "project"],
+          description: "Leave out to get both, which is usually what is wanted.",
+        },
+        for_whom: {
+          type: "string",
+          description:
+            "Only work for this person — 'Mandar sir', 'Ruchi'. Partial names match.",
+        },
       },
     },
   },
   {
     name: "close_project",
-    description: "Mark a project won, lost, on hold, or done.",
+    description:
+      "Mark a project or task won, lost, on hold, or done. Use it the moment " +
+      "they say a task is finished — 'PPT aur app dono ho gaye' — even early: " +
+      "it calls off every reminder still set for it, and a task that keeps " +
+      "ringing after it is done is worse than one that never rang.",
     parameters: {
       type: "object",
       properties: {
@@ -859,6 +928,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   list_saved_places: (ctx) => listSavedPlacesTool(ctx),
   forget_place: forgetPlaceTool,
   create_project: createProjectTool,
+  create_task: createTaskTool,
   add_project_items: addProjectItemsTool,
   update_project_item: updateProjectItemTool,
   project_status: projectStatusTool,
@@ -883,6 +953,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "append_sheet_row",
   "save_place",
   "add_project_items",
+  "create_task",
 ]);
 
 export function isKnownTool(name: string): boolean {
