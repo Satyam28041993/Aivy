@@ -74,6 +74,10 @@ exports a function that is still deployed, `firebase deploy --only functions
 --non-interactive` stops the whole job. Delete those names *first*. Do not pass
 `--force` on deploy — that would also delete a forgotten live export. This
 cost one Deploy Web run: hosting updated, the named-delete step never ran.
+The consequence to remember: **add the name to that list in the same commit
+that removes the callable.** Leave it for later and the next deploy — anyone's
+— is blocked, with an error that says nothing about a workflow step existing
+to fix it.
 
 **`continue-on-error` on Functions deploy is trap 1 in a different coat.**
 A leftover branch tried that. The run stays green while the server did not
