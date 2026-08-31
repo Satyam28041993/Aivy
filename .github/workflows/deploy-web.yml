@@ -75,26 +75,15 @@ jobs:
           firebase deploy --only firestore:rules,firestore:indexes \
             --project aivy-5c031 --non-interactive
 
-      - name: Build & deploy Functions
-        if: ${{ inputs.deploy_functions }}
-        working-directory: functions
-        run: |
-          npm ci
-          npm run build
-          firebase deploy --only functions --project aivy-5c031 --non-interactive
-
       # Functions whose source has gone stay deployed and keep answering.
-      #
-      # `firebase deploy --only functions --force` would delete anything missing
-      # from source automatically, and that is exactly what makes it wrong here:
-      # one forgotten export, one branch deployed by mistake, and a live callable
-      # is gone with no prompt. This repo has already lost days to a deploy step
-      # that did something invisible. So retirements are named, one at a time,
-      # and adding to this list is a deliberate act.
-      #
-      # The step is idempotent: a name that is already gone is reported and
-      # skipped, so it stays green after the first successful run. Once a name
-      # has been through a green deploy it can be dropped from the list.
+      # This step has to run *before* deploy: in non-interactive mode the CLI
+      # aborts if a remote function is missing from source, so a delete-after
+      # step never runs. `--force` on deploy would also delete them — and
+      # anything else missing from source, which is why we do not use it.
+      # Retirements are named, one at a time; adding to this list is a
+      # deliberate act. The step is idempotent: a name already gone is
+      # reported and skipped. Once a name has been through a green deploy it
+      # can be dropped from the list.
       - name: Delete retired functions
         if: ${{ inputs.deploy_functions }}
         run: |
@@ -109,6 +98,14 @@ jobs:
               echo "$fn was not there — nothing to do"
             fi
           done
+
+      - name: Build & deploy Functions
+        if: ${{ inputs.deploy_functions }}
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
+          firebase deploy --only functions --project aivy-5c031 --non-interactive
 
       # The Firebase CLI only sets a callable's invoker policy when it *creates*
       # the function. These three were created by a deploy that could not set it,

@@ -69,6 +69,12 @@ access token the app forwards with a request. So nothing on a schedule can read
 Gmail, and the web build cannot read it at all. The morning brief is built when
 the app opens for this reason, not because a cron would have been harder.
 
+**Non-interactive function deploy aborts on orphans.** If source no longer
+exports a function that is still deployed, `firebase deploy --only functions
+--non-interactive` stops the whole job. Delete those names *first*. Do not pass
+`--force` on deploy — that would also delete a forgotten live export. This
+cost one Deploy Web run: hosting updated, the named-delete step never ran.
+
 **`continue-on-error` on Functions deploy is trap 1 in a different coat.**
 A leftover branch tried that. The run stays green while the server did not
 update. Do not put it back.
@@ -97,7 +103,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after deleting the retired pipelines._
+_Last updated: after moving retired-function deletes before deploy._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
