@@ -43,6 +43,15 @@ change its id.
 on purpose and is what every build signs with. Google sign-in is registered
 against its fingerprint. Do not regenerate it.
 
+**A refusal about the user's own data is a bug.** Asked for "mandar sir ka
+location" — an address he had saved himself — Aivy refused three times as
+somebody else's private information. Nothing had told the model that everything
+these tools reach is one person's own notebook, so it applied a generic privacy
+rule to the user's own note. The rule is now in `systemPrompt.ts` under **Their
+own records are theirs**, with a test pinning it. It applies to places,
+contacts, occasions and remembered facts alike, and stops short of hunting for
+something never recorded.
+
 **Firestore rejects `undefined`.** Not "ignores" — rejects, and the write throws.
 Omit the key instead. `stripUndefined` in `chatStore.ts` guards the chat path;
 nothing guards the others.
