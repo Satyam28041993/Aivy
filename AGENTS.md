@@ -96,7 +96,7 @@ reading a different document. Checkout the live branch first.
 
 ## Where things stand
 
-_Last updated: after deleting the merged leftover branches._
+_Last updated: after restoring the environment notes this file had overwritten._
 
 Ten remote branches that were already on the live branch (or that were the
 thrown-away chat-projects copy on a 55-commit-old base) have been deleted.
@@ -190,6 +190,62 @@ do, is in Known gaps below — waiting on the user.
   (dashboard still uses that class for stats). WhatsApp UI callables
   (`userSendWhatsapp`, `testWhatsapp`) have no Flutter caller; the WhatsApp
   *backend* still runs. `ChatRepository.uploadVoiceFile` has no caller.
+
+## The machines this runs on
+
+Two assistants work here and their environments differ, which is worth saying
+once rather than rediscovering.
+
+**This section was deleted once, by accident.** The file it is restored from
+was the Cursor Cloud environment doc that lived at this path before the working
+agreement was written over it — and the first Cursor session after that lost
+its Flutter SDK path and could not run `flutter analyze` at all. If you rewrite
+this file, keep this section.
+
+**Cursor Cloud VM**
+- Flutter SDK (stable) is at `~/flutter`, on `PATH` via `~/.bashrc`. A
+  non-interactive shell may not see it — then use `~/flutter/bin/flutter`.
+- Node 22 (nvm) and Java 21 are preinstalled. The update script runs
+  `npm install` in `functions/` and `flutter pub get` at the root.
+- Run the web app: `flutter run -d web-server --web-port 8080 --web-hostname
+  0.0.0.0` (first page load compiles, so it takes 15–60s). `flutter run -d
+  chrome` also works.
+
+**Claude Code environment**
+- No Flutter SDK at all. CI is the only Dart compiler available; `Checks` runs
+  `flutter analyze` and `flutter test` and fails on errors.
+- Node and the functions toolchain work normally.
+
+**True on both**
+- The app points at the live Firebase project `aivy-5c031`. There is no
+  emulator config in `firebase.json`, so writing Firestore or deploying needs
+  real credentials.
+- **Sign-in is Google OAuth only.** The README says anonymous auth; the code
+  (`lib/core/auth/aivy_auth_controller.dart`) explicitly signs anonymous users
+  out. There is no test bypass, so any signed-in flow needs a real account.
+- **Secrets are not in the repo.** `GEMINI_API_KEY` and the integration keys
+  live in Firebase Secret Manager and `functions/.env` (gitignored). Vitest does
+  not need them; deploying does.
+
+To exercise a deployed callable without the OAuth UI, mint an anonymous token
+directly — anonymous sign-in is enabled on the project even though the app
+signs those users out:
+
+```bash
+API_KEY="AIzaSyD9kg-3Q5Etl9GQ_EJqvw2MQvyogCDeCqw"   # public web key, from firebase_options.dart
+ID_TOKEN=$(curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$API_KEY" \
+  -H "Content-Type: application/json" -d '{"returnSecureToken":true}' \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['idToken'])")
+
+curl -s -X POST "https://us-central1-aivy-5c031.cloudfunctions.net/aivyProcess" \
+  -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
+  -d '{"data":{"text":"Remind me to call Sam tomorrow at 5pm","timezone":"UTC","nowIso":"2026-01-01T00:00:00.000Z"}}'
+```
+
+The body wraps in `{"data":{...}}` and the reply comes back as
+`{"result":{...}}`. It hits live Gemini and Firestore under a throwaway uid, so
+it leaves real rows behind.
 
 ## Before you push
 
