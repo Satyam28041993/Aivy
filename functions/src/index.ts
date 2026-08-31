@@ -25,12 +25,6 @@ export const health = onRequest(
   },
 );
 
-export {
-  aivyProcess,
-  getUserMemory,
-  saveUserMemory,
-  markOrderDispatched,
-} from "./aivyProcess";
 export { clearUserData } from "./clearUserData";
 export { backfillReminderScheduledTimeMs } from "./backfillReminderScheduledTimeMs";
 export {
@@ -38,17 +32,11 @@ export {
   onPaymentWriteForClientStats,
 } from "./clientStatsTriggers";
 export { syncClientStats } from "./syncClientStats";
-export { testWhatsapp } from "./testWhatsappApi";
-export { userSendWhatsapp } from "./userSendWhatsapp";
-export { elevenLabsTts } from "./elevenLabsTts";
-export { googleSpeechSynthesize } from "./googleSpeechCloud";
-export { aivyVoiceAsk } from "./aivyVoiceAsk";
 export { aivyAgent, aivyAgentChats, aivyAgentCommit } from "./agent/aivyAgent";
 export { aivyResetData } from "./agent/resetData";
 export { aivyTestPush } from "./push";
 export { checkOccasions } from "./occasionReminders";
 export { aivyMorningBrief } from "./morning/aivyMorningBrief";
-export { translateWaPreview } from "./translateWaPreview";
 export { checkWhatsappHealth } from "./checkWhatsappHealth";
 export {
   getMetaWhatsappClientConfig,

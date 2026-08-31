@@ -37,7 +37,6 @@ vi.mock("./clientResolve", () => ({
   createClient: () => Promise.resolve({ id: "c1", name: "Rohan" }),
 }));
 
-vi.mock("../aivyProcess", () => ({ saveUserMemory: () => Promise.resolve() }));
 
 vi.mock("firebase-admin/firestore", () => ({
   FieldValue: { serverTimestamp: () => "ts" },

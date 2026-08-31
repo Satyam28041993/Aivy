@@ -17,7 +17,7 @@ import { DateTime } from "luxon";
 import { runAgentTurn } from "./agentLoop";
 import { buildSystemPrompt } from "./systemPrompt";
 import { commitDraft } from "./commit";
-import { getUserMemory } from "../aivyProcess";
+import { getUserMemory } from "./userMemory";
 import { listPendingDrafts, markDraftStatus } from "./draftStore";
 import {
   appendMessage,

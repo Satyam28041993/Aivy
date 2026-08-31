@@ -9,7 +9,7 @@ import '../data/morning_brief_service.dart';
 import '../models/morning_brief.dart';
 import 'widgets/morning_brief_card.dart';
 import '../../projects/presentation/project_detail_sheet.dart';
-import '../../chat/data/aivy_process_service.dart';
+import '../../../core/firebase/aivy_callables.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../clients/data/client_repository.dart';
 import '../../payments/data/payment_repository.dart';
@@ -63,7 +63,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final ChatRepository _repository;
-  late final AivyProcessService _aivyProcess;
+  late final AivyCallables _callables;
   late final ClientRepository _clients;
   late final PaymentRepository _payments;
   late final ReminderRepository _reminders;
@@ -78,22 +78,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _repository = ChatRepository();
-    _aivyProcess = AivyProcessService();
+    _callables = AivyCallables();
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
     _reminders = ReminderRepository();
     _briefService = MorningBriefService();
     unawaited(_loadBrief());
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_aivyProcess.syncClientStats());
-      unawaited(_aivyProcess.fetchDashboardStats());
+      unawaited(_callables.syncClientStats());
+      unawaited(_callables.fetchDashboardStats());
       unawaited(_reminders.syncPendingReminderNotifications(widget.userId));
     });
   }
 
   @override
   void dispose() {
-    _aivyProcess.dispose();
+    _callables.dispose();
     super.dispose();
   }
 
@@ -164,7 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Pulling down is the one gesture that means "this is stale", so
             // it rebuilds the brief rather than handing back the cached one.
             await Future.wait([
-              _aivyProcess.syncClientStats(),
+              _callables.syncClientStats(),
               _loadBrief(force: true),
             ]);
             if (mounted) {

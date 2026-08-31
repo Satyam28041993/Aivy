@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../features/chat/data/aivy_process_service.dart';
+import '../firebase/aivy_callables.dart';
 import 'in_app_notification_item.dart';
 import 'in_app_notifications_repository.dart';
 
@@ -17,7 +17,7 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final InAppNotificationsRepository _repo = InAppNotificationsRepository();
-  final AivyProcessService _aivy = AivyProcessService();
+  final AivyCallables _aivy = AivyCallables();
   static final _timeFmt = DateFormat('d MMM · hh:mm a');
 
   @override

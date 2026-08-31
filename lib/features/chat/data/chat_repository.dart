@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../dashboard/models/client_insights_summary.dart';
@@ -21,8 +20,6 @@ import '../models/memory_entry_summary.dart';
 import 'chat_flow_state.dart';
 import '../utils/aivy_response_formatter.dart';
 import '../utils/extract_inr_amount.dart';
-import 'voice_file_upload.dart'
-    if (dart.library.io) 'voice_file_upload_io.dart';
 
 /// [AivyAiResponse.data.analyticsKind] values that carry [rows] for chat table UI.
 const Set<String> _analyticsKindsWithTableRows = {
@@ -39,49 +36,18 @@ const Set<String> _analyticsKindsWithTableRows = {
 class ChatRepository {
   ChatRepository({
     FirebaseFirestore? firestore,
-    FirebaseStorage? storage,
     NotificationService? notificationService,
     ReminderRepository? reminderRepository,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _storage = storage ?? FirebaseStorage.instance,
        // Retained for dependency injection; reminder scheduling was removed in Phase 2.
        _notificationService =
            notificationService ?? NotificationService.instance,
        _reminderRepository = reminderRepository ?? ReminderRepository();
 
   final FirebaseFirestore _firestore;
-  final FirebaseStorage _storage;
   // ignore: unused_field
   final NotificationService _notificationService;
   final ReminderRepository _reminderRepository;
-
-  /// Uploads a local voice recording to
-  /// `users/{userId}/voice/{entryId}.m4a` and returns the download URL.
-  Future<String> uploadVoiceFile({
-    required String userId,
-    required String entryId,
-    required String localFilePath,
-  }) {
-    return uploadVoiceToStorage(
-      storage: _storage,
-      userId: userId,
-      entryId: entryId,
-      localFilePath: localFilePath,
-    );
-  }
-
-  /// Marks a voice-only entry complete so it does not stay in `processing`.
-  Future<void> completeVoiceEntry({
-    required String userId,
-    required String entryId,
-  }) async {
-    await _entries(userId).doc(entryId).update({
-      'status': 'completed',
-      'contextType': 'voice',
-      'summary': 'Voice message',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
 
   CollectionReference<Map<String, dynamic>> _chats(String userId) {
     return _firestore.collection('users').doc(userId).collection('chats');

@@ -21,18 +21,6 @@ describe("outbound path credential resolver audit", () => {
     expect(src).not.toContain('collection("app_config").doc("whatsapp")');
   });
 
-  it("userSendWhatsapp passes ownerUid into sendWhatsAppMessageOrTemplate", () => {
-    const src = readFileSync(join(root, "src/userSendWhatsapp.ts"), "utf8");
-    expect(src).toContain("ownerUid: uid");
-    expect(src).toContain("sendWhatsAppMessageOrTemplate");
-  });
-
-  it("testWhatsapp passes ownerUid into sendWhatsAppMessageOrTemplate", () => {
-    const src = readFileSync(join(root, "src/testWhatsappApi.ts"), "utf8");
-    expect(src).toContain("ownerUid: request.auth.uid");
-    expect(src).toContain("sendWhatsAppMessageOrTemplate");
-  });
-
   it("checkWhatsappHealth resolves credentials through resolveWhatsAppCredentials", () => {
     const src = readFileSync(join(root, "src/checkWhatsappHealth.ts"), "utf8");
     expect(src).toContain("resolveWhatsAppCredentials");
