@@ -48,6 +48,14 @@ import {
   listOccasionsTool,
   saveOccasionTool,
 } from "./tools/occasionTools";
+import {
+  addProjectItemsTool,
+  closeProjectTool,
+  createProjectTool,
+  listProjectsTool,
+  projectStatusTool,
+  updateProjectItemTool,
+} from "./tools/projectTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -593,6 +601,139 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "create_project",
+    description:
+      "Open a project — a piece of work that runs for weeks and has many steps: " +
+      "a client job, a site, a tender. Use when they say 'naya project mila', " +
+      "'Pune ka kaam shuru hua'. Do not use for a single task; that is a reminder.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "What they call it — 'Pune label project', 'Sharma packaging'.",
+        },
+        client_name: { type: "string", description: "The client, if there is one." },
+        note: {
+          type: "string",
+          description: "Anything worth carrying: site address, contact, terms.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "add_project_items",
+    description:
+      "Add work to a project. This is what a page of notes after a visit turns " +
+      "into — several items at once, each with its own kind and date. Creates a " +
+      "draft for confirmation, and dated items become reminders.",
+    parameters: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Project name as they said it." },
+        items: {
+          type: "array",
+          description: "Everything that came out of the conversation.",
+          items: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: "The work itself — 'send 3 label samples', 'finalise rate'.",
+              },
+              kind: {
+                type: "string",
+                enum: [
+                  "sample",
+                  "approval",
+                  "rate",
+                  "quotation",
+                  "meeting",
+                  "followup",
+                  "delivery",
+                  "payment",
+                  "task",
+                ],
+              },
+              status: {
+                type: "string",
+                enum: ["open", "waiting_on_them", "done"],
+                description:
+                  "'waiting_on_them' when the next move is the client's — an " +
+                  "approval, a rate confirmation, a PO. 'done' when they are " +
+                  "telling you it already happened.",
+              },
+              when_phrase: WHEN_PHRASE,
+              when_tense: WHEN_TENSE,
+              day_period: DAY_PERIOD,
+              note: { type: "string" },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: ["project", "items"],
+    },
+  },
+  {
+    name: "update_project_item",
+    description:
+      "Move one item along — done, waiting on them, a new date, or a note. Use " +
+      "for 'sample bhej diya', 'rate abhi unke paas hai', 'meeting Monday ho gayi'.",
+    parameters: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        item: {
+          type: "string",
+          description: "Enough of the item's words to find it — 'rate', 'sample'.",
+        },
+        status: { type: "string", enum: ["open", "waiting_on_them", "done", "dropped"] },
+        when_phrase: WHEN_PHRASE,
+        when_tense: WHEN_TENSE,
+        note: { type: "string" },
+      },
+      required: ["project", "item"],
+    },
+  },
+  {
+    name: "project_status",
+    description:
+      "Where a project stands — what is done, what is open, what is stuck with " +
+      "the client, what is late, what is next. Use for 'Pune project ka kya haal " +
+      "hai', 'kya pending hai'.",
+    parameters: {
+      type: "object",
+      properties: { project: { type: "string" } },
+      required: ["project"],
+    },
+  },
+  {
+    name: "list_projects",
+    description:
+      "Every project with its open count and what is next. Use for 'kaun kaun se " +
+      "project chal rahe hai'.",
+    parameters: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["active", "won", "lost", "on_hold", "done"] },
+      },
+    },
+  },
+  {
+    name: "close_project",
+    description: "Mark a project won, lost, on hold, or done.",
+    parameters: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        status: { type: "string", enum: ["won", "lost", "on_hold", "done", "active"] },
+      },
+      required: ["project"],
+    },
+  },
+  {
     name: "save_occasion",
     description:
       "Record a birthday or anniversary — a date that comes back every year. " +
@@ -717,6 +858,12 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_saved_place: getSavedPlaceTool,
   list_saved_places: (ctx) => listSavedPlacesTool(ctx),
   forget_place: forgetPlaceTool,
+  create_project: createProjectTool,
+  add_project_items: addProjectItemsTool,
+  update_project_item: updateProjectItemTool,
+  project_status: projectStatusTool,
+  list_projects: listProjectsTool,
+  close_project: closeProjectTool,
   save_occasion: saveOccasionTool,
   list_occasions: (ctx) => listOccasionsTool(ctx),
   forget_occasion: forgetOccasionTool,
@@ -735,6 +882,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "send_email",
   "append_sheet_row",
   "save_place",
+  "add_project_items",
 ]);
 
 export function isKnownTool(name: string): boolean {

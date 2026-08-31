@@ -17,6 +17,7 @@ export type DraftKind =
   | "payment_due"
   | "payment_received"
   | "remember_fact"
+  | "project_items"
   | "calendar_event"
   | "email"
   | "sheet_row"
@@ -155,6 +156,24 @@ export interface RememberedFact {
   value: string;
 }
 
+/** One line of work on a project, as it will be written once confirmed. */
+export interface ProjectItemDraftLine {
+  title: string;
+  kind: string;
+  status: string;
+  /** 0 when the item carries no date of its own. */
+  dueMs: number;
+  whenLabel: string;
+  note: string;
+}
+
+export interface ProjectItemsDraftData {
+  kind: "project_items";
+  projectId: string;
+  projectName: string;
+  items: ProjectItemDraftLine[];
+}
+
 export interface RememberFactDraftData {
   kind: "remember_fact";
   category: string;
@@ -174,6 +193,7 @@ export type DraftData =
   | PaymentDueDraftData
   | PaymentReceivedDraftData
   | RememberFactDraftData
+  | ProjectItemsDraftData
   | CalendarEventDraftData
   | EmailDraftData
   | SheetRowDraftData

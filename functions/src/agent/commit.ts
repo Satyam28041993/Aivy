@@ -18,9 +18,11 @@
  */
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 
 import { createClient } from "./clientResolve";
+import { addItems } from "./projectStore";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { savePlace } from "./placesStore";
 import { normalizeName } from "./nameNormalize";
@@ -47,6 +49,7 @@ import type {
   QuotationDraftData,
   ReminderDraftData,
   RememberFactDraftData,
+  ProjectItemsDraftData,
   SavedPlaceDraftData,
   SheetRowDraftData,
 } from "./draftTypes";
@@ -438,6 +441,64 @@ async function commitRememberFact(
   };
 }
 
+/**
+ * Project items, and a reminder for each one that carries a date.
+ *
+ * The reminder is the point. A tracker nobody is reminded about is a list that
+ * goes stale in a week; routing dated items through the same reminders the rest
+ * of the app uses means they ring on the phone like everything else, with no
+ * second mechanism to build or keep working.
+ */
+async function commitProjectItems(
+  uid: string,
+  d: ProjectItemsDraftData,
+): Promise<CommitResult> {
+  const withReminders: Array<Parameters<typeof addItems>[2][number]> = [];
+
+  for (const line of d.items) {
+    let reminderId = "";
+    if (line.dueMs > 0 && line.status !== "done") {
+      try {
+        reminderId = await writeReminder(uid, {
+          title: line.title,
+          scheduledMs: line.dueMs,
+          type: line.kind === "meeting" ? "meeting" : "reminder",
+          subType: `project_${line.kind}`,
+          note: d.projectName,
+          extra: { projectId: d.projectId, projectName: d.projectName },
+        });
+      } catch (e) {
+        // An item without its alarm is still an item; losing the whole save
+        // because one reminder failed would be the worse trade.
+        logger.warn("commitProjectItems: reminder failed", {
+          err: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    withReminders.push({
+      title: line.title,
+      kind: line.kind as never,
+      status: line.status as never,
+      dueMs: line.dueMs,
+      note: line.note,
+      reminderId,
+    });
+  }
+
+  const saved = await addItems(uid, d.projectId, withReminders);
+  const dated = saved.filter((i) => i.reminderId).length;
+
+  return {
+    ok: true,
+    message:
+      dated > 0
+        ? `Added to ${d.projectName} — ${saved.length} item(s), ${dated} with a reminder.`
+        : `Added to ${d.projectName} — ${saved.length} item(s).`,
+    createdIds: saved.map((i) => i.id),
+    summary: `${d.projectName}: ${saved.map((i) => i.title).join("; ")}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Google Workspace
 // ---------------------------------------------------------------------------
@@ -632,6 +693,9 @@ export async function commitDraft(
       break;
     case "saved_place":
       result = await commitSavedPlace(uid, draft.data);
+      break;
+    case "project_items":
+      result = await commitProjectItems(uid, draft.data);
       break;
     default:
       return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };
