@@ -81,7 +81,7 @@ the app opens for this reason, not because a cron would have been harder.
 
 ## Where things stand
 
-_Last updated: after tasks, the detail sheet, and reordering the brief._
+_Last updated: after the Work list in Records._
 
 **Working and tested in the live app**
 
@@ -126,6 +126,13 @@ _Last updated: after tasks, the detail sheet, and reordering the brief._
   appended *after* the model has written the rest: these are counts and dates
   that are already right, and two sections have been lost before to model output
   arriving in a shape the parser did not expect.
+- **The Work list** — Records → **Work**. Every project and task, late first,
+  with finished ones folded at the bottom; the search box filters it. Counts
+  come from reading each project's items rather than from running totals kept on
+  the project document, because a second copy of the truth goes wrong the first
+  time a write half-fails. The Records chip that used to say "Tasks" now says
+  **Reminders** — it always showed reminders, and once real tasks existed two
+  things were called tasks.
 - **The detail sheet** (`lib/features/projects/`). Tapping a work line in the
   brief opens the whole thing: steps with their states, and a **history** —
   every change, when it happened. `updatedAtMs` cannot answer "kab kya update
@@ -138,12 +145,6 @@ _Last updated: after tasks, the detail sheet, and reordering the brief._
 
 **Known gaps — pick these up next**
 
-- **There is still no browse list.** The detail sheet opens one project or task
-  from the brief, so anything not in today's brief — closed work, a project with
-  nothing due — cannot be reached at all. Next: one screen in Records with both,
-  tasks by deadline on top, projects below, opening the same sheet. Keep it
-  browse-only; creating and editing must stay in chat or the same data ends up
-  half-written two different ways.
 - **History starts from now.** Projects and tasks created before this have no
   events, and the sheet says so rather than showing an empty box.
 - **Repeating reminders are not real.** "Every month on the 5th" sets one

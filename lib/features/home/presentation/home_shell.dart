@@ -199,6 +199,7 @@ class _HomeShellState extends State<HomeShell> {
       ReportsScreen(
         userId: widget.userId,
         onOpenChat: _openAgentTab,
+        onAskAboutWork: _askAivyAboutWork,
       ),
       MoreScreen(userId: widget.userId),
     ];

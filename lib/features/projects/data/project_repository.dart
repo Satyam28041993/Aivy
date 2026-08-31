@@ -14,12 +14,55 @@ class ProjectRepository {
 
   final FirebaseFirestore _firestore;
 
+  CollectionReference<Map<String, dynamic>> _col(String userId) {
+    return _firestore.collection('users').doc(userId).collection('projects');
+  }
+
   DocumentReference<Map<String, dynamic>> _doc(String userId, String projectId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('projects')
-        .doc(projectId);
+    return _col(userId).doc(projectId);
+  }
+
+  /// Every project and task, with the counts the browse list shows.
+  ///
+  /// One read for the list and one per project for its items. That is the
+  /// honest cost of counts that are always right; keeping running totals on the
+  /// project document would be a second copy of the truth, and the first
+  /// half-failed write would leave the two disagreeing with nothing to say so.
+  Future<List<ProjectSummary>> summaries(String userId, {int limit = 60}) async {
+    final snap = await _col(userId).limit(limit).get();
+    final projects = snap.docs
+        .map((d) => ProjectRecord.fromMap(d.id, d.data()))
+        .where((p) => p.name.isNotEmpty)
+        .toList();
+
+    final built = await Future.wait(
+      projects.map((p) async {
+        List<ProjectItemRecord> items = const [];
+        try {
+          final itemSnap = await _doc(userId, p.id).collection('items').limit(200).get();
+          items = itemSnap.docs
+              .map((d) => ProjectItemRecord.fromMap(d.id, d.data()))
+              .where((i) => i.title.isNotEmpty)
+              .toList();
+        } catch (_) {
+          // One unreadable project should cost its counts, not the whole list.
+        }
+        return ProjectSummary.from(p, items);
+      }),
+    );
+
+    // Late first, then soonest, then whatever was touched most recently — the
+    // undated work has no other order worth having.
+    built.sort((a, b) {
+      if (a.overdue != b.overdue) return b.overdue.compareTo(a.overdue);
+      if (a.nextDueMs > 0 && b.nextDueMs > 0) {
+        return a.nextDueMs.compareTo(b.nextDueMs);
+      }
+      if (a.nextDueMs > 0) return -1;
+      if (b.nextDueMs > 0) return 1;
+      return b.project.updatedAtMs.compareTo(a.project.updatedAtMs);
+    });
+    return built;
   }
 
   /// One project or task with its items and its history.

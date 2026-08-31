@@ -10,6 +10,9 @@ import '../../clients/data/client_repository.dart';
 import '../../payments/data/payment_repository.dart';
 import '../../payments/models/client_pending_dues_summary.dart';
 import '../../payments/models/payment_record.dart';
+import '../../projects/data/project_repository.dart';
+import '../../projects/models/project_models.dart';
+import '../../projects/presentation/project_detail_sheet.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../../tasks/models/task_item.dart';
 import '../models/order_record.dart';
@@ -30,21 +33,26 @@ class ReportsScreen extends StatefulWidget {
     super.key,
     required this.userId,
     this.onOpenChat,
+    this.onAskAboutWork,
   });
 
   final String userId;
   final VoidCallback? onOpenChat;
 
+  /// Jumps to Aivy with a question about one project or task already written.
+  final ValueChanged<String>? onAskAboutWork;
+
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-enum _Lens { all, money, orders, quotes, work }
+enum _Lens { all, money, orders, quotes, reminders, work }
 
 class _ReportsScreenState extends State<ReportsScreen> {
   late final ChatRepository _repository;
   late final ClientRepository _clients;
   late final PaymentRepository _payments;
+  late final ProjectRepository _projects;
 
   final TextEditingController _search = TextEditingController();
   _Lens _lens = _Lens.all;
@@ -56,6 +64,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _repository = ChatRepository();
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
+    _projects = ProjectRepository();
     _search.addListener(() {
       if (mounted) {
         setState(() {});
@@ -101,6 +110,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  /// Opens the same sheet the morning brief opens — one thing, drawn one way.
+  void _openProject(String projectId) {
+    unawaited(
+      ProjectDetailSheet.open(
+        context,
+        userId: widget.userId,
+        projectId: projectId,
+        onAskAbout: widget.onAskAboutWork,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -143,6 +164,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const SizedBox(height: 22),
                   ],
                   if (_shows(_Lens.work)) ...[
+                    _ProjectRecords(
+                      repository: _projects,
+                      userId: widget.userId,
+                      matches: _matches,
+                      onOpen: _openProject,
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                  if (_shows(_Lens.reminders)) ...[
                     _WorkRecords(
                       repository: _repository,
                       userId: widget.userId,
@@ -193,7 +223,10 @@ class _Header extends StatelessWidget {
     _Lens.money: 'Money',
     _Lens.orders: 'Orders',
     _Lens.quotes: 'Quotations',
-    _Lens.work: 'Tasks',
+    // This chip used to say "Tasks" and show reminders, which left two
+    // different things called tasks once real tasks existed.
+    _Lens.reminders: 'Reminders',
+    _Lens.work: 'Work',
   };
 
   @override
@@ -688,6 +721,245 @@ class _QuotationRecords extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Work: projects and tasks
+// ---------------------------------------------------------------------------
+
+/// Everything being worked on, and everything already finished.
+///
+/// The morning brief was the only way in until now, which meant a task stopped
+/// existing the moment it was closed — its history was still written, with no
+/// route to it. Finished work sits folded at the bottom here, because it is not
+/// read daily but it is exactly what you go looking for when somebody asks when
+/// something was delivered.
+class _ProjectRecords extends StatefulWidget {
+  const _ProjectRecords({
+    required this.repository,
+    required this.userId,
+    required this.matches,
+    required this.onOpen,
+  });
+
+  final ProjectRepository repository;
+  final String userId;
+  final bool Function(List<String?>) matches;
+  final ValueChanged<String> onOpen;
+
+  @override
+  State<_ProjectRecords> createState() => _ProjectRecordsState();
+}
+
+class _ProjectRecordsState extends State<_ProjectRecords> {
+  Future<List<ProjectSummary>>? _future;
+  bool _showDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.repository.summaries(widget.userId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ProjectSummary>>(
+      future: _future,
+      builder: (context, snap) {
+        if (!snap.hasData && !snap.hasError) {
+          return const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AivySectionHeader(title: 'Work'),
+              AivyCard(child: _Loading()),
+            ],
+          );
+        }
+
+        final all = (snap.data ?? const <ProjectSummary>[])
+            .where((s) => widget.matches([
+                  s.project.name,
+                  s.project.forWhom,
+                  s.project.note,
+                ]))
+            .toList();
+
+        final live = all.where((s) => s.project.isLive).toList();
+        final closed = all.where((s) => !s.project.isLive).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AivySectionHeader(title: 'Work', count: live.length),
+            if (all.isEmpty)
+              const AivyCard(
+                child: AivyEmpty('Nothing yet. Tell Aivy about a task or a project.'),
+              )
+            else ...[
+              if (live.isEmpty)
+                const AivyCard(child: AivyEmpty('Nothing open.'))
+              else
+                AivyCard(
+                  child: Column(
+                    children: [
+                      for (final s in live)
+                        _ProjectRow(summary: s, onTap: () => widget.onOpen(s.project.id)),
+                    ],
+                  ),
+                ),
+              if (closed.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: () => setState(() => _showDone = !_showDone),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Text('FINISHED', style: AivyUi.label(context)),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${closed.length}',
+                          style: const TextStyle(
+                            color: AivyUi.brand,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(
+                          _showDone
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: AivyUi.inkFaint,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showDone)
+                  AivyCard(
+                    child: Column(
+                      children: [
+                        for (final s in closed)
+                          _ProjectRow(
+                            summary: s,
+                            onTap: () => widget.onOpen(s.project.id),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ProjectRow extends StatelessWidget {
+  const _ProjectRow({required this.summary, required this.onTap});
+
+  final ProjectSummary summary;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = summary.project;
+    // Red is late, amber is due soon, green is settled — the same meanings
+    // these colours carry in the brief and in the detail sheet.
+    final Color mark = !p.isLive
+        ? AivyUi.ok
+        : summary.overdue > 0
+            ? AivyUi.danger
+            : summary.nextDueMs > 0 &&
+                    summary.nextDueMs <
+                        DateTime.now()
+                            .add(const Duration(days: 2))
+                            .millisecondsSinceEpoch
+                ? AivyUi.warn
+                : AivyUi.inkFaint;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 5, right: 10),
+              child: SizedBox(
+                width: 6,
+                height: 6,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: mark, shape: BoxShape.circle),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          p.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: p.isLive ? AivyUi.ink : AivyUi.inkSoft,
+                            fontSize: 14.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (p.isPersonal)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 6),
+                          child: Icon(
+                            Icons.home_outlined,
+                            size: 13,
+                            color: AivyUi.ok,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    p.isLive
+                        ? summary.subtitle()
+                        : '${p.status.replaceAll('_', ' ')} · ${summary.done} done',
+                    style: TextStyle(
+                      color: summary.overdue > 0 && p.isLive
+                          ? AivyUi.danger
+                          : AivyUi.inkFaint,
+                      fontSize: 12.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(left: 6, top: 2),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: AivyUi.inkFaint,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

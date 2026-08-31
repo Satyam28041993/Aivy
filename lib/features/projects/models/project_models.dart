@@ -163,3 +163,93 @@ class ProjectDetail {
   List<ProjectItemRecord> get done =>
       items.where((i) => i.status == 'done').toList();
 }
+
+/// One project or task as the browse list needs it: the record plus the counts
+/// that decide what it says and where it sorts.
+///
+/// The counts come from its items, which means one read per project. That is
+/// affordable for a list somebody opens on purpose, and the alternative —
+/// keeping running totals on the project document — is a second copy of the
+/// truth that goes wrong the first time a write half-fails.
+@immutable
+class ProjectSummary {
+  const ProjectSummary({
+    required this.project,
+    required this.open,
+    required this.waiting,
+    required this.done,
+    required this.overdue,
+    required this.nextDueMs,
+  });
+
+  final ProjectRecord project;
+  final int open;
+  final int waiting;
+  final int done;
+  final int overdue;
+
+  /// Soonest date still owed — the project's own deadline when it is a task,
+  /// otherwise the earliest date on anything still live in it. 0 for neither.
+  final int nextDueMs;
+
+  int get total => open + waiting + done;
+  int get live => open + waiting;
+
+  static ProjectSummary from(
+    ProjectRecord project,
+    List<ProjectItemRecord> items, {
+    DateTime? now,
+  }) {
+    final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final live = items.where((i) => i.isLive).toList();
+    final dates = <int>[
+      if (project.dueMs > 0) project.dueMs,
+      ...live.where((i) => i.dueMs > 0).map((i) => i.dueMs),
+    ]..sort();
+
+    return ProjectSummary(
+      project: project,
+      open: items.where((i) => i.status == 'open').length,
+      waiting: items.where((i) => i.status == 'waiting_on_them').length,
+      done: items.where((i) => i.status == 'done').length,
+      overdue: [
+        if (project.dueMs > 0 && project.dueMs < nowMs) 1,
+        ...live.where((i) => i.dueMs > 0 && i.dueMs < nowMs).map((_) => 1),
+      ].length,
+      nextDueMs: dates.isEmpty ? 0 : dates.first,
+    );
+  }
+
+  /// The line under the name. Says the fewest true things that answer "where is
+  /// this", and says "all clear" rather than nothing when there is no work left.
+  String subtitle({DateTime? now}) {
+    final parts = <String>[
+      if (project.forWhom.isNotEmpty) project.forWhom,
+      if (overdue > 0)
+        overdue == 1 ? '1 late' : '$overdue late'
+      else if (nextDueMs > 0)
+        _dueWord(nextDueMs, now: now),
+      if (open > 0) '$open pending',
+      if (waiting > 0) '$waiting waiting on them',
+    ];
+    if (parts.isEmpty || (open == 0 && waiting == 0 && overdue == 0)) {
+      parts.add(done > 0 ? 'all clear' : 'nothing in it yet');
+    }
+    return parts.join(' · ');
+  }
+
+  static String _dueWord(int dueMs, {DateTime? now}) {
+    final today = now ?? DateTime.now();
+    final start = DateTime(today.year, today.month, today.day);
+    final due = DateTime.fromMillisecondsSinceEpoch(dueMs);
+    final days = DateTime(due.year, due.month, due.day).difference(start).inDays;
+    if (days <= 0) return 'due today';
+    if (days == 1) return 'due tomorrow';
+    return 'due ${due.day} ${_months[due.month - 1]}';
+  }
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+}
