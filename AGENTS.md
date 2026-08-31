@@ -99,6 +99,26 @@ fingerprint would break Google sign-in.
   `AivyPill`. Colour carries meaning — red late, amber a decision, green settled,
   violet Aivy. A screen that reaches for `Theme.of(context)` defaults will look
   like a different app.
+- **Tasks and projects are one collection**, told apart by `kind`. A task is a
+  name with a deadline and a few steps — a project with fewer parts, not a
+  different animal — so every reader, reminder and status answer written for
+  projects works on it unchanged. Docs written before tasks existed carry no
+  `kind`, so read through `kindOf(p)`, never `p.kind`. `create_task` saves the
+  whole thing from one sentence on one card: splitting it into create-then-add
+  is how a feature stops being used. A deadline sets its own reminder plus a
+  halfway check-in, and marking a step done — or closing a task early — cancels
+  what is still scheduled (`agent/reminderCancel.ts`). A task that keeps ringing
+  after it is finished teaches him to ignore the ones that matter.
+- **The brief is ordered the way a morning is used**: tasks, projects, today,
+  mail, news, alerts, under one counted line. It ran mail-first once, which put
+  what he owes his director below twenty lines of alert digest. Sections fold
+  and the choice is remembered, but not all folded by default — a brief that
+  opens shut costs six taps to read one morning. Folded headers carry their
+  count, because folded and broken look identical without it. The tasks and
+  projects sections are read straight from Firestore and appended *after* the
+  model writes the rest: they are counts and dates that are already right, and
+  two sections have been lost before to model output arriving in an unexpected
+  shape.
 - **Reminders** are the one delivery path. Anything with a date should become a
   reminder rather than growing a second mechanism: the phone alarm and the
   server push both already work off them.
@@ -107,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after moving retired-function deletes before deploy._
+_Last updated: after the user verified build31 on the phone._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -137,6 +157,13 @@ unused today and kept for whatever voice is built next.
 - Saved places, Maps search and directions, live location
 - Google: Calendar, Gmail, Sheets, Contacts — Android only
 - Dashboard and Records, dark throughout
+- Tasks — created from one sentence, deadline plus a halfway check-in, steps
+  marked done from chat, reminders cancelled when a task closes early
+- The Work list in Records and the detail sheet with its history
+- The brief's new order, its counted summary line, and folding sections
+- **The app after 12,228 lines were deleted** — build31 exercised on the phone:
+  notifications, push, exact alarms, a real reminder firing, Today and Records
+  all intact
 
 **Just built, not yet exercised by the user**
 
@@ -146,37 +173,10 @@ unused today and kept for whatever voice is built next.
   `waiting_on_them` is a first-class state: half this trade is waiting on a
   client, and calling that "pending" makes both the feeling and the answer wrong.
   Dated items become reminders. Works entirely through chat.
-- **Tasks** — the small and medium work, business or personal: a deck a director
-  wants in two days, a film to book with his wife. Same collection as projects
-  under `kind: "task"`, so every reader, reminder and status answer written for
-  projects works on them unchanged; a second collection would have meant writing
-  all of it twice. `create_task` saves the whole thing from one sentence — name,
-  who it is for, deadline, steps — on one card, because splitting that into
-  create-then-add is how a feature stops being used. A deadline gets its own
-  reminder plus a halfway check-in, and marking a step done or closing a task
-  early **cancels its reminders** (`agent/reminderCancel.ts`) — a task that keeps
-  ringing after it is finished teaches him to ignore the ones that matter.
-- **The brief reads in the order a morning is used**: tasks, projects, today,
-  mail, news, alerts. It used to run mail-first, which put what he owes his
-  director below twenty lines of Hindi alert digest. Above it all, one counted
-  line — "2 late · 1 due today · 12 alert topics" — so it answers before it is
-  read. Sections fold, and the choice is remembered (`shared_preferences`), but
-  **not all folded by default**: a brief that opens shut costs six taps to read
-  one morning. The four that ask something of you open; news and alerts start
-  folded with their count on the header, because folded and broken look
-  identical without it.
-- **Work in the morning brief** — "Your tasks" and "Projects" sections, late
-  first, red for late and amber for due. Built straight from Firestore and
-  appended *after* the model has written the rest: these are counts and dates
-  that are already right, and two sections have been lost before to model output
-  arriving in a shape the parser did not expect.
-- **The Work list** — Records → **Work**. Every project and task, late first,
-  with finished ones folded at the bottom; the search box filters it. Counts
-  come from reading each project's items rather than from running totals kept on
-  the project document, because a second copy of the truth goes wrong the first
-  time a write half-fails. The Records chip that used to say "Tasks" now says
-  **Reminders** — it always showed reminders, and once real tasks existed two
-  things were called tasks.
+- **A project's items and its history.** The sheet opens and the Work list
+  reads, but no project has been filled from a page of trip notes yet, and no
+  history line has been written by a real update — every project that exists
+  predates the event log.
 - **The detail sheet** (`lib/features/projects/`). Tapping a work line in the
   brief opens the whole thing: steps with their states, and a **history** —
   every change, when it happened. `updatedAtMs` cannot answer "kab kya update
