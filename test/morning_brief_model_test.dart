@@ -32,6 +32,23 @@ void main() {
     });
   });
 
+  group('MorningBrief', () {
+    test('reads the one-line summary the server counted', () {
+      final b = MorningBrief.fromMap(<String, dynamic>{
+        'summary': '2 late  ·  1 due today',
+        'sections': <dynamic>[],
+      });
+      expect(b.summary, '2 late  ·  1 due today');
+    });
+
+    test('leaves the summary null on an older brief that has none', () {
+      // Yesterday's cached brief was written before this field existed, and
+      // must still render rather than showing an empty strip.
+      final b = MorningBrief.fromMap(<String, dynamic>{'sections': <dynamic>[]});
+      expect(b.summary, isNull);
+    });
+  });
+
   group('BriefSection', () {
     test('an empty section still earns its heading', () {
       // It used to be dropped, which is how the whole alerts section

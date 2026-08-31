@@ -72,7 +72,7 @@ the app opens for this reason, not because a cron would have been harder.
 
 ## Where things stand
 
-_Last updated: after tasks, work in the brief, and the detail sheet._
+_Last updated: after tasks, the detail sheet, and reordering the brief._
 
 **Working and tested in the live app**
 
@@ -103,6 +103,15 @@ _Last updated: after tasks, work in the brief, and the detail sheet._
   reminder plus a halfway check-in, and marking a step done or closing a task
   early **cancels its reminders** (`agent/reminderCancel.ts`) — a task that keeps
   ringing after it is finished teaches him to ignore the ones that matter.
+- **The brief reads in the order a morning is used**: tasks, projects, today,
+  mail, news, alerts. It used to run mail-first, which put what he owes his
+  director below twenty lines of Hindi alert digest. Above it all, one counted
+  line — "2 late · 1 due today · 12 alert topics" — so it answers before it is
+  read. Sections fold, and the choice is remembered (`shared_preferences`), but
+  **not all folded by default**: a brief that opens shut costs six taps to read
+  one morning. The four that ask something of you open; news and alerts start
+  folded with their count on the header, because folded and broken look
+  identical without it.
 - **Work in the morning brief** — "Your tasks" and "Projects" sections, late
   first, red for late and amber for due. Built straight from Firestore and
   appended *after* the model has written the rest: these are counts and dates

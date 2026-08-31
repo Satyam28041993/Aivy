@@ -104,11 +104,19 @@ class MorningBrief {
     required this.greeting,
     required this.sections,
     required this.gaps,
+    this.summary,
   });
 
   final String dateKey;
   final int builtAtMs;
   final String greeting;
+
+  /// The morning in one line — "2 late · 1 due today · 12 alert topics".
+  ///
+  /// Sits above everything, so the brief answers before it is read. On a
+  /// morning with nothing owed it is the only line worth looking at.
+  final String? summary;
+
   final List<BriefSection> sections;
 
   /// What could not be read — said out loud rather than left as a silent gap.
@@ -121,6 +129,10 @@ class MorningBrief {
       dateKey: (m['dateKey'] as String?) ?? '',
       builtAtMs: (m['builtAtMs'] as num?)?.toInt() ?? 0,
       greeting: (m['greeting'] as String?)?.trim() ?? 'Good morning.',
+      summary: () {
+        final v = (m['summary'] as String?)?.trim();
+        return (v == null || v.isEmpty) ? null : v;
+      }(),
       sections: (m['sections'] as List?)
               ?.whereType<Map>()
               .map((s) => BriefSection.fromMap(Map<String, dynamic>.from(s)))

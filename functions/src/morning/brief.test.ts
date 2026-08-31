@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dateKeyFor, dueWords, parseBrief } from "./brief";
+import { dateKeyFor, dueWords, orderSections, parseBrief, summaryLine } from "./brief";
 
 /**
  * The cache key decides whether a morning is rebuilt or handed back, so it has
@@ -127,5 +127,70 @@ describe("dueWords", () => {
 
   it("says so when there is no date, rather than inventing one", () => {
     expect(dueWords(0, IST, now)).toEqual({ text: "no date" });
+  });
+});
+
+function section(kind: string, items: Array<Record<string, unknown>> = []) {
+  return {
+    kind,
+    title: kind,
+    items: items as never,
+  };
+}
+
+/**
+ * The order a morning is used in.
+ *
+ * Mail, news and alerts came first because that is the order they were
+ * gathered in, which put the one thing owed to a director below twenty lines
+ * of alert digest.
+ */
+describe("orderSections", () => {
+  it("puts what is owed above what is merely worth reading", () => {
+    const out = orderSections([
+      section("mail"),
+      section("news"),
+      section("alerts"),
+      section("today"),
+      section("tasks"),
+      section("projects"),
+    ]);
+    expect(out.map((s) => s.kind)).toEqual([
+      "tasks",
+      "projects",
+      "today",
+      "mail",
+      "news",
+      "alerts",
+    ]);
+  });
+
+  it("keeps a section nobody planned for rather than dropping it", () => {
+    const out = orderSections([section("weather"), section("tasks")]);
+    expect(out.map((s) => s.kind)).toEqual(["tasks", "weather"]);
+  });
+});
+
+describe("summaryLine", () => {
+  it("counts what is owed before anything is read", () => {
+    const line = summaryLine([
+      section("tasks", [
+        { headline: "PPT", tone: "late" },
+        { headline: "Movie", tone: "due" },
+        { headline: "Later thing" },
+      ]),
+      section("mail", [{ headline: "A reply is waiting" }]),
+      section("alerts", [
+        { headline: "x", group: "Canva" },
+        { headline: "y", group: "Canva" },
+        { headline: "z", group: "Labels" },
+      ]),
+    ]);
+    // Two alert mails under one term are one topic, not two.
+    expect(line).toBe("1 late  ·  1 due today  ·  1 mail  ·  2 alert topics");
+  });
+
+  it("says so plainly when nothing is owed", () => {
+    expect(summaryLine([section("tasks"), section("mail")])).toBe("Nothing owed today.");
   });
 });

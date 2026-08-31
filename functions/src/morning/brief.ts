@@ -75,9 +75,53 @@ export interface MorningBrief {
   dateKey: string;
   builtAtMs: number;
   greeting: string;
+  /**
+   * The whole morning in one line — "2 late · 1 due today · 12 alert topics".
+   *
+   * Counted here rather than written by the model, and shown above everything
+   * else, so the brief answers before it is read. On a morning where nothing
+   * is owed that line is the only thing worth looking at.
+   */
+  summary?: string;
   sections: BriefSection[];
   /** What could not be read, said plainly rather than left as a gap. */
   gaps: string[];
+}
+
+/**
+ * The order a morning is actually used in: what is owed, then what is
+ * scheduled, then what has come in, then what is worth browsing.
+ *
+ * It used to run mail → news → alerts → tasks, which put the one thing a
+ * person owes their director below twenty lines of Hindi alert digest.
+ */
+const SECTION_ORDER = ["tasks", "projects", "today", "mail", "news", "alerts"];
+
+function orderSections(sections: BriefSection[]): BriefSection[] {
+  const ranked = SECTION_ORDER.flatMap((kind) => sections.filter((s) => s.kind === kind));
+  // Anything the model invented keeps its place at the end rather than being
+  // dropped — a section nobody planned for is still a section somebody reads.
+  const rest = sections.filter((s) => !SECTION_ORDER.includes(s.kind));
+  return [...ranked, ...rest];
+}
+
+/** Counts for the one-line summary, taken from the sections as built. */
+function summaryLine(sections: BriefSection[]): string {
+  const of = (kind: string) => sections.find((s) => s.kind === kind)?.items ?? [];
+  const tasks = of("tasks");
+  const late = tasks.filter((i) => i.tone === "late").length;
+  const due = tasks.filter((i) => i.tone === "due").length;
+  const mail = of("mail").length;
+  const alertTopics = new Set(of("alerts").map((i) => i.group ?? i.headline)).size;
+
+  const parts = [
+    late > 0 ? `${late} late` : "",
+    due > 0 ? `${due} due today` : "",
+    mail > 0 ? `${mail} mail` : "",
+    alertTopics > 0 ? `${alertTopics} alert topic${alertTopics === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join("  ·  ") : "Nothing owed today.";
 }
 
 function dateKeyFor(timezone: string, nowMs = Date.now()): string {
@@ -607,11 +651,14 @@ export async function buildBrief(opts: {
   // of the morning, what is on him today is read from Firestore and is right.
   const work = await workSections(opts.uid, zone, nowMs, input.gaps);
 
+  const sections = orderSections([...written.sections, ...work]);
+
   const brief: MorningBrief = {
     dateKey: dateKeyFor(zone, nowMs),
     builtAtMs: nowMs,
     greeting: written.greeting,
-    sections: [...written.sections, ...work],
+    summary: summaryLine(sections),
+    sections,
     gaps: input.gaps,
   };
 
@@ -623,4 +670,4 @@ export async function buildBrief(opts: {
   return brief;
 }
 
-export { dateKeyFor, parseBrief };
+export { dateKeyFor, orderSections, parseBrief, summaryLine };

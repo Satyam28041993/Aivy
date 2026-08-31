@@ -136,7 +136,7 @@ class _ProjectDetailSheetState extends State<ProjectDetailSheet> {
           children: [
             const Text(
               'Could not open this one.',
-              style: TextStyle(color: AivyUi.inkSoft, fontSize: 13.5),
+              style: TextStyle(color: AivyUi.inkSoft, fontSize: 14.5),
             ),
             const SizedBox(height: 8),
             TextButton(onPressed: _load, child: const Text('Try again')),
@@ -157,8 +157,8 @@ class _ProjectDetailSheetState extends State<ProjectDetailSheet> {
               detail.project.note,
               style: const TextStyle(
                 color: AivyUi.inkSoft,
-                fontSize: 13,
-                height: 1.4,
+                fontSize: 14,
+                height: 1.45,
               ),
             ),
           ],
@@ -278,7 +278,7 @@ class _Steps extends StatelessWidget {
         title: 'Steps',
         child: Text(
           'Nothing in it yet. Tell Aivy what needs doing.',
-          style: TextStyle(color: AivyUi.inkFaint, fontSize: 13, height: 1.35),
+          style: TextStyle(color: AivyUi.inkFaint, fontSize: 14, height: 1.4),
         ),
       );
     }
@@ -351,8 +351,8 @@ class _StepRow extends StatelessWidget {
                   item.title,
                   style: TextStyle(
                     color: done || dropped ? AivyUi.inkSoft : AivyUi.ink,
-                    fontSize: 13.5,
-                    height: 1.3,
+                    fontSize: 15,
+                    height: 1.35,
                     fontWeight: FontWeight.w600,
                     decoration: dropped ? TextDecoration.lineThrough : null,
                   ),
@@ -368,8 +368,8 @@ class _StepRow extends StatelessWidget {
                       ].join(' · '),
                       style: TextStyle(
                         color: late ? AivyUi.danger : AivyUi.inkFaint,
-                        fontSize: 12,
-                        height: 1.3,
+                        fontSize: 13,
+                        height: 1.35,
                       ),
                     ),
                   ),
@@ -395,7 +395,7 @@ class _Timeline extends StatelessWidget {
         child: Text(
           'Nothing recorded yet. Every change you make through Aivy from now on '
           'shows up here.',
-          style: TextStyle(color: AivyUi.inkFaint, fontSize: 13, height: 1.35),
+          style: TextStyle(color: AivyUi.inkFaint, fontSize: 14, height: 1.4),
         ),
       );
     }
@@ -466,7 +466,7 @@ class _TimelineRow extends StatelessWidget {
                     DateFormat('d MMM, h:mm a').format(at),
                     style: const TextStyle(
                       color: AivyUi.inkFaint,
-                      fontSize: 11.5,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -475,8 +475,8 @@ class _TimelineRow extends StatelessWidget {
                     event.text,
                     style: const TextStyle(
                       color: AivyUi.ink,
-                      fontSize: 13,
-                      height: 1.35,
+                      fontSize: 14.5,
+                      height: 1.4,
                     ),
                   ),
                 ],
@@ -508,7 +508,7 @@ class _Block extends StatelessWidget {
             if (trailing != null)
               Text(
                 trailing!,
-                style: const TextStyle(color: AivyUi.inkFaint, fontSize: 11.5),
+                style: const TextStyle(color: AivyUi.inkFaint, fontSize: 12.5),
               ),
           ],
         ),
