@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../core/design/aivy_ui.dart';
 import '../../../core/firebase/firebase_session.dart';
 import '../../../core/location/device_location.dart';
 import '../../../core/theme/aivy_theme.dart';
 import '../data/agent_service.dart';
+import '../models/agent_attachment.dart';
 import '../models/agent_models.dart';
 import 'widgets/agent_history_drawer.dart';
 import 'widgets/agent_message_bubble.dart';
@@ -63,6 +68,9 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
 
   /// Shown immediately so the user sees their own line before the round trip.
   String? _pendingUserText;
+
+  final List<AgentPendingFile> _pendingFiles = [];
+  final ImagePicker _images = ImagePicker();
 
   /// Whether Gmail/Calendar/Sheets are reachable from this device. Null until
   /// checked; always false on web, where the Google REST stack does not run.
@@ -213,19 +221,21 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
 
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty || _sending) {
+    final files = List<AgentPendingFile>.from(_pendingFiles);
+    if (!canSendAgentTurn(text: text, attachmentCount: files.length) || _sending) {
       return;
     }
     _input.clear();
     setState(() {
       _sending = true;
       _error = null;
-      _pendingUserText = text;
+      _pendingFiles.clear();
+      _pendingUserText = _optimisticLine(text, files);
     });
     _scrollToEnd();
 
     try {
-      final res = await _service.send(text: text, chatId: _chatId);
+      final res = await _service.send(text: text, chatId: _chatId, files: files);
       if (!mounted) {
         return;
       }
@@ -238,8 +248,11 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       }
       setState(() {
         _error = _describeSendFailure(error);
-        // Put the text back so nothing is lost.
+        // Put the text and files back so nothing is lost.
         _input.text = text;
+        _pendingFiles
+          ..clear()
+          ..addAll(files);
         _pendingUserText = null;
       });
     } finally {
@@ -247,6 +260,151 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
         setState(() => _sending = false);
       }
     }
+  }
+
+  String _optimisticLine(String text, List<AgentPendingFile> files) {
+    final pins = files.map((f) => '📎 ${f.name}').join('\n');
+    if (text.isNotEmpty && pins.isNotEmpty) {
+      return '$text\n$pins';
+    }
+    return pins.isNotEmpty ? pins : text;
+  }
+
+  Future<void> _pickFrom({required String source}) async {
+    if (_sending || _pendingFiles.length >= kAgentMaxAttachments) {
+      return;
+    }
+    try {
+      if (source == 'pdf') {
+        final pick = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const ['pdf'],
+          withData: true,
+        );
+        final file = pick?.files.single;
+        final bytes = file?.bytes;
+        if (file == null || bytes == null || bytes.isEmpty) {
+          return;
+        }
+        _addPending(file.name, 'application/pdf', bytes);
+        return;
+      }
+      final shot = await _images.pickImage(
+        source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 2048,
+      );
+      if (shot == null) {
+        return;
+      }
+      final bytes = await shot.readAsBytes();
+      _addPending(
+        shot.name,
+        shot.mimeType ?? 'image/jpeg',
+        bytes,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _snack(
+        source == 'camera'
+            ? 'Could not open the camera — pick a photo or a PDF instead.'
+            : 'Could not attach that file.',
+      );
+      if (kDebugMode) {
+        debugPrint('[AivyAgent] attach failed: $error');
+      }
+    }
+  }
+
+  void _addPending(String name, String rawMime, Uint8List bytes) {
+    final mime = normalizeAgentMime(rawMime, fileName: name);
+    if (mime == null) {
+      _snack('Send a photo or a PDF — JPEG, PNG or PDF.');
+      return;
+    }
+    if (bytes.length > kAgentMaxAttachmentBytes) {
+      _snack('That file is too large — keep it under 8 MB.');
+      return;
+    }
+    if (_pendingFiles.length >= kAgentMaxAttachments) {
+      _snack('Three files at a time.');
+      return;
+    }
+    setState(() {
+      _pendingFiles.add(AgentPendingFile(name: name, mimeType: mime, bytes: bytes));
+    });
+  }
+
+  Future<void> _showAttachSheet() async {
+    if (_sending) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AivyUi.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Attach', style: AivyUi.title(context)),
+                const SizedBox(height: 4),
+                Text(
+                  'A visiting card, a rate card, a brochure, a training PDF.',
+                  style: AivyUi.soft(context),
+                ),
+                const SizedBox(height: 14),
+                _attachTile(
+                  icon: Icons.photo_camera_outlined,
+                  label: 'Take a photo',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    unawaited(_pickFrom(source: 'camera'));
+                  },
+                ),
+                _attachTile(
+                  icon: Icons.photo_outlined,
+                  label: 'Choose a photo',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    unawaited(_pickFrom(source: 'gallery'));
+                  },
+                ),
+                _attachTile(
+                  icon: Icons.picture_as_pdf_outlined,
+                  label: 'Choose a PDF',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    unawaited(_pickFrom(source: 'pdf'));
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _attachTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AivyUi.brand),
+      title: Text(label, style: const TextStyle(color: AivyUi.ink)),
+      onTap: onTap,
+    );
   }
 
   /// Names the actual cause rather than reporting every failure the same way.
@@ -457,7 +615,9 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   // Build
   // -------------------------------------------------------------------------
 
-  bool get _hasText => _input.text.trim().isNotEmpty;
+  bool get _canSend =>
+      canSendAgentTurn(text: _input.text, attachmentCount: _pendingFiles.length) &&
+      !_sending;
 
   @override
   Widget build(BuildContext context) {
@@ -697,55 +857,107 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   Widget _composer() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          color: const Color(0xFF10141F),
-          border: Border.all(
-            color: _inputFocus.hasFocus
-                ? const Color(0xFF22D3EE).withValues(alpha: 0.45)
-                : const Color(0xFF1E293B),
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(16, 2, 4, 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                focusNode: _inputFocus,
-                enabled: !_sending,
-                minLines: 1,
-                maxLines: 5,
-                textInputAction: TextInputAction.newline,
-                keyboardType: TextInputType.multiline,
-                style: const TextStyle(
-                  color: Color(0xFFE7EDF5),
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Type anything…',
-                  hintStyle: TextStyle(color: Color(0xFF475569), fontSize: 15),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 13),
-                ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_pendingFiles.isNotEmpty) _attachmentChips(),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              color: const Color(0xFF10141F),
+              border: Border.all(
+                color: _inputFocus.hasFocus
+                    ? const Color(0xFF22D3EE).withValues(alpha: 0.45)
+                    : const Color(0xFF1E293B),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: _sendButton(),
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: IconButton(
+                    tooltip: 'Attach a photo or PDF',
+                    onPressed: _sending ? null : _showAttachSheet,
+                    icon: Icon(
+                      Icons.attach_file_rounded,
+                      color: _pendingFiles.isNotEmpty
+                          ? AivyUi.brand
+                          : const Color(0xFF94A3B8),
+                      size: 22,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    focusNode: _inputFocus,
+                    enabled: !_sending,
+                    minLines: 1,
+                    maxLines: 5,
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(
+                      color: Color(0xFFE7EDF5),
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Type anything, or attach a file…',
+                      hintStyle: TextStyle(color: Color(0xFF475569), fontSize: 15),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 13),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _sendButton(),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attachmentChips() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          for (final file in _pendingFiles)
+            InputChip(
+              avatar: Icon(
+                file.isPdf
+                    ? Icons.picture_as_pdf_outlined
+                    : Icons.image_outlined,
+                size: 16,
+                color: AivyUi.brand,
+              ),
+              label: Text(
+                file.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+              labelStyle: const TextStyle(color: AivyUi.ink, fontSize: 12),
+              backgroundColor: AivyUi.surfaceHigh,
+              side: const BorderSide(color: AivyUi.line),
+              onDeleted: _sending
+                  ? null
+                  : () => setState(() => _pendingFiles.remove(file)),
+            ),
+        ],
       ),
     );
   }
 
   Widget _sendButton() {
-    final enabled = _hasText && !_sending;
+    final enabled = _canSend;
     return Material(
       color: enabled ? const Color(0xFF22D3EE) : const Color(0xFF1E293B),
       shape: const CircleBorder(),

@@ -27,7 +27,9 @@ Each of these cost real time. They are here so they cost it once.
 It now defaults to true, but if you dispatch the workflow by API, pass it
 explicitly. A run that skips the functions still reports success, because a
 skipped step is not a failed one — so hosting updates, the server does not, and
-nothing says so.
+nothing says so. A push to `deploy/**` is the git trigger when Actions
+dispatch is unavailable; that path always deploys functions. An unset input
+on a push used to skip them — do not put that back.
 
 **Deleting a function from the source does not undeploy it.** It keeps
 answering, so an old callable can still reply to something that was meant to
@@ -57,12 +59,19 @@ somebody else's private information. Nothing had told the model that everything
 these tools reach is one person's own notebook, so it applied a generic privacy
 rule to the user's own note. The rule is now in `systemPrompt.ts` under **Their
 own records are theirs**, with a test pinning it. It applies to places,
-contacts, occasions and remembered facts alike, and stops short of hunting for
-something never recorded.
+contacts, occasions, remembered facts and the document library alike, and
+stops short of hunting for something never recorded.
 
 **Firestore rejects `undefined`.** Not "ignores" — rejects, and the write throws.
 Omit the key instead. `stripUndefined` in `chatStore.ts` guards the chat path;
 nothing guards the others.
+
+**Callables cannot carry a PDF.** The request ceiling is about 10 MB, so a file
+goes to Storage first (`users/{uid}/agent_files/...`) and the turn only sends
+the path. The server downloads that prefix and no other — including `..`
+tricks. Bytes go to Gemini on *this* turn as `inlineData` and are never written
+into chat history; a conversation that replayed base64 would grow until the
+next turn failed.
 
 **Gmail is Android-only.** The server holds no Google refresh token — only the
 access token the app forwards with a request. So nothing on a schedule can read
@@ -127,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the user verified build31 on the phone._
+_Last updated: after dispatching the file-library deploy and APK from git._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -144,8 +153,9 @@ and following the call graph, not by reading names — `paymentSettlement`,
 `webSearch` and `readNudgeState` all looked equally orphaned and are all live.
 
 **Nothing voice-related is left in the app.** `audio_service.dart` plays the
-reminder sound and is not speech; `firebase_storage` and `storage.rules` are
-unused today and kept for whatever voice is built next.
+reminder sound and is not speech. `firebase_storage` and `storage.rules` are
+now used by the Aivy paperclip — a photo or PDF uploads to
+`users/{uid}/agent_files/` before the turn.
 
 **Working and tested in the live app**
 
@@ -167,6 +177,16 @@ unused today and kept for whatever voice is built next.
 
 **Just built, not yet exercised by the user**
 
+- **Files on Aivy** — paperclip on the composer (camera, photo, PDF). The app
+  uploads to Storage; `aivyAgent` downloads only `users/{uid}/agent_files/`,
+  shows the bytes to Gemini on this turn, and stores `📎 filename` in history.
+  A visiting card becomes a `saved_contact` draft (root `contacts`, same as
+  Records). A brochure / rate card / training PDF becomes a `library_item`
+  draft (`users/{uid}/library`). `search_library` answers later; a job line
+  still goes through `remember_fact`. Writes wait for the confirm card. Image
+  and PDF only — PPT and Excel are refused with a sentence, not a second
+  editor. `find_contact` reads the CRM book first, so a saved card is
+  findable on web without Google.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
@@ -205,6 +225,9 @@ unused today and kept for whatever voice is built next.
 - **`aivy_ai_response.dart` is mostly unused.** `ReminderSuggestion` inside it
   is live, which is why the file stayed. The rest of its classes have no
   reader.
+- **PPT and Excel are not readable yet.** The paperclip takes a photo or a
+  PDF. There is no Documents edit screen — filing and recall are through
+  Aivy, same as everything else.
 
 ## The machines this runs on
 
