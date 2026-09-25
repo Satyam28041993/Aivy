@@ -27,7 +27,9 @@ Each of these cost real time. They are here so they cost it once.
 It now defaults to true, but if you dispatch the workflow by API, pass it
 explicitly. A run that skips the functions still reports success, because a
 skipped step is not a failed one — so hosting updates, the server does not, and
-nothing says so.
+nothing says so. A push to `deploy/**` is the git trigger when Actions
+dispatch is unavailable; that path always deploys functions. An unset input
+on a push used to skip them — do not put that back.
 
 **Deleting a function from the source does not undeploy it.** It keeps
 answering, so an old callable can still reply to something that was meant to
@@ -134,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the file-library first slice (paperclip, visiting cards, library)._
+_Last updated: after dispatching the file-library deploy and APK from git._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
