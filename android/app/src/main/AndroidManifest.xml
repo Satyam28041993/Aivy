@@ -14,6 +14,10 @@
          app is closed, and nothing is stored. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Visiting-card photos from the Aivy paperclip. Not required — a
+         device without a camera can still pick a gallery image or a PDF. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="aivy"
         android:name="${applicationName}"

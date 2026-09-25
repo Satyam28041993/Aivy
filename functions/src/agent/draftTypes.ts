@@ -22,7 +22,9 @@ export type DraftKind =
   | "calendar_event"
   | "email"
   | "sheet_row"
-  | "saved_place";
+  | "saved_place"
+  | "saved_contact"
+  | "library_item";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -149,6 +151,31 @@ export interface SavedPlaceDraftData {
   replacing: boolean;
 }
 
+export interface SavedContactDraftData {
+  kind: "saved_contact";
+  name: string;
+  phone: string;
+  company: string;
+  email: string;
+  notes: string;
+  /** True when this number is already saved and the card updates it. */
+  replacing: boolean;
+  existingId: string | null;
+}
+
+export interface LibraryItemDraftData {
+  kind: "library_item";
+  title: string;
+  libraryKind: "brochure" | "rate_card" | "training" | "product" | "other";
+  sourceName: string;
+  mimeType: string;
+  storagePath: string;
+  excerpt: string;
+  facts: Array<{ label: string; value: string }>;
+  replacing: boolean;
+  existingId: string | null;
+}
+
 /** One thing to remember, filed under a key of its own. */
 export interface RememberedFact {
   /** Stable subject key — "wife", "anniversary", "city". */
@@ -228,7 +255,9 @@ export type DraftData =
   | CalendarEventDraftData
   | EmailDraftData
   | SheetRowDraftData
-  | SavedPlaceDraftData;
+  | SavedPlaceDraftData
+  | SavedContactDraftData
+  | LibraryItemDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {

@@ -60,6 +60,7 @@ const USER_COLLECTIONS = [
   "daily_summary",
   "contacts",
   "places",
+  "library",
   "memory_logs",
   // Written by the agent and missed here until tasks landed: a reset that
   // leaves projects behind is not a reset.

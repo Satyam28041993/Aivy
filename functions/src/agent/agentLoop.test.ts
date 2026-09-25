@@ -303,4 +303,28 @@ describe("history", () => {
     expect(res.newContents[0]!.parts[0]!.text).toBe("naya");
     expect(res.newContents[1]!.role).toBe("model");
   });
+
+  it("shows file bytes to the model this turn and never persists them", async () => {
+    const s = scripted(say("visiting card hai"));
+    const res = await runAgentTurn({
+      ...base,
+      userText: "ye card save kar lo",
+      attachmentNames: ["card.jpg"],
+      fileParts: [{ inlineData: { mimeType: "image/jpeg", data: "QUJD" } }],
+      transport: s.transport,
+    });
+
+    const live = s.seen[0] as {
+      contents: Array<{ parts: Array<{ text?: string; inlineData?: { data: string } }> }>;
+    };
+    const liveParts = live.contents.at(-1)!.parts;
+    expect(liveParts[0]!.text).toContain("ye card save kar lo");
+    expect(liveParts[0]!.text).toContain("📎 card.jpg");
+    expect(liveParts[1]!.inlineData?.data).toBe("QUJD");
+
+    expect(res.newContents[0]!.parts).toHaveLength(1);
+    expect(res.newContents[0]!.parts[0]!.text).toContain("📎 card.jpg");
+    expect(JSON.stringify(res.newContents)).not.toContain("QUJD");
+    expect(JSON.stringify(res.newContents)).not.toContain("inlineData");
+  });
 });

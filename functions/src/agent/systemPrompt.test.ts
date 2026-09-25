@@ -48,4 +48,12 @@ describe("buildSystemPrompt", () => {
   it("still says a write is not done until it is confirmed", () => {
     expect(prompt).toContain("Writes need a yes");
   });
+
+  it("tells the model how to file an attached visiting card or rate card", () => {
+    expect(prompt).toContain("save_contact");
+    expect(prompt).toContain("save_library_item");
+    expect(prompt).toContain("search_library");
+    expect(prompt).toContain("remember_fact");
+    expect(prompt).toMatch(/do not dump the whole page into/i);
+  });
 });

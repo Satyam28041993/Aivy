@@ -57,6 +57,11 @@ import {
   projectStatusTool,
   updateProjectItemTool,
 } from "./tools/projectTools";
+import {
+  saveContactTool,
+  saveLibraryItemTool,
+  searchLibraryTool,
+} from "./tools/libraryTools";
 import { fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 /** Minimal JSON-schema subset Gemini accepts for a function declaration. */
@@ -521,12 +526,94 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: "find_contact",
     description:
-      "Look up someone's email or phone in the user's Google Contacts. Use when " +
-      "you need an address before writing a mail, or when they ask for someone's " +
-      "number.",
+      "Look up someone's email or phone. Checks the contacts they have saved " +
+      "here first — visiting cards included — then Google Contacts when Google " +
+      "is connected. Use when they ask for someone's number, or when you need " +
+      "an address before writing a mail. Works without Google for anyone they " +
+      "saved in this app.",
     parameters: {
       type: "object",
-      properties: { query: { type: "string", description: "Name to search for." } },
+      properties: { query: { type: "string", description: "Name, company or number." } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "save_contact",
+    description:
+      "Save a person they met — almost always from a visiting card they just " +
+      "attached. Name is required, plus a phone or an email. Creates a draft " +
+      "for confirmation. This is their contact book in this app, not a Google " +
+      "contact. If the same phone is already saved, the card updates it.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Name as printed on the card." },
+        phone: { type: "string", description: "Phone as printed. 10 digits is fine." },
+        company: { type: "string" },
+        email: { type: "string" },
+        notes: {
+          type: "string",
+          description: "Title, address, or anything else worth keeping.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "save_library_item",
+    description:
+      "File a document they will ask about later — a rate card, brochure, " +
+      "training note, product sheet, price list. One file is one record. " +
+      "Extract every useful fact (prices, SKUs, specs, trainer names) so " +
+      "search can find them later. Creates a draft for confirmation. Do not " +
+      "dump the whole page into remember_fact.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "What they will ask for it as — 'GEID holographic rate card'.",
+        },
+        kind: {
+          type: "string",
+          enum: ["brochure", "rate_card", "training", "product", "other"],
+        },
+        excerpt: {
+          type: "string",
+          description: "A short summary in a few sentences, in English.",
+        },
+        facts: {
+          type: "array",
+          description: "Every useful fact pulled out of the document.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "e.g. '10k qty rate', 'SKU'." },
+              value: { type: "string" },
+            },
+            required: ["label", "value"],
+          },
+        },
+        source_name: { type: "string", description: "Original file name, if known." },
+        mime_type: { type: "string" },
+        storage_path: {
+          type: "string",
+          description: "The Storage path the app sent with this turn, if any.",
+        },
+      },
+      required: ["title", "kind"],
+    },
+  },
+  {
+    name: "search_library",
+    description:
+      "Search the documents they have filed — rate cards, brochures, training " +
+      "notes. Use for 'X ka rate kya hai', 'training me kya tha', 'brochure me " +
+      "kya likha hai'. Their own notebook includes the library, so look it up " +
+      "and give it to them.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
       required: ["query"],
     },
   },
@@ -920,6 +1007,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   list_calendar_events: listCalendarEventsTool,
   list_recent_emails: listRecentEmailsTool,
   find_contact: findContactTool,
+  save_contact: saveContactTool,
+  save_library_item: saveLibraryItemTool,
+  search_library: searchLibraryTool,
   find_places: findPlacesTool,
   get_directions: getDirectionsTool,
   where_am_i: (ctx) => whereAmITool(ctx),
@@ -954,6 +1044,8 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "save_place",
   "add_project_items",
   "create_task",
+  "save_contact",
+  "save_library_item",
 ]);
 
 export function isKnownTool(name: string): boolean {
