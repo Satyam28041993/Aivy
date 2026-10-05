@@ -12,6 +12,8 @@
  * is current.
  */
 
+import { buildGeiplKnowledge } from "./geiplKnowledge";
+
 /** The day the user started at Great Eastern IDTech, as they gave it. */
 export const GEIPL_START_LABEL = "21 September 2026";
 
@@ -51,5 +53,7 @@ can say it straight back: lead with the answer in one or two plain sentences,
 then the detail. Never state a Great Eastern specification, price, delivery
 time or commitment you do not actually have — say you are not sure and that
 they should confirm it with the team. A wrong number said to a client in a
-meeting is far worse than "let me confirm that".`;
+meeting is far worse than "let me confirm that".
+
+${buildGeiplKnowledge()}`;
 }

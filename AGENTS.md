@@ -172,10 +172,16 @@ unused today and kept for whatever voice is built next.
   Graphic (PGPL). The prompt now says business is either Great Eastern or their
   own **PrintSahaj**, and that a remembered "works at Prakruti" line is out of
   date. It is in the prompt, not only in memory, because memory saved earlier
-  may still say Prakruti and a fact cannot overrule itself. Great Eastern product and
-  training knowledge goes in this same file next, so Aivy can answer a
-  client's questions while they sit with the client. Tests in `systemPrompt.test.ts`.
-  Not live until `Deploy Web` runs with the functions.
+  may still say Prakruti and a fact cannot overrule itself. Tests in
+  `systemPrompt.test.ts`. Not live until `Deploy Web` runs with the functions.
+- **Great Eastern training** (`functions/src/agent/geiplKnowledge.ts`), so Aivy
+  can answer a client's questions while the user sits with them. Written from
+  the training PDFs and docs in their Drive plus geipl.com: company, hardware,
+  supplies, WMS, RFID, TTR, label stocks, and the DinoLabelDigital terms and
+  process. About 3,000 words, sent on every turn. Where sources disagree the
+  file names which to quote (₹10,000 MOV and 7 working days, not the older
+  brochure MOQ). **No prices yet** — the prompt forbids quoting any until the
+  user's price list is added here. Brochure images are coming too.
 
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job

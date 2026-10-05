@@ -79,4 +79,29 @@ describe("buildSystemPrompt", () => {
   it("does not let it invent Great Eastern facts in front of a client", () => {
     expect(prompt).toMatch(/Never state a Great Eastern specification/);
   });
+
+  it("carries the Great Eastern training material", () => {
+    expect(prompt).toContain("Great Eastern IDTech — what you know");
+    expect(prompt).toContain("DinoLabelDigital");
+    expect(prompt).toContain("Warehouse Management System");
+    expect(prompt).toContain("Thermal transfer ribbons");
+  });
+
+  it("quotes the current Dino terms, not the older brochure ones", () => {
+    // The pitch deck says MOQ 5,000 and 5-7 days; the cheat sheet and the
+    // quotation format say Rs 10,000 MOV and 7 working days. Left to
+    // itself the model picks one at random in front of a client.
+    expect(prompt).toContain("Minimum order value ₹10,000 per order");
+    expect(prompt).toContain("Lead time: 7 working days");
+    expect(prompt).toMatch(/Do not quote those/);
+  });
+
+  it("will not quote a price before it has the price list", () => {
+    expect(prompt).toMatch(/Never quote a price, discount or rate/);
+  });
+
+  it("looks things up on the company website rather than guessing", () => {
+    expect(prompt).toContain("site:geipl.com");
+    expect(prompt).toContain("site:dinolabeldigital.com");
+  });
 });
