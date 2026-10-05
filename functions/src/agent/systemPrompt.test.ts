@@ -107,9 +107,19 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/check it equals chrome x multiplier/);
   });
 
-  it("follows the price book, not the old brochure, on BarTender Starter printers", () => {
-    expect(prompt).toContain("Starter workstation licence with unlimited printers");
+  it("knows BarTender: editions, licensing and the Starter printer question", () => {
+    expect(prompt).toContain("BarTender — label design and printing software");
+    // Workstation licence = one PC, unlimited printers; the old "up to 3"
+    // was the printer-based Starter. The price book sells the workstation one.
+    expect(prompt).toMatch(/workstation licence\*\* is one user on one PC with \*\*unlimited printers/);
+    expect(prompt).toContain("Say unlimited printers, one PC.");
     expect(prompt).not.toContain("Starter (up to 3 printers)");
+    // Each edition and the cloud plans are covered.
+    for (const s of ["*Professional adds*", "*Automation adds*", "*Enterprise adds*", "BarTender Cloud plans"]) {
+      expect(prompt).toContain(s);
+    }
+    // No website dollar prices: Great Eastern's prices come from get_price.
+    expect(prompt).not.toMatch(/\$\s?\d/);
   });
 
   it("knows how to recommend, and hands over the brochure", () => {

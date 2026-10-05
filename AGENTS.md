@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after adding the Great Eastern price book (`get_price`)._
+_Last updated: after the BarTender training (`agent/bartenderKnowledge.ts`)._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -218,6 +218,16 @@ unused today and kept for whatever voice is built next.
   rules give clients no access to it; only the functions read it. The prompt
   says prices are for the user's eyes, not to be put into anything sent to a
   client unasked, and always "GST extra". Edit the sheet, re-run the workflow.
+- **BarTender training** (`functions/src/agent/bartenderKnowledge.ts`, rendered
+  inside the Great Eastern section). From the BarTender 2022 four-edition
+  comparison the user supplied, the three BarTender PDFs in the library and
+  what search could read of bartendersoftware.com (the site is blocked from
+  this environment). Editions feature by feature, workstation vs printer
+  licensing — which is why the price book's "Starter, unlimited printers" and
+  the old charts' "up to 3" are both true — the price-book SKU codes decoded,
+  support tiers, Cloud plans, the manufacturing pitch and six questions for
+  choosing an edition. No website prices, at the user's request: Great
+  Eastern's come from `get_price`.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets

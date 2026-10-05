@@ -18,6 +18,7 @@
  * this repository is public and the price book is not.
  */
 
+import { buildBartenderKnowledge } from "./bartenderKnowledge";
 import { buildProductSelector } from "./brochures";
 
 export function buildGeiplKnowledge(): string {
@@ -432,16 +433,10 @@ much, where — recommend like a sales engineer, not a catalogue:
   film-wrapped and DPM codes, OCR) or HT682A (reads up to 20 m — high racks —
   and has a hot-swap battery).
 
-**BarTender — which edition**
-- Simple labels, data from Excel or CSV → Starter. The Great Eastern price
-  book sells the Starter workstation licence with unlimited printers; the
-  older "Starter vs Professional" brochure says up to 3. The user confirmed
-  the price book is right — say unlimited, and do not quote the brochure's 3.
-- Databases, serial numbers, RFID encoding, conditional labels →
-  Professional.
-- Printing automatically from SAP/Oracle/WMS or a web service → Automation.
-- Several sites, regulated industry (pharma, food), audit trail and
-  e-signatures → Enterprise.
+**BarTender — which edition**: see the BarTender section below; ask its six
+questions before naming an edition.
+
+${buildBartenderKnowledge()}
 
 ## Specifications come from the brochure
 
