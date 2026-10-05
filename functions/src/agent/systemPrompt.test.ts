@@ -96,8 +96,15 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/Do not quote those/);
   });
 
-  it("will not quote a price before it has the price list", () => {
-    expect(prompt).toMatch(/Never quote a price, discount or rate/);
+  it("prices come from the price book, never from memory", () => {
+    expect(prompt).toContain("call `get_price` before giving any");
+    expect(prompt).toMatch(/Never price from memory/);
+    expect(prompt).toContain("GST extra");
+    // The user said the prices are for their eyes; they must not leak into
+    // something sent to a client unasked.
+    expect(prompt).toMatch(/do not put a price into an\s+email/);
+    // The multiplier is the cross-check the user asked for.
+    expect(prompt).toMatch(/check it equals chrome x multiplier/);
   });
 
   it("knows how to recommend, and hands over the brochure", () => {

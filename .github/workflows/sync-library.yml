@@ -1,6 +1,8 @@
 # Copies the Great Eastern brochures and training documents from Google Drive
 # into Firebase Storage, so Aivy's find_document tool can hand out download
-# links. See functions/scripts/syncBrochures.cjs.
+# links (functions/scripts/syncBrochures.cjs), and the price book from the
+# user's Google Sheet into Firestore for get_price
+# (functions/scripts/syncPriceBook.cjs). Run it after editing either.
 #
 # Run it again after adding or changing files in the Drive folders:
 # GitHub → Actions → Sync Document Library → Run workflow. It also runs when
@@ -13,6 +15,7 @@ on:
     branches: ["claude/page-voice-process-review-enhkhh"]
     paths:
       - "functions/scripts/syncBrochures.cjs"
+      - "functions/scripts/syncPriceBook.cjs"
       - ".github/workflows/sync-library.yml"
 
 concurrency:
@@ -60,3 +63,10 @@ jobs:
       - name: Sync Drive → Firebase Storage
         working-directory: functions
         run: node scripts/syncBrochures.cjs
+
+      # The price sheet is checked before it is written: a material rate that
+      # is not chrome x its multiplier fails this step and leaves the old
+      # price book in place.
+      - name: Sync price book (Google Sheet → Firestore)
+        working-directory: functions
+        run: node scripts/syncPriceBook.cjs

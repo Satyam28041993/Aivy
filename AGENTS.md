@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the brochure file cards and Enter-to-send._
+_Last updated: after adding the Great Eastern price book (`get_price`)._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -180,8 +180,7 @@ unused today and kept for whatever voice is built next.
   supplies, WMS, RFID, TTR, label stocks, and the DinoLabelDigital terms and
   process. About 3,000 words, sent on every turn. Where sources disagree the
   file names which to quote (₹10,000 MOV and 7 working days, not the older
-  brochure MOQ). **No prices yet** — the prompt forbids quoting any until the
-  user's price list is added here.
+  brochure MOQ). Prices are not in this file — see the price book below.
 - **Document library** (`functions/src/agent/brochures.ts`, tool
   `find_document`). 34 product brochures (Drive "NEW BROUCHER": Printer,
   Scanner, Mobile Computer, Bartender) and 21 training/company files (Drive
@@ -205,6 +204,20 @@ unused today and kept for whatever voice is built next.
   when read by hand. Retrieval is keyword ranking over the catalogue, not
   embeddings: with ~55 files and model numbers as the main query, that is
   enough; revisit if the library grows into the hundreds.
+- **The price book** (`functions/src/agent/priceBook.ts`, tool `get_price`).
+  Transcribed from photos of the printed 2026 price book into the user's
+  Google Sheet "GEIPL Price Book 2026 - Aivy" (in the price-book photo folder
+  in Drive): terms, systems, then supplies — labels per roll, then the Indian
+  Chrome rate per 1000, then one column per material as a live formula of
+  chrome x the multiplier in its heading — then products with no brochure and
+  points to confirm. **The prices are never in this repo, which is public.**
+  `scripts/syncPriceBook.cjs` (a step of the Sync Document Library workflow)
+  exports the sheet and writes Firestore `priceBook/current`; it re-checks
+  every material rate against chrome x multiplier and refuses to write if one
+  is off. The sheet is shared (Viewer) with the service account. Firestore
+  rules give clients no access to it; only the functions read it. The prompt
+  says prices are for the user's eyes, not to be put into anything sent to a
+  client unasked, and always "GST extra". Edit the sheet, re-run the workflow.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets

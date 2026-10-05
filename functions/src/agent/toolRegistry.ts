@@ -35,6 +35,7 @@ import {
   sendEmailTool,
 } from "./tools/googleTools";
 import { findDocumentTool, readDocumentTool } from "./brochures";
+import { getPriceTool } from "./priceBook";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -931,6 +932,34 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "get_price",
+    description:
+      "Look up Great Eastern's price book (RSP, GST extra). Call it for ANY " +
+      "Great Eastern price question before giving a number: a printer, scanner, " +
+      "mobile computer, RFID reader, BarTender licence or accessory by model; " +
+      "a label or tag by size ('50x50', '100x150', '1x2 tag') with the material " +
+      "if they said one; a ribbon (type, width mm, length m); a printhead; wrist " +
+      "bands; fabric or heat-seal tape; or a commercial term (warranty, payment, " +
+      "MOQ, lead time, returns). Quote only numbers it returns, with their unit. " +
+      "For labels give labels per roll and the rate per 1000; each material's " +
+      "rate is the Indian Chrome rate x the multiplier in its name - say that " +
+      "when asked how it was worked out. Repeat any 'check' note it returns.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "What to price, as they said it: 'BX410T', 'DS2208', '50x50 label', 'wax ribbon 110mm 300m', 'B-EX4T1 printhead', 'warranty'.",
+        },
+        material: {
+          type: "string",
+          description: "Label material if they named one: 'PP white', 'chrome', 'polyester', 'thermal transfer', 'VOID', 'custom printed'. Leave empty for every material.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -962,6 +991,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   web_search: webSearchTool,
   find_document: findDocumentTool,
   read_document: readDocumentTool,
+  get_price: getPriceTool,
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,
