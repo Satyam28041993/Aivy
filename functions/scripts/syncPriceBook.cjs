@@ -270,7 +270,7 @@ function parsePriceBook(csvText) {
     model: x.Model,
     why: x.Why,
   }));
-  const doubts = table(need("E."), 1).map((x) => ({ type: x.Type, point: x.Point }));
+  const doubts = table(need("E."), 1).map((x) => ({ type: x.Type, point: x.Point, status: x.Status || "" }));
 
   const supplyNotes = need("C. SUPPLIES").map((r) => r[0]).slice(1);
 
