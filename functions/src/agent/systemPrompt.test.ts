@@ -104,6 +104,9 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Recommending a product");
     expect(prompt).toContain("find_document");
     expect(prompt).toContain("Product catalogue (from the brochures)");
+    // Specs must come from the brochure text, not the one-line catalogue.
+    expect(prompt).toContain("read_document");
+    expect(prompt).toContain("Specifications come from the brochure");
   });
 
   it("looks things up on the company website rather than guessing", () => {

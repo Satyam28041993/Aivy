@@ -28,6 +28,13 @@ import { logger } from "firebase-functions";
 import { dataResult, fail, type ToolContext, type ToolResult } from "./toolTypes";
 
 export const BROCHURE_COLLECTION = "brochures";
+/** Full text per file, written by the sync script; read one at a time. */
+export const BROCHURE_TEXT_COLLECTION = "brochureText";
+/**
+ * How much of one document goes back to the model. The longest brochure is
+ * well under this; a cap keeps a stray huge file from eating the whole turn.
+ */
+export const MAX_READ_CHARS = 40000;
 
 export type BrochureKind =
   | "printer"
@@ -688,4 +695,69 @@ export function buildProductSelector(): string {
       return `**${heading[kind]}**\n${lines.join("\n")}`;
     })
     .join("\n\n");
+}
+
+/**
+ * The whole text of one brochure or document, so a specification question is
+ * answered from the brochure itself rather than from the one-line summary.
+ * Picks the best match the same way `find_document` does; when the query is
+ * ambiguous it reads the top match and names the runners-up, so the model can
+ * say which one it read.
+ */
+export async function readDocumentTool(
+  _ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+  if (!query) {
+    return fail("needs_detail", "Which product or document should I read?");
+  }
+  let docs: BrochureDoc[];
+  try {
+    docs = await loadBrochures();
+  } catch (e) {
+    logger.warn("read_document: list failed", {
+      err: e instanceof Error ? e.message : String(e),
+    });
+    return fail("failed", "I couldn't open the document library just now.");
+  }
+  const ranked = docs
+    .map((d) => ({ d, s: scoreBrochure(d, query) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s);
+  if (ranked.length === 0) {
+    return fail("nothing_found", `No brochure or document matches "${query}".`);
+  }
+  const top = ranked[0].d;
+  const match = toMatch(top);
+  let text = "";
+  let readable = false;
+  try {
+    const snap = await getFirestore().collection(BROCHURE_TEXT_COLLECTION).doc(top.driveId).get();
+    const data = snap.data();
+    readable = Boolean(data?.readable);
+    text = typeof data?.text === "string" ? data.text : "";
+  } catch (e) {
+    logger.warn("read_document: text read failed", {
+      driveId: top.driveId,
+      err: e instanceof Error ? e.message : String(e),
+    });
+  }
+  const others = ranked.slice(1, 4).map((x) => toMatch(x.d).model ?? x.d.title);
+  if (!readable || !text) {
+    return dataResult({
+      document: match,
+      text: null,
+      note:
+        "This file's text could not be read (it is images, or its fonts do not extract). " +
+        "Answer from the summary only, say so, and give the link so they can check the brochure.",
+      ...(others.length ? { other_matches: others } : {}),
+    });
+  }
+  return dataResult({
+    document: match,
+    text: text.slice(0, MAX_READ_CHARS),
+    truncated: text.length > MAX_READ_CHARS,
+    ...(others.length ? { other_matches: others } : {}),
+  });
 }

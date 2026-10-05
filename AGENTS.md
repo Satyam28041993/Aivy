@@ -195,6 +195,16 @@ unused today and kept for whatever voice is built next.
   `brochures.ts`, written from reading every brochure, also renders the
   product list the prompt recommends from, so the two cannot drift. Internal
   sales docs are flagged `share_with_client: false`.
+- **Aivy reads the brochures** (`read_document`). The sync also extracts the
+  full text of every PDF/Word/PPT/Excel into `brochureText/{driveFileId}`
+  (pdf-parse, mammoth, jszip — devDependencies, used only by the script).
+  Spec questions are answered from that text, one document per call, not from
+  the catalogue's one-liners. Brochures that are pictures or whose fonts
+  extract as noise are stored as `readable: false`, and Aivy says it cannot
+  read them rather than guessing — DS3678 and BHT-1700/1800 were like that
+  when read by hand. Retrieval is keyword ranking over the catalogue, not
+  embeddings: with ~55 files and model numbers as the main query, that is
+  enough; revisit if the library grows into the hundreds.
 
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job

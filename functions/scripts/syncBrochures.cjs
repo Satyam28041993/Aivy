@@ -14,6 +14,12 @@
  * clients keep working. Files removed from Drive are removed here too. Two
  * copies of the same file (same checksum) are stored once.
  *
+ * It also pulls the readable text out of every PDF, Word, PowerPoint and Excel
+ * file into `brochureText/{driveFileId}`, so Aivy can read a whole brochure
+ * when asked for a specification instead of knowing only its one-line summary.
+ * Text is kept in its own collection because it is large and only one
+ * document's worth is wanted at a time; the library listing stays small.
+ *
  * Local run:  GOOGLE_APPLICATION_CREDENTIALS=key.json node scripts/syncBrochures.cjs
  */
 
@@ -25,6 +31,9 @@ const { GoogleAuth } = require("google-auth-library");
 const PROJECT_ID = "aivy-5c031";
 const BUCKET = "aivy-5c031.firebasestorage.app";
 const COLLECTION = "brochures";
+const TEXT_COLLECTION = "brochureText";
+/** Firestore caps a document at 1 MiB; the longest brochure is far below this. */
+const MAX_TEXT_CHARS = 300000;
 const STORAGE_PREFIX = "library";
 
 /** Drive folders to mirror. Sub-folders are walked; each file's folder becomes its category. */
@@ -50,6 +59,62 @@ const EXPORTS = {
     ext: ".pptx",
   },
 };
+
+/** Plain text of a file, or "" for a type that has none (images). */
+async function extractText(buf, mimeType, fileName) {
+  const name = fileName.toLowerCase();
+  if (mimeType === "application/pdf" || name.endsWith(".pdf")) {
+    const { PDFParse } = require("pdf-parse");
+    const parser = new PDFParse({ data: buf });
+    try {
+      return (await parser.getText()).text || "";
+    } finally {
+      await parser.destroy();
+    }
+  }
+  if (name.endsWith(".docx")) {
+    const mammoth = require("mammoth");
+    return (await mammoth.extractRawText({ buffer: buf })).value || "";
+  }
+  if (name.endsWith(".pptx") || name.endsWith(".xlsx")) {
+    const JSZip = require("jszip");
+    const zip = await JSZip.loadAsync(buf);
+    const parts = Object.keys(zip.files)
+      .filter((f) =>
+        name.endsWith(".pptx")
+          ? /^ppt\/slides\/slide\d+\.xml$/.test(f)
+          : f === "xl/sharedStrings.xml",
+      )
+      .sort((a, b) => (parseInt(a.replace(/\D/g, ""), 10) || 0) - (parseInt(b.replace(/\D/g, ""), 10) || 0));
+    const out = [];
+    for (const f of parts) {
+      const xml = await zip.file(f).async("string");
+      const runs = [...xml.matchAll(/<(?:a:t|t)(?:\s[^>]*)?>([^<]*)<\/(?:a:t|t)>/g)].map((m) => m[1]);
+      out.push(runs.join(" "));
+    }
+    return out
+      .join("\n\n")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  }
+  return "";
+}
+
+/**
+ * Some brochures are pictures of text, or embed fonts that come out as
+ * symbol soup. Saying "unreadable" is better than handing the model noise to
+ * quote from.
+ */
+function looksReadable(text) {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length < 200) return false;
+  const plain = (t.match(/[A-Za-z0-9 .,:;()%/+-]/g) || []).length;
+  const words = (t.match(/\b[A-Za-z]{3,}\b/g) || []).length;
+  return plain / t.length > 0.85 && words > 40;
+}
 
 function folderIds() {
   const raw = (process.env.LIBRARY_FOLDER_IDS || "").trim();
@@ -142,9 +207,44 @@ async function main() {
 
   const seenIds = new Set();
   const seenChecksums = new Set();
+  const textDocs = new Map();
+  for (const doc of (await db.collection(TEXT_COLLECTION).get()).docs) {
+    textDocs.set(doc.id, doc.get("extractedFrom"));
+  }
+
   let copied = 0;
   let unchanged = 0;
   let skipped = 0;
+  let texts = 0;
+
+  async function saveText(file, buf, fileName, contentType) {
+    let text = "";
+    try {
+      text = await extractText(buf, contentType, fileName);
+    } catch (e) {
+      console.log(`  text: could not read ${fileName}: ${e && e.message ? e.message : e}`);
+    }
+    text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    const readable = looksReadable(text);
+    await db.collection(TEXT_COLLECTION).doc(file.id).set({
+      driveId: file.id,
+      fileName,
+      readable,
+      text: readable ? text.slice(0, MAX_TEXT_CHARS) : "",
+      chars: text.length,
+      extractedFrom: file.modifiedTime,
+      extractedAtMs: Date.now(),
+    });
+    texts++;
+    console.log(`  text: ${fileName} — ${readable ? `${text.length} chars` : "not readable (images or odd fonts)"}`);
+  }
+
+  async function download(file, exp) {
+    const bytes = exp
+      ? await drive(`files/${file.id}/export`, { mimeType: exp.mime }, "arraybuffer")
+      : await drive(`files/${file.id}`, { alt: "media", supportsAllDrives: true }, "arraybuffer");
+    return Buffer.from(bytes);
+  }
 
   for (const { file, category } of found) {
     const exp = EXPORTS[file.mimeType];
@@ -164,17 +264,19 @@ async function main() {
     seenIds.add(file.id);
 
     const prev = existing.get(file.id);
+    const fileName = exp && !file.name.endsWith(exp.ext) ? `${file.name}${exp.ext}` : file.name;
+    const contentType = exp ? exp.mime : file.mimeType;
+    const textCurrent = textDocs.get(file.id) === file.modifiedTime;
+
     if (prev && prev.url && prev.driveModifiedTime === file.modifiedTime && prev.category === category) {
       unchanged++;
+      if (!textCurrent) {
+        await saveText(file, await download(file, exp), fileName, contentType);
+      }
       continue;
     }
 
-    const fileName = exp && !file.name.endsWith(exp.ext) ? `${file.name}${exp.ext}` : file.name;
-    const contentType = exp ? exp.mime : file.mimeType;
-    const bytes = exp
-      ? await drive(`files/${file.id}/export`, { mimeType: exp.mime }, "arraybuffer")
-      : await drive(`files/${file.id}`, { alt: "media", supportsAllDrives: true }, "arraybuffer");
-    const buf = Buffer.from(bytes);
+    const buf = await download(file, exp);
 
     const storagePath = `${STORAGE_PREFIX}/${category}/${fileName}`;
     // Keep the old token so a link already forwarded to a client stays valid.
@@ -210,6 +312,7 @@ async function main() {
     });
     copied++;
     console.log(`  copied: ${storagePath} (${(buf.length / 1048576).toFixed(1)} MB)`);
+    await saveText(file, buf, fileName, contentType);
   }
 
   let removed = 0;
@@ -217,17 +320,23 @@ async function main() {
     if (seenIds.has(id)) continue;
     if (data.storagePath) await bucket.file(data.storagePath).delete({ ignoreNotFound: true });
     await db.collection(COLLECTION).doc(id).delete();
+    await db.collection(TEXT_COLLECTION).doc(id).delete();
     removed++;
     console.log(`  removed (no longer in Drive): ${data.fileName || id}`);
   }
 
   console.log(
-    `Done. ${copied} copied, ${unchanged} unchanged, ${skipped} skipped, ${removed} removed. ` +
+    `Done. ${copied} copied, ${unchanged} unchanged, ${skipped} skipped, ${removed} removed, ` +
+      `${texts} texts extracted. ` +
       `${seenIds.size} files in the library.`,
   );
 }
 
-main().catch((e) => {
-  console.error(e && e.message ? e.message : e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e && e.message ? e.message : e);
+    process.exit(1);
+  });
+}
+
+module.exports = { extractText, looksReadable };

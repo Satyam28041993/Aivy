@@ -34,7 +34,7 @@ import {
   listRecentEmailsTool,
   sendEmailTool,
 } from "./tools/googleTools";
-import { findDocumentTool } from "./brochures";
+import { findDocumentTool, readDocumentTool } from "./brochures";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -909,6 +909,28 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "read_document",
+    description:
+      "Read the full text of one Great Eastern brochure or document. Call it " +
+      "BEFORE answering any question about a product's specifications, " +
+      "features, options, sizes, speeds, interfaces, battery, warranty or " +
+      "compatibility, and for what a form or company document actually says. " +
+      "The catalogue in your instructions is only a one-line summary; the " +
+      "brochure is the source. Answer from the text it returns, and if the text " +
+      "does not say, tell them the brochure does not cover it. Pass the model " +
+      "number or document name. For a comparison, call it once per product.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Model number or document name, e.g. 'BV400', 'DS8178', 'WMS', 'NCNR'.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -939,6 +961,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   search_clients: searchClientsTool,
   web_search: webSearchTool,
   find_document: findDocumentTool,
+  read_document: readDocumentTool,
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,
