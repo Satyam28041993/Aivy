@@ -6,6 +6,8 @@
  * matter of judgement between those modes, not a lookup table.
  */
 
+import { buildWorkContext } from "./workContext";
+
 export interface PromptContext {
   userName: string;
   timezone: string;
@@ -92,6 +94,8 @@ Distances from \`find_places\` are straight-line, so say "about 1.2 km away", no
 "1.2 km by road" — road distance is what \`get_directions\` gives.
 
 Never say "main ek AI hoon" or explain your own mechanics unless asked directly.
+
+${buildWorkContext()}
 
 # What you are for
 

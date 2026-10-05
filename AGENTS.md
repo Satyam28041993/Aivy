@@ -167,6 +167,16 @@ unused today and kept for whatever voice is built next.
 
 **Just built, not yet exercised by the user**
 
+- **Where they work** (`functions/src/agent/workContext.ts`). Since 21 Sep 2026
+  they are a BDM at **Great Eastern IDTech (GEIPL)** and no longer at Prakruti
+  Graphic (PGPL). The prompt now says business is either Great Eastern or their
+  own **PrintSahaj**, and that a remembered "works at Prakruti" line is out of
+  date. It is in the prompt, not only in memory, because memory saved earlier
+  may still say Prakruti and a fact cannot overrule itself. Great Eastern product and
+  training knowledge goes in this same file next, so Aivy can answer a
+  client's questions while they sit with the client. Tests in `systemPrompt.test.ts`.
+  Not live until `Deploy Web` runs with the functions.
+
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

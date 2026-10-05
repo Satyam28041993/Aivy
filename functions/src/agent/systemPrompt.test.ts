@@ -48,4 +48,35 @@ describe("buildSystemPrompt", () => {
   it("still says a write is not done until it is confirmed", () => {
     expect(prompt).toContain("Writes need a yes");
   });
+
+  it("knows they work at Great Eastern IDTech now, not Prakruti", () => {
+    // They moved from Prakruti Graphic to Great Eastern IDTech as a BDM on
+    // 21 September 2026. Without this, business talk gets filed under the
+    // old employer.
+    expect(prompt).toContain("Great Eastern IDTech");
+    expect(prompt).toContain("21 September 2026");
+    expect(prompt).toMatch(/no longer\s+work at Prakruti/);
+  });
+
+  it("splits business between Great Eastern and their own PrintSahaj", () => {
+    expect(prompt).toContain("PrintSahaj");
+    expect(prompt).toMatch(/exactly two things/);
+  });
+
+  it("lets the job change overrule an out-of-date remembered employer", () => {
+    // Memory written before the move still says Prakruti; a remembered fact
+    // cannot overrule itself, so the prompt has to.
+    const stale = buildSystemPrompt({
+      ...CTX,
+      memory: { employer: "Prakruti Graphic Pvt Ltd" },
+    });
+    expect(stale).toMatch(/that line is\s+out of date/);
+    expect(stale.indexOf("# Where they work")).toBeLessThan(
+      stale.indexOf("employer: Prakruti Graphic Pvt Ltd"),
+    );
+  });
+
+  it("does not let it invent Great Eastern facts in front of a client", () => {
+    expect(prompt).toMatch(/Never state a Great Eastern specification/);
+  });
 });
