@@ -83,8 +83,9 @@ describe("rankBrochures", () => {
 
 describe("catalog", () => {
   it("covers every brochure and document that was read", () => {
-    // 34 brochures + 21 training documents.
-    expect(Object.keys(BROCHURE_CATALOG)).toHaveLength(55);
+    // 35 brochures (the 2022 BarTender edition comparison was added later)
+    // + 21 training documents.
+    expect(Object.keys(BROCHURE_CATALOG)).toHaveLength(56);
   });
 
   it("puts products, not forms, in the prompt's product list", () => {

@@ -227,7 +227,8 @@ unused today and kept for whatever voice is built next.
   the old charts' "up to 3" are both true — the price-book SKU codes decoded,
   support tiers, Cloud plans, the manufacturing pitch and six questions for
   choosing an edition. No website prices, at the user's request: Great
-  Eastern's come from `get_price`.
+  Eastern's come from `get_price`. The 2022 comparison PDF is also in the
+  library (Drive Bartender folder), so it can be sent to a client.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets

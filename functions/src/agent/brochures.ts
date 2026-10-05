@@ -332,8 +332,16 @@ export const BROCHURE_CATALOG: Record<string, CatalogEntry> = {
     brand: "Seagull Scientific",
     kind: "software",
     summary:
-      "Edition comparison: Starter covers up to 3 printers with Excel/CSV data; Professional adds SQL/SAP/Oracle databases, advanced serialisation, conditional printing, data-entry forms, RFID encoding and PDF output.",
+      "Older (2021) Starter vs Professional chart: Starter works from Excel/CSV data; Professional adds SQL/SAP/Oracle databases, advanced serialisation, conditional printing, data-entry forms, RFID encoding and PDF output. Its 'up to 3 printers' is the old printer-based Starter — the workstation licence sold today is unlimited printers on one PC.",
     keywords: ["bartender", "starter", "professional", "comparison"],
+  },
+  "10xYSgNI2fDNl_0sKLC9kcneY9fu8nz-1": {
+    model: "BarTender 2022 edition comparison (Starter / Professional / Automation / Enterprise)",
+    brand: "Seagull Scientific",
+    kind: "software",
+    summary:
+      "The current four-edition chart, feature by feature: design, Intelligent Templates, databases, data-entry forms, integration and automation (ERP, REST API, file drop), printing and RFID encoding, centralised management (Librarian, workflows, audit trail), security and support. The one to send a client choosing an edition.",
+    keywords: ["bartender", "edition", "comparison", "2022", "starter", "professional", "automation", "enterprise", "features", "chart"],
   },
   "11q5CsPJAiXFjoI0PwDZWLXKCmRGDcM4o": {
     model: "BarTender Professional / Automation / Enterprise",
