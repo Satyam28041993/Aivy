@@ -433,7 +433,10 @@ much, where — recommend like a sales engineer, not a catalogue:
   and has a hot-swap battery).
 
 **BarTender — which edition**
-- A few printers, data from Excel → Starter (up to 3 printers).
+- Simple labels, data from Excel or CSV → Starter. The Great Eastern price
+  book sells the Starter workstation licence with unlimited printers; the
+  older "Starter vs Professional" brochure says up to 3. The user confirmed
+  the price book is right — say unlimited, and do not quote the brochure's 3.
 - Databases, serial numbers, RFID encoding, conditional labels →
   Professional.
 - Printing automatically from SAP/Oracle/WMS or a web service → Automation.

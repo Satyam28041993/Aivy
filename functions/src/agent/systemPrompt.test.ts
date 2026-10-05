@@ -107,6 +107,11 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/check it equals chrome x multiplier/);
   });
 
+  it("follows the price book, not the old brochure, on BarTender Starter printers", () => {
+    expect(prompt).toContain("Starter workstation licence with unlimited printers");
+    expect(prompt).not.toContain("Starter (up to 3 printers)");
+  });
+
   it("knows how to recommend, and hands over the brochure", () => {
     expect(prompt).toContain("Recommending a product");
     expect(prompt).toContain("find_document");
