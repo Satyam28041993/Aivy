@@ -34,6 +34,7 @@ import {
   listRecentEmailsTool,
   sendEmailTool,
 } from "./tools/googleTools";
+import { findDocumentTool } from "./brochures";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -885,6 +886,29 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "find_document",
+    description:
+      "Find a Great Eastern / DinoLabelDigital file and get its download link: " +
+      "product brochures (printers, scanners, mobile computers, print & apply, " +
+      "BarTender) and company documents (business profile, WMS deck, RFID " +
+      "portfolio, webinars, NCNR form, authorisation letter, quotation format, " +
+      "artwork guidelines, label checklist, pitch deck). Call it whenever they " +
+      "ask for a brochure, a datasheet, a form or 'uska PDF bhejo', and after you " +
+      "recommend a product, so they can forward the brochure. Pass the model " +
+      "number or the document name as they said it; leave query empty to list " +
+      "everything. Give each link on its own line. When share_with_client is " +
+      "false, say it is an internal sales document before they forward it.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Model number, product type or document name, e.g. 'DS2208', 'RFID printer', 'NCNR form'.",
+        },
+      },
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -914,6 +938,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_client_summary: getClientSummaryTool,
   search_clients: searchClientsTool,
   web_search: webSearchTool,
+  find_document: findDocumentTool,
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,

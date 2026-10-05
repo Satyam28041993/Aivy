@@ -1,0 +1,62 @@
+# Copies the Great Eastern brochures and training documents from Google Drive
+# into Firebase Storage, so Aivy's find_document tool can hand out download
+# links. See functions/scripts/syncBrochures.cjs.
+#
+# Run it again after adding or changing files in the Drive folders:
+# GitHub → Actions → Sync Document Library → Run workflow. It also runs when
+# the script or this file changes on the live branch.
+name: Sync Document Library
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/page-voice-process-review-enhkhh"]
+    paths:
+      - "functions/scripts/syncBrochures.cjs"
+      - ".github/workflows/sync-library.yml"
+
+concurrency:
+  group: sync-library
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # The service account reads Drive through the Drive API, which a Firebase
+      # project does not have on by default. If the account may not enable
+      # APIs, the sync step below says so with the console link.
+      - name: Enable the Drive API
+        run: |
+          gcloud services enable drive.googleapis.com --project aivy-5c031 \
+            || echo "::warning::Could not enable the Drive API from here; enable it in the console if the sync fails."
+
+      - name: Sync Drive → Firebase Storage
+        working-directory: functions
+        run: node scripts/syncBrochures.cjs

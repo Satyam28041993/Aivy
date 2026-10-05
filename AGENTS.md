@@ -181,7 +181,20 @@ unused today and kept for whatever voice is built next.
   process. About 3,000 words, sent on every turn. Where sources disagree the
   file names which to quote (₹10,000 MOV and 7 working days, not the older
   brochure MOQ). **No prices yet** — the prompt forbids quoting any until the
-  user's price list is added here. Brochure images are coming too.
+  user's price list is added here.
+- **Document library** (`functions/src/agent/brochures.ts`, tool
+  `find_document`). 34 product brochures (Drive "NEW BROUCHER": Printer,
+  Scanner, Mobile Computer, Bartender) and 21 training/company files (Drive
+  "01 Training & Company Knowledge", Word/PPT/Excel included) are copied to
+  Firebase Storage under `library/` by `functions/scripts/syncBrochures.cjs`,
+  run by the **Sync Document Library** workflow; one Firestore row per file in
+  `brochures/{driveFileId}` holds a token download link a client can open.
+  Re-run the workflow after adding files to Drive; links survive re-runs
+  because the token is kept. **The service account can only read folders
+  shared with it** — the workflow prints its email first. The catalog in
+  `brochures.ts`, written from reading every brochure, also renders the
+  product list the prompt recommends from, so the two cannot drift. Internal
+  sales docs are flagged `share_with_client: false`.
 
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job

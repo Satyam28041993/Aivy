@@ -100,6 +100,12 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/Never quote a price, discount or rate/);
   });
 
+  it("knows how to recommend, and hands over the brochure", () => {
+    expect(prompt).toContain("Recommending a product");
+    expect(prompt).toContain("find_document");
+    expect(prompt).toContain("Product catalogue (from the brochures)");
+  });
+
   it("looks things up on the company website rather than guessing", () => {
     expect(prompt).toContain("site:geipl.com");
     expect(prompt).toContain("site:dinolabeldigital.com");

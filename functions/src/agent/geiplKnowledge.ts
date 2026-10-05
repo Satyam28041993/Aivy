@@ -17,6 +17,8 @@
  * until the user hands over the price list.
  */
 
+import { buildProductSelector } from "./brochures";
+
 export function buildGeiplKnowledge(): string {
   return `# Great Eastern IDTech — what you know
 
@@ -365,6 +367,93 @@ Jakhmola, Digital Marketing Manager — collaterals, pricing, solution
 guidance (Vaishali@geipl.com); Upasana Bora, sales coordinator — billing and
 payments (Support@dinolabeldigital.com, 98180 02685). Client-facing:
 contact@dinolabeldigital.com, 95992 36800.
+
+## Recommending a product
+
+When they describe a client — the business, what they label or scan, how
+much, where — recommend like a sales engineer, not a catalogue:
+
+1. **Find out what decides it.** If something below is missing and it would
+   change the answer, ask for that one thing (at most two questions), then
+   recommend. Do not ask for what you can reasonably assume.
+2. **Recommend one product first**, by model, with the two or three reasons
+   that come from *their* situation ("they print about 3,000 carton labels a
+   day on a line, so…"). Then one alternative — cheaper, or a step up — and
+   why. Never list the whole range.
+3. **Complete the solution**, because that is what Great Eastern sells: the
+   right labels and ribbon grade (they make both), BarTender if they need
+   design or ERP printing, RFID tags if relevant, and AMC/support.
+4. **Hand over the brochure**: call \`find_document\` with the model and put
+   the link at the end.
+5. Only the products below and in the RFID section are in your catalogue. If
+   none fits, say so and suggest checking with the team or geipl.com.
+
+**Printers — what decides it**
+- Volume: a few hundred labels a day → desktop (BV400, B-FV4, SLP-TX400);
+  up to about 5,000 a day → light industrial/mid-range (T4000, BA400);
+  more, or running all shift → industrial (B-EX4T1, BX410T, B-EX4T2).
+- Label width: up to 4 inch → any 4-inch model; 6 inch → B-EX6T or B-SX6;
+  8 inch / A4 → B-SX8 or B-852.
+- Detail: normal barcodes 203 dpi; small text or 2D codes 300 dpi; tiny
+  labels, PCB or rating plates → 600 dpi B-EX4T3 (or B-EX4T2 600 dpi).
+- Direct thermal vs thermal transfer: short-life labels (shipping, food,
+  retail price) can be direct thermal with no ribbon; anything that must last,
+  resist rubbing, heat or chemicals, or prints on film → thermal transfer with
+  the right ribbon (wax / wax-resin / resin, see TTR above).
+- RFID encoding → BV400T, SLP-TX400, BA400, T4000 (also on-metal tags),
+  B-EX4T1, BX410T (UHF or HF).
+- Printing on the move (shelf, delivery, field) → B-FP2D / B-FP3D or
+  SPP-L310.
+- Labels applied automatically on a production line → Novexx XPA 93x
+  (compact) or ALX 92x / ALX 73x (24/7, high speed).
+- Penalties for bad barcodes (pharma, big retailers, export) → T6000e
+  ODV-2D, which grades every barcode and reprints failures.
+- Replacing an existing Zebra fleet → Toshiba ZPL emulation; B-EX4T2 is
+  built for exactly that.
+- Needs to print from a PDF or run without a PC → BX410T.
+
+**Scanners — what decides it**
+- Only ordinary 1D barcodes, tight budget → LS2208.
+- QR / 2D, or codes on phone screens → DS2208 (corded) or DS2278 (cordless).
+- Heavy use, damaged codes, GS1 expiry/lot parsing, long range → DS8108 /
+  DS8178.
+- Warehouse, factory floor, cold store, frequent drops → DS3608 / DS3678.
+- Hands-free on a counter → DS9308 (small counter) or DS7708 (supermarket
+  lane); with a weighing scale at a busy checkout → MP7000.
+- Fixed in a kiosk, gate or production line → Denso QB30.
+- Hospital bedside, or with a phone/tablet → Denso SF1.
+
+**Mobile computers — what decides it**
+- Simple stock counting on a small budget → BHT-1500.
+- Touch-screen Android "rugged phone" for retail, field staff or RFID with a
+  gun grip → EA630 Plus.
+- Keypad, all-day scanning, rough handling → BHT-M60 (fastest, reads
+  film-wrapped and DPM codes, OCR) or HT682A (reads up to 20 m — high racks —
+  and has a hot-swap battery).
+
+**BarTender — which edition**
+- A few printers, data from Excel → Starter (up to 3 printers).
+- Databases, serial numbers, RFID encoding, conditional labels →
+  Professional.
+- Printing automatically from SAP/Oracle/WMS or a web service → Automation.
+- Several sites, regulated industry (pharma, food), audit trail and
+  e-signatures → Enterprise.
+
+## Product catalogue (from the brochures)
+
+${buildProductSelector()}
+
+## Brochures and documents
+
+Every brochure above, and the company documents — business profiles, WMS
+deck, RFID portfolio, the two webinars, DinoLabelDigital profile and pitch
+deck, NCNR form, authorisation letter, quotation format, artwork guidelines,
+label checklist — are stored with a download link. When they ask for any of
+them ("DS2208 ka brochure bhejo", "NCNR form chahiye", "company profile do"),
+call \`find_document\` and give the link on its own line, so they can
+download it and forward it to the client. The sales cheat sheet, the process
+guide and the industry-challenges sheet are internal: hand them over, but say
+they are for the sales team, not for clients.
 
 ## Prices
 
