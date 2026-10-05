@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after adding the Great Eastern document library._
+_Last updated: after the brochure file cards and Enter-to-send._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -205,6 +205,18 @@ unused today and kept for whatever voice is built next.
   when read by hand. Retrieval is keyword ranking over the catalogue, not
   embeddings: with ~55 files and model numbers as the main query, that is
   enough; revisit if the library grows into the hundreds.
+- **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
+  `agent_message_bubble.dart`). A Firebase Storage link is named by its file
+  ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets
+  Download, WhatsApp (wa.me), Gmail (mailto on the phone, Gmail compose on the
+  web) and Copy link. They share the link, not the bytes. File links are
+  always lifted out of the text, even in a list, since each card names itself.
+- **Enter sends** in the composer, Shift+Enter is a new line, and the phone
+  keyboard shows a send key. The field is read-only rather than disabled while
+  a reply is coming, so it keeps focus between messages. An Enter that
+  finishes an IME composition is left alone.
+- **`**bold**` renders as bold** (`message_format.dart`); the bubble used to
+  print the asterisks. Only bold — the replies use nothing else.
 
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job

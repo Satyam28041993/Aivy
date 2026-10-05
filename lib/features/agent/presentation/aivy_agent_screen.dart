@@ -89,6 +89,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     // and the border lifts on focus.
     _input.addListener(_repaintComposer);
     _inputFocus.addListener(_repaintComposer);
+    _inputFocus.onKeyEvent = _onComposerKey;
     unawaited(_refreshGoogleStatus());
     // Asked here rather than at launch, so the system dialog arrives with the
     // screen that actually uses the answer. Declining costs nothing: location
@@ -210,6 +211,44 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   // -------------------------------------------------------------------------
   // Sending
   // -------------------------------------------------------------------------
+
+  /// Enter sends; Shift+Enter starts a new line — the way every chat app on a
+  /// computer behaves. Before this, Enter only added a line, so on the web the
+  /// message sat in the box until the arrow was clicked.
+  ///
+  /// Returning `handled` also stops the browser from inserting the newline.
+  /// An Enter that confirms a word being composed by an input method (Hindi
+  /// transliteration, for one) is left alone, or it would send half a word.
+  KeyEventResult _onComposerKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.enter &&
+        key != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    if (_input.value.composing.isValid) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      _insertNewline();
+      return KeyEventResult.handled;
+    }
+    unawaited(_send());
+    return KeyEventResult.handled;
+  }
+
+  void _insertNewline() {
+    final value = _input.value;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : value.text.length;
+    final end = selection.isValid ? selection.end : value.text.length;
+    _input.value = TextEditingValue(
+      text: value.text.replaceRange(start, end, '\n'),
+      selection: TextSelection.collapsed(offset: start + 1),
+    );
+  }
 
   Future<void> _send() async {
     final text = _input.text.trim();
@@ -715,11 +754,19 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
               child: TextField(
                 controller: _input,
                 focusNode: _inputFocus,
-                enabled: !_sending,
+                // Read-only rather than disabled while a reply is coming: a
+                // disabled field drops focus, so every message after the first
+                // needed a click back into the box before typing.
+                readOnly: _sending,
                 minLines: 1,
                 maxLines: 5,
-                textInputAction: TextInputAction.newline,
-                keyboardType: TextInputType.multiline,
+                // The phone keyboard shows a send key that sends, matching
+                // Enter on a computer. Long text still wraps over five lines.
+                textInputAction: TextInputAction.send,
+                keyboardType: TextInputType.text,
+                onSubmitted: (_) => unawaited(_send()),
+                // Keep the keyboard up after sending, ready for the next line.
+                onEditingComplete: () {},
                 style: const TextStyle(
                   color: Color(0xFFE7EDF5),
                   fontSize: 15,

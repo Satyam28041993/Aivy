@@ -8,21 +8,65 @@ import 'package:flutter/material.dart';
 /// arrives on WhatsApp.
 @immutable
 class MessageLink {
-  const MessageLink(this.url, this.label, this.icon);
+  const MessageLink(this.url, this.label, this.icon, {this.isFile = false});
 
   final String url;
   final String label;
   final IconData icon;
+
+  /// A file to hand to someone — a brochure, a form — rather than a page to
+  /// open. These get Download / WhatsApp / Gmail buttons, because the reason
+  /// Aivy fetched it is almost always to send it to a client.
+  final bool isFile;
 
   @override
   bool operator ==(Object other) =>
       other is MessageLink &&
       other.url == url &&
       other.label == label &&
-      other.icon == icon;
+      other.icon == icon &&
+      other.isFile == isFile;
 
   @override
-  int get hashCode => Object.hash(url, label, icon);
+  int get hashCode => Object.hash(url, label, icon, isFile);
+}
+
+/// The file name inside a Firebase Storage download link, or null when the
+/// URL is not one. `…/o/library%2FScanner%2FDS-2208.pdf?alt=media&token=…`
+/// becomes `DS-2208.pdf` — the host alone ("firebasestorage.googleapis.com")
+/// told the user nothing about which brochure it was.
+String? storageFileName(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.host.contains('firebasestorage.googleapis.com')) {
+    return null;
+  }
+  final segments = uri.pathSegments;
+  final at = segments.indexOf('o');
+  if (at < 0 || at + 1 >= segments.length) {
+    return null;
+  }
+  // pathSegments are already decoded once, so "library/Scanner/DS-2208.pdf".
+  final path = segments.sublist(at + 1).join('/');
+  final name = path.split('/').last.trim();
+  return name.isEmpty ? null : name;
+}
+
+IconData _fileIcon(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_rounded;
+  if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
+    return Icons.description_rounded;
+  }
+  if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+    return Icons.table_chart_rounded;
+  }
+  if (lower.endsWith('.pptx') || lower.endsWith('.ppt')) {
+    return Icons.slideshow_rounded;
+  }
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) {
+    return Icons.image_rounded;
+  }
+  return Icons.insert_drive_file_rounded;
 }
 
 final RegExp _urlPattern = RegExp(r'https?://\S+');
@@ -37,6 +81,10 @@ String _trimUrl(String raw) {
 }
 
 MessageLink describeLink(String url) {
+  final fileName = storageFileName(url);
+  if (fileName != null) {
+    return MessageLink(url, fileName, _fileIcon(fileName), isFile: true);
+  }
   final lower = url.toLowerCase();
   if (lower.contains('/maps/dir')) {
     return MessageLink(url, 'Get directions', Icons.directions_rounded);

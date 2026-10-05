@@ -76,6 +76,15 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- url_launcher: brochure links — mail them, open them (WhatsApp, browser) -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
         <!-- url_launcher: tel: intents -->
         <intent>
             <action android:name="android.intent.action.DIAL" />

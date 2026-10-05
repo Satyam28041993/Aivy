@@ -39,6 +39,26 @@ void main() {
     });
   });
 
+  group('brochure links', () {
+    const url = 'https://firebasestorage.googleapis.com/v0/b/aivy-5c031.firebasestorage.app/o/'
+        'library%2FScanner%2FDS-2208%202D%20DS2278-BT.pdf?alt=media&token=abc-123';
+
+    test('are named by their file, not by the storage host', () {
+      final link = extractLinks('Here is the brochure: $url').single;
+      expect(link.label, 'DS-2208 2D DS2278-BT.pdf');
+      expect(link.isFile, isTrue);
+      expect(link.url, url);
+    });
+
+    test('ordinary links are not files', () {
+      expect(extractLinks('https://example.com/a').single.isFile, isFalse);
+    });
+
+    test('storageFileName ignores other hosts', () {
+      expect(storageFileName('https://example.com/o/a.pdf'), isNull);
+    });
+  });
+
   group('stripLinks', () {
     test('removes the link and the colon that introduced it', () {
       const text = 'You are in Mande. Here is the map link: '
