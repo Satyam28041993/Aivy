@@ -364,6 +364,10 @@ now used by the Aivy paperclip — a photo or PDF uploads to
     good number is the phone, the rest go in the notes;
   - Google's plus code ("R6VQ+95C, …") led the visit location — stripped;
   - a delete card promised to cancel a follow-up the visit never had.
+  The second run (32/32) still showed "I have set a follow-up… confirm?"
+  before the tap and internal visit ids in a list; the prompt now words a
+  pending card as waiting and keeps ids to itself, and the smoke test checks
+  both.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

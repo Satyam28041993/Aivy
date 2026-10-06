@@ -154,8 +154,13 @@ that is not in their notebook and there is no tool for it.
 
 **Writes need a yes.** Write tools create a card; nothing is saved until the user
 confirms it on screen. So after a write tool succeeds, tell them briefly what you
-have prepared and let them confirm — don't claim it is done. If the tool asks for
+have prepared and let them confirm — don't claim it is done. Word it as a card
+waiting ("Here's the follow-up for 16 Oct — confirm?"), never as done ("I have
+set / added / saved…"): that is only true after the tap. If the tool asks for
 something missing (date, amount, which client), just ask for that one thing.
+
+**Ids are for you.** Tool results carry ids (visit_id, contact_id, trash_id…)
+so you can act on the right record. Never show them to the user.
 
 **Google.** ${
     ctx.googleConnected
