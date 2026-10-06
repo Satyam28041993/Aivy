@@ -11,13 +11,14 @@
  * network or an API key.
  */
 
+import { addUsage, EMPTY_USAGE, type GeminiUsageMetadata, type TurnUsage } from "./aiUsage";
 import { logger } from "firebase-functions";
 
 import type { AgentDraft } from "./draftTypes";
 import { dispatchTool, isKnownTool, TOOL_DECLARATIONS, WRITE_TOOLS } from "./toolRegistry";
 import type { ToolContext } from "./toolTypes";
 
-const MODEL = "gemini-2.5-flash";
+export const MODEL = "gemini-2.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 export interface GeminiPart {
@@ -48,6 +49,7 @@ export interface GeminiResponse {
     content?: { parts?: GeminiPart[] };
     finishReason?: string;
   }>;
+  usageMetadata?: GeminiUsageMetadata;
 }
 
 /** Swappable so tests can drive the loop with a scripted model. */
@@ -88,6 +90,8 @@ export interface AgentTurnResult {
   /** Model-visible turns to persist as history for the next call. */
   newContents: GeminiContent[];
   hops: number;
+  /** Tokens across every hop, from Gemini's own counts. */
+  usage: TurnUsage;
 }
 
 function httpTransport(geminiKey: string): GeminiTransport {
@@ -216,6 +220,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   const trace: AgentToolTrace[] = [];
   let reply = "";
   let hops = 0;
+  let usage: TurnUsage = { ...EMPTY_USAGE };
 
   while (hops < maxHops) {
     // Snapshot: `contents` keeps growing as the loop runs, and a transport that
@@ -227,6 +232,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
     });
     hops++;
+    usage = addUsage(usage, res.usageMetadata);
 
     const parts = partsOf(res);
     const calls = callsOf(parts);
@@ -294,5 +300,5 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       : "I did not catch that — say a bit more?";
   }
 
-  return { reply, drafts, trace, newContents, hops };
+  return { reply, drafts, trace, newContents, hops, usage };
 }

@@ -10,6 +10,7 @@ import '../../../core/notifications/notification_health_screen.dart';
 import '../../../core/notifications/notifications_screen.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/models/chat_session.dart';
+import '../../ai_usage/presentation/ai_usage_screen.dart';
 import '../../contacts/presentation/contacts_list_screen.dart';
 import 'data_management_screen.dart';
 
@@ -292,6 +293,12 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
             );
           },
+        ),
+        ListTile(
+          leading: const Icon(Icons.memory),
+          title: const Text('AI usage & cost'),
+          subtitle: const Text('Har AI call ka input, output aur Gemini cost'),
+          onTap: () => AiUsageScreen.open(context, userId: widget.userId),
         ),
         ListTile(
           leading: const Icon(Icons.contacts_outlined),

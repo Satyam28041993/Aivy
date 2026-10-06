@@ -14,7 +14,7 @@ import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 
-import { runAgentTurn } from "./agentLoop";
+import { MODEL, runAgentTurn } from "./agentLoop";
 import { buildSystemPrompt } from "./systemPrompt";
 import { commitDraft } from "./commit";
 import { getUserMemory } from "./userMemory";
@@ -31,6 +31,7 @@ import {
   titleFromText,
   touchChat,
 } from "./chatStore";
+import { logAiUsage } from "./aiUsage";
 import {
   historyLineForAttachments,
   loadInlineParts,
@@ -261,6 +262,19 @@ export const aivyAgent = onCall(
       files: attachments.length,
       tools: turn.trace.map((t) => `${t.name}:${t.ok ? "ok" : t.reason}`),
       drafts: turn.drafts.length,
+      tokensIn: turn.usage.inputTokens,
+      tokensOut: turn.usage.outputTokens + turn.usage.thinkingTokens,
+    });
+
+    // For Settings → AI usage: what went in, what came out, what it cost.
+    await logAiUsage(uid, {
+      source: "chat",
+      model: MODEL,
+      input: displayText || promptText,
+      output: turn.reply,
+      tools: turn.trace.map((t) => t.name),
+      usage: turn.usage,
+      chatId,
     });
 
     return {

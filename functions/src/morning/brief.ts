@@ -22,6 +22,7 @@
  * cannot be summarised wrongly should not be summarised.
  */
 
+import { addUsage, EMPTY_USAGE, logAiUsage, type GeminiUsageMetadata } from "../agent/aiUsage";
 import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
@@ -607,9 +608,17 @@ export async function buildBrief(opts: {
     if (res.ok) {
       const body = (await res.json()) as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        usageMetadata?: GeminiUsageMetadata;
       };
       const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       written = parseBrief(text);
+      await logAiUsage(opts.uid, {
+        source: "brief",
+        model: MODEL,
+        input: `Morning brief — ${nowLabel}`,
+        output: text,
+        usage: addUsage(EMPTY_USAGE, body.usageMetadata),
+      });
     } else {
       logger.error("brief: model refused", { status: res.status });
     }
