@@ -240,7 +240,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let reply = "";
   let hops = 0;
   let usage: TurnUsage = { ...EMPTY_USAGE };
-  let nudged = false;
+  let emptyRetries = 0;
 
   while (hops < maxHops) {
     // Snapshot: `contents` keeps growing as the loop runs, and a transport that
@@ -262,16 +262,21 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       // Gemini 2.5 Flash now and then answers with nothing — on the first hop
       // (often MALFORMED_FUNCTION_CALL) or after a tool asked for details.
       // One nudge gets a real answer instead of "I did not catch that".
-      if (!text && !nudged && hops < maxHops) {
-        nudged = true;
-        logger.warn("agent: empty model answer, nudging once", {
+      // First a plain retry (a malformed call is usually a one-off), then a
+      // nudge. Live runs saw two empties in a row, so one chance was not enough.
+      if (!text && emptyRetries < 2 && hops < maxHops) {
+        emptyRetries++;
+        logger.warn("agent: empty model answer, retrying", {
           finishReason: res.candidates?.[0]?.finishReason ?? "none",
           afterTools: trace.length,
+          attempt: emptyRetries,
         });
-        contents.push({
-          role: "user",
-          parts: [{ text: "(Reply to me now in plain words — ask what the tool said is missing, or tell me what you did.)" }],
-        });
+        if (emptyRetries === 2) {
+          contents.push({
+            role: "user",
+            parts: [{ text: "(Reply to me now — ask what the tool said is missing, or do what I asked.)" }],
+          });
+        }
         continue;
       }
       reply = text;

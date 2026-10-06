@@ -340,6 +340,14 @@ describe("after the live smoke test", () => {
     expect(JSON.stringify(r.newContents)).not.toContain("Reply to me now");
   });
 
+  it("survives two empty answers in a row — a retry, then a nudge", async () => {
+    const empty: GeminiResponse = { candidates: [{ content: { parts: [] } }] };
+    const s = scripted(empty, empty, say("Are you at Bajaj right now?"));
+    const r = await runAgentTurn({ ...base, userText: "haan", transport: s.transport });
+    expect(r.reply).toBe("Are you at Bajaj right now?");
+    expect(s.calls()).toBe(3);
+  });
+
   it("nudges an empty first answer too, before any tool ran", async () => {
     const empty: GeminiResponse = { candidates: [{ content: { parts: [] }, finishReason: "MALFORMED_FUNCTION_CALL" }] };
     const s = scripted(empty, say("Which client did you visit?"));

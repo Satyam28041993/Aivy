@@ -376,7 +376,9 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   both.
   The third run caught an empty *first* answer — Gemini 2.5 Flash sometimes
   returns nothing before any tool runs (often `MALFORMED_FUNCTION_CALL`);
-  the one nudge now covers every empty answer and logs the finish reason.
+  the empty-answer handling now covers every empty answer and logs the
+  finish reason. A later run saw two empties in a row, so it is a plain
+  retry first, then a nudge (two chances) before "I did not catch that".
   The fourth had "I have updated…" and the card's lines pasted into the
   chat; every draft result now carries a `reply_rule`. The fifth run was
   35/35 with a clean transcript, and the APK was built from that head.
