@@ -324,6 +324,99 @@ export async function sheetsAppendRow(
   return Number(res.updates?.updatedRows ?? 0);
 }
 
+/**
+ * Creates a spreadsheet in the user's Drive with one tab and a frozen header
+ * row. The `spreadsheets` scope the app already asks for is enough to create
+ * one; it lands in My Drive and can be moved there without changing its id.
+ */
+export async function sheetsCreate(
+  token: string,
+  input: { title: string; tab: string; header: string[] },
+): Promise<{ spreadsheetId: string; url: string }> {
+  const res = await callGoogle<{ spreadsheetId?: string; spreadsheetUrl?: string }>(
+    "Sheets",
+    token,
+    "https://sheets.googleapis.com/v4/spreadsheets",
+    {
+      method: "POST",
+      body: {
+        properties: { title: input.title },
+        sheets: [
+          {
+            properties: {
+              title: input.tab,
+              gridProperties: { frozenRowCount: 1 },
+            },
+            data: [
+              {
+                startRow: 0,
+                startColumn: 0,
+                rowData: [
+                  {
+                    values: input.header.map((h) => ({
+                      userEnteredValue: { stringValue: h },
+                      userEnteredFormat: { textFormat: { bold: true } },
+                    })),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  const spreadsheetId = `${res.spreadsheetId ?? ""}`;
+  if (!spreadsheetId) {
+    throw new GoogleApiError("Sheets", 500, "create returned no spreadsheetId");
+  }
+  return {
+    spreadsheetId,
+    url: res.spreadsheetUrl ?? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+  };
+}
+
+/**
+ * Appends rows exactly as given (RAW: a phone number keeps its leading zero
+ * and a remark that starts with "=" stays text) and returns the 1-based sheet
+ * row of the first one, so it can be updated later.
+ */
+export async function sheetsAppendRowsRaw(
+  token: string,
+  input: { spreadsheetId: string; tab: string; rows: string[][] },
+): Promise<number | null> {
+  const range = `${input.tab}!A1`;
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(input.spreadsheetId)}` +
+    `/values/${encodeURIComponent(range)}:append` +
+    "?valueInputOption=RAW&insertDataOption=INSERT_ROWS";
+  const res = await callGoogle<{ updates?: { updatedRange?: string } }>(
+    "Sheets",
+    token,
+    url,
+    { method: "POST", body: { values: input.rows } },
+  );
+  return firstRowOf(res.updates?.updatedRange ?? "");
+}
+
+/** "DSR!A5:L7" → 5. */
+export function firstRowOf(updatedRange: string): number | null {
+  const m = /![A-Z]+(\d+)/.exec(updatedRange);
+  return m ? Number(m[1]) : null;
+}
+
+/** Overwrites one row (RAW), e.g. to fill in a follow-up date added later. */
+export async function sheetsUpdateRow(
+  token: string,
+  input: { spreadsheetId: string; tab: string; row: number; cells: string[] },
+): Promise<void> {
+  const range = `${input.tab}!A${input.row}`;
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(input.spreadsheetId)}` +
+    `/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  await callGoogle("Sheets", token, url, { method: "PUT", body: { values: [input.cells] } });
+}
+
 // ---------------------------------------------------------------------------
 // People (contacts) — how "rohan ko mail bhej do" finds an address
 // ---------------------------------------------------------------------------

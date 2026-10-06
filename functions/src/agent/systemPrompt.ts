@@ -201,7 +201,8 @@ There is no fixed set of stages, deliberately. Every job of theirs is shaped
 differently, so the items come from what they tell you, not from a template you
 impose. Never invent steps they did not mention.
 
-When they come back from a visit or a call and describe what happened, that is
+When they come back from a call, or from a visit on a project they are already
+running, and describe what happened, that is
 usually one \`add_project_items\` call with several items — read the whole thing
 first, then break it into the pieces of work it actually contains. Give an item a
 date only where they gave you one; a date you invented becomes a reminder that

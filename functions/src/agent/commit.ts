@@ -26,6 +26,7 @@ import { addItems, createProject, setProjectReminders } from "./projectStore";
 import { logProjectEvent } from "./projectEvents";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { savePlace } from "./placesStore";
+import { saveVisit, setVisitFollowUp, syncVisitsToSheet } from "./visitStore";
 import { normalizeName } from "./nameNormalize";
 import {
   effectiveRemainingAmount,
@@ -54,6 +55,8 @@ import type {
   TaskDraftData,
   SavedPlaceDraftData,
   SheetRowDraftData,
+  VisitDraftData,
+  VisitFollowupDraftData,
 } from "./draftTypes";
 
 /**
@@ -757,6 +760,86 @@ async function commitSavedPlace(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Visits (DSR)
+// ---------------------------------------------------------------------------
+
+/** What the sheet sync came to, said in one clause. */
+function sheetClause(sync: Awaited<ReturnType<typeof syncVisitsToSheet>>): string {
+  if (sync.problem) {
+    return ` Saved in Aivy; ${sync.problem}`;
+  }
+  const made = sync.created ? " (new DSR sheet created in your Drive)" : "";
+  return ` Added to the DSR sheet${made}.${sync.url ? `\n${sync.url}` : ""}`;
+}
+
+/**
+ * The visit goes to Firestore first — that is the record — and then the sheet
+ * is brought up to date, which also copies any visit that was saved earlier
+ * without a Google token. The closing question is the user's flow: after a
+ * visit, ask about the follow-up.
+ */
+async function commitVisit(
+  uid: string,
+  d: VisitDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  const client = await ensureClient(uid, d.client);
+  const visit = await saveVisit(uid, {
+    visitDateMs: d.visitDateMs,
+    dateLabel: d.dateLabel,
+    clientId: client.id,
+    clientName: client.name,
+    contactPerson: d.contactPerson,
+    contactPhone: d.contactPhone,
+    location: d.location,
+    visitType: d.visitType,
+    products: d.products,
+    discussion: d.discussion,
+    status: d.status,
+    nextStep: d.nextStep,
+    followUpMs: 0,
+    followUpLabel: "",
+    followUpReminderId: "",
+  });
+  const sync = await syncVisitsToSheet(uid, opts.googleToken, d.timezone);
+  return {
+    ok: true,
+    message: `Visit saved — ${client.name}, ${d.dateLabel}.${sheetClause(sync)}\n\nShould I set a follow-up for ${client.name}? (yes / no)`,
+    createdIds: [visit.id],
+    summary: `visit ${visit.id} ${client.name} ${d.dateLabel} — waiting to hear whether to set a follow-up`,
+  };
+}
+
+async function commitVisitFollowup(
+  uid: string,
+  d: VisitFollowupDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  const reminderId = await writeReminder(uid, {
+    title: `Follow-up: ${d.clientName}`,
+    scheduledMs: d.whenMs,
+    type: "followup",
+    subType: "visit_followup",
+    note: d.note || null,
+    clientName: d.clientName,
+    extra: { visitId: d.visitId },
+  });
+  await setVisitFollowUp(uid, d.visitId, {
+    followUpMs: d.whenMs,
+    followUpLabel: d.whenLabel,
+    reminderId,
+  });
+  const sync = await syncVisitsToSheet(uid, opts.googleToken, d.timezone);
+  const sheet = sync.problem ? ` The DSR sheet will show it once Google is connected.` : " DSR sheet updated.";
+  return {
+    ok: true,
+    message: `Follow-up set — ${d.clientName}, ${d.whenLabel}. I'll remind you.${sheet}`,
+    createdIds: [reminderId],
+    summary: `follow-up ${d.clientName} ${d.whenLabel} (visit ${d.visitId})`,
+  };
+}
+
 /** Replays one confirmed draft. Idempotent: a committed draft is not redone. */
 export async function commitDraft(
   uid: string,
@@ -819,6 +902,12 @@ export async function commitDraft(
       break;
     case "task":
       result = await commitTask(uid, draft.data);
+      break;
+    case "visit":
+      result = await commitVisit(uid, draft.data, opts);
+      break;
+    case "visit_followup":
+      result = await commitVisitFollowup(uid, draft.data, opts);
       break;
     default:
       return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };

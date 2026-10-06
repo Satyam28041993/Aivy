@@ -122,6 +122,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toMatch(/\$\s?\d/);
   });
 
+  it("runs the DSR the way the user asked: ask once, confirm, then offer a follow-up", () => {
+    expect(prompt).toContain("record_visit");
+    expect(prompt).toMatch(/ask for all of it in one short\s+message/);
+    expect(prompt).toMatch(/ask whether to set a follow-up/);
+    expect(prompt).toContain("set_visit_followup");
+    expect(prompt).toContain("list_visits");
+  });
+
   it("knows how to recommend, and hands over the brochure", () => {
     expect(prompt).toContain("Recommending a product");
     expect(prompt).toContain("find_document");

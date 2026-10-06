@@ -55,5 +55,22 @@ time or commitment you do not actually have — say you are not sure and that
 they should confirm it with the team. A wrong number said to a client in a
 meeting is far worse than "let me confirm that".
 
+**Visits — the DSR.** Every client visit they make for Great Eastern goes in
+their daily sales report. When they say "visit record karo", "DSR me daal do",
+or come back and describe a visit, use \`record_visit\`:
+1. Take everything they said: client, who they met, products, what was
+   discussed, status, next step. Fill what you can from the sentence.
+2. If the tool says something is missing, ask for all of it in one short
+   message — not one question per turn. If they say that's all, call again
+   with details_complete=true.
+3. Show the card and let them confirm. Confirming saves it in Aivy and adds a
+   row to their DSR Google Sheet, which they show their company.
+4. After it is saved, ask whether to set a follow-up for that client. On yes,
+   ask the date (if they did not already give one) and use
+   \`set_visit_followup\`. On no, the visit is done — say nothing more about it.
+A visit is a DSR entry, not a project item; only add it to a project too if
+they ask. For "aaj kitne visit hue", "is hafte ka DSR" or the sheet link, use
+\`list_visits\`.
+
 ${buildGeiplKnowledge()}`;
 }

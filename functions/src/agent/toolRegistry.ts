@@ -36,6 +36,7 @@ import {
 } from "./tools/googleTools";
 import { findDocumentTool, readDocumentTool } from "./brochures";
 import { getPriceTool } from "./priceBook";
+import { listVisitsTool, recordVisitTool, setVisitFollowupTool } from "./tools/visitTools";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -960,6 +961,70 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "record_visit",
+    description:
+      "Record a client visit for the Great Eastern DSR (daily sales report). " +
+      "Use when they say 'visit record karo', 'DSR me daal do', or describe a " +
+      "visit they just made. Saves to Aivy AND adds a row to their DSR Google " +
+      "Sheet after they confirm the card. Pass everything they said; if the " +
+      "contact person, what was discussed, or where it stands is missing, the " +
+      "tool tells you what to ask — ask it in ONE message, then call again. " +
+      "Set details_complete=true only when they have answered or said there " +
+      "is nothing more.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: { type: "string", description: "Company / client visited." },
+        contact_person: { type: "string", description: "Who they met, with designation if said (e.g. 'Mr. Sharma, Purchase Head')." },
+        contact_phone: { type: "string", description: "Contact number, if given." },
+        location: { type: "string", description: "Area/city of the visit. Leave empty to use the phone's location." },
+        visit_type: { type: "string", enum: ["New", "Follow-up", "Demo", "Service", "Payment collection", "Other"] },
+        products: { type: "string", description: "Products discussed, e.g. 'BX410T, wax-resin ribbon, 100x50 PP labels'." },
+        discussion: { type: "string", description: "What was discussed / remarks, in their words, cleaned up." },
+        status: { type: "string", description: "Where it stands: Interested, Quotation to send, Quotation sent, Demo planned, Order received, Not interested, On hold…" },
+        next_step: { type: "string", description: "The next action, e.g. 'Send quotation for 2 printers'." },
+        when_phrase: { type: "string", description: "Visit day if not today ('kal', '3 Oct'). Empty = today." },
+        day_period: DAY_PERIOD,
+        details_complete: { type: "boolean", description: "True once the missing details were asked for and answered or declined." },
+      },
+      required: ["client_name"],
+    },
+  },
+  {
+    name: "set_visit_followup",
+    description:
+      "Set the follow-up for a visit that was just saved (or a given visit_id): " +
+      "a reminder on that date, and the date filled into the visit's DSR row. " +
+      "Use after a visit is saved and they say yes to a follow-up and give a date.",
+    parameters: {
+      type: "object",
+      properties: {
+        visit_id: { type: "string", description: "Visit id from 'recently saved'. Empty = their latest visit." },
+        when_phrase: WHEN_PHRASE,
+        day_period: DAY_PERIOD,
+        note: { type: "string", description: "What the follow-up is about, if they said." },
+      },
+      required: ["when_phrase"],
+    },
+  },
+  {
+    name: "list_visits",
+    description:
+      "Read back their recorded visits (DSR): 'aaj ke visits', 'is hafte kitne " +
+      "visit hue', 'Bajaj me pichhli baar kya hua tha', 'DSR sheet ka link'. " +
+      "Returns the visits and the DSR sheet link.",
+    parameters: {
+      type: "object",
+      properties: {
+        period: {
+          type: "string",
+          enum: ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_30_days"],
+        },
+        client_name: { type: "string", description: "Only visits to this client." },
+      },
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -992,6 +1057,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   find_document: findDocumentTool,
   read_document: readDocumentTool,
   get_price: getPriceTool,
+  record_visit: recordVisitTool,
+  set_visit_followup: setVisitFollowupTool,
+  list_visits: listVisitsTool,
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,

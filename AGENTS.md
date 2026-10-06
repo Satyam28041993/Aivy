@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the BarTender training (`agent/bartenderKnowledge.ts`)._
+_Last updated: after the visit DSR (`record_visit`)._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -229,6 +229,20 @@ unused today and kept for whatever voice is built next.
   choosing an edition. No website prices, at the user's request: Great
   Eastern's come from `get_price`. The 2022 comparison PDF is also in the
   library (Drive Bartender folder), so it can be sent to a client.
+- **Visits — the DSR** (`agent/visitStore.ts`, `agent/tools/visitTools.ts`;
+  tools `record_visit`, `set_visit_followup`, `list_visits`). The user's
+  Great Eastern daily sales report. "Visit record karo" → the tool refuses to
+  draw the card until contact person, discussion and status are given or the
+  user says that is all (`details_complete`), so the cross-question is
+  enforced in code → one card → confirm writes `users/{uid}/visits` **and**
+  a row in "Aivy DSR - Great Eastern visits", a Google Sheet created in their
+  Drive on the first visit (`meta/dsr` holds its id) → the commit message asks
+  whether to set a follow-up → `set_visit_followup` writes a reminder and fills
+  that visit's row. The Firestore row is the record, the sheet a copy: a visit
+  saved without a Google token (web, or permission missing) waits with
+  `sheetRow: null` and is copied on the next save that has one; a deleted
+  sheet is replaced rather than breaking every save. Rows are written RAW so
+  phone numbers keep their leading zero.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets

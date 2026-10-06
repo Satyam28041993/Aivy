@@ -71,7 +71,7 @@ function periodOf(raw: unknown): DayPeriod | null {
  * about. `allowCreate` is false for lookups where inventing a client makes no
  * sense (settling a payment against someone with no dues, say).
  */
-async function referenceClient(
+export async function referenceClient(
   ctx: ToolContext,
   rawName: string,
   allowCreate: boolean,

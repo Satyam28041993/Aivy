@@ -22,7 +22,9 @@ export type DraftKind =
   | "calendar_event"
   | "email"
   | "sheet_row"
-  | "saved_place";
+  | "saved_place"
+  | "visit"
+  | "visit_followup";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -149,6 +151,34 @@ export interface SavedPlaceDraftData {
   replacing: boolean;
 }
 
+/** A client visit for the DSR: saved in Aivy and copied to the DSR sheet. */
+export interface VisitDraftData {
+  kind: "visit";
+  client: DraftClientRef;
+  visitDateMs: number;
+  dateLabel: string;
+  contactPerson: string;
+  contactPhone: string;
+  location: string;
+  visitType: string;
+  products: string;
+  discussion: string;
+  status: string;
+  nextStep: string;
+  timezone: string;
+}
+
+/** A follow-up added to a visit after it was saved. */
+export interface VisitFollowupDraftData {
+  kind: "visit_followup";
+  visitId: string;
+  clientName: string;
+  whenMs: number;
+  whenLabel: string;
+  note: string;
+  timezone: string;
+}
+
 /** One thing to remember, filed under a key of its own. */
 export interface RememberedFact {
   /** Stable subject key — "wife", "anniversary", "city". */
@@ -228,7 +258,9 @@ export type DraftData =
   | CalendarEventDraftData
   | EmailDraftData
   | SheetRowDraftData
-  | SavedPlaceDraftData;
+  | SavedPlaceDraftData
+  | VisitDraftData
+  | VisitFollowupDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {
