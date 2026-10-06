@@ -144,6 +144,13 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("site:dinolabeldigital.com");
   });
 
+  it("is a warm, calm, respectful companion — caring, never flirting", () => {
+    expect(prompt).toContain("**Who you are to him.**");
+    expect(prompt).toMatch(/Respect comes\s+first, always/);
+    expect(prompt).toMatch(/no romance, no pet names/);
+    expect(prompt).toContain('"Sure, Satyam"');
+  });
+
   it("knows it has a voice, and keeps a spoken reply short", () => {
     expect(prompt).toContain("You have a voice.");
     expect(prompt).not.toContain("will be read aloud.**");

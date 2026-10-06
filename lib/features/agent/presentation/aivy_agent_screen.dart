@@ -15,6 +15,7 @@ import '../../../core/theme/aivy_theme.dart';
 import '../data/agent_service.dart';
 import '../models/agent_attachment.dart';
 import '../models/agent_models.dart';
+import '../voice/aivy_voice_screen.dart';
 import '../voice/voice_intent.dart';
 import '../voice/voice_recorder.dart';
 import '../voice/voice_service.dart';
@@ -533,6 +534,22 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
   // Voice
   // -------------------------------------------------------------------------
 
+  /// The full-screen voice conversation, on this same chat.
+  void _openVoice() {
+    unawaited(_voice.stop());
+    unawaited(
+      AivyVoiceScreen.open(
+        context,
+        chatId: _chatId,
+        onChatId: (id) {
+          if (mounted && id != _chatId) {
+            _bindChat(id);
+          }
+        },
+      ),
+    );
+  }
+
   /// The one card still waiting in the latest reply, if there is exactly one.
   AgentDraft? _waitingCard() {
     for (var i = _messages.length - 1; i >= 0 && i >= _messages.length - 3; i--) {
@@ -866,6 +883,11 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
             onPressed: _connectGoogle,
           ),
           IconButton(
+            icon: const Icon(Icons.graphic_eq_rounded, color: Color(0xFFC4B5FD), size: 22),
+            tooltip: 'Talk to Aivy',
+            onPressed: _openVoice,
+          ),
+          IconButton(
             icon: const Icon(Icons.add_comment_outlined,
                 color: Color(0xFF94A3B8), size: 21),
             tooltip: 'Nayi baat',
@@ -1174,6 +1196,8 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: busy ? null : () => unawaited(_onMic()),
+                    // Hold the mic for the full-screen voice conversation.
+                    onLongPress: busy ? null : _openVoice,
                     child: SizedBox(
                       width: 40,
                       height: 40,

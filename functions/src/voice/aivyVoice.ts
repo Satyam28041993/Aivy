@@ -159,7 +159,8 @@ async function cloudTts(text: string): Promise<{ audioBase64: string; mimeType: 
     body: JSON.stringify({
       input: { text },
       voice: voiceFor(text),
-      audioConfig: { audioEncoding: "MP3", speakingRate: 1.05 },
+      // A touch slower and softer than default: calm, not announcer.
+      audioConfig: { audioEncoding: "MP3", speakingRate: 0.97, pitch: 0.5 },
     }),
   });
   if (!res.ok) {
@@ -199,7 +200,7 @@ async function geminiTts(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": keyOf() },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `Say warmly, in a natural Indian English voice: ${text}` }] }],
+        contents: [{ parts: [{ text: `Say this warmly and calmly, like a caring friend, in a natural Indian English voice: ${text}` }] }],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },

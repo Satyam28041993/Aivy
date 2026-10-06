@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after Aivy got her voice back (mic, transcribe, speak)._
+_Last updated: after the voice screen and Aivy's warmer persona._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -408,6 +408,26 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   `source: voice` (Cloud TTS priced per character via `extraUsd`). Both
   callables are in the deploy invoker list. The prompt says she has a voice,
   so an older "I cannot speak" in a chat does not stick.
+- **Voice screen** (`lib/features/agent/voice/aivy_voice_screen.dart`). The
+  ✦ wave icon in the Aivy header (or a long-press on the mic) opens a
+  full-screen conversation in the Gemini Live style: a drifting starfield
+  with nebulae, and an orb that breathes when idle, swells with his voice,
+  swirls while thinking and ripples while she speaks. It opens already
+  listening and keeps going — after she speaks it listens again; silence
+  rests it, Pause stops the loop. Live captions show what she heard and
+  what she said; a waiting card shows as a small glass panel with Save /
+  Cancel, or "haan" by voice. **Same chat, same `aivyAgent`, same tools** —
+  every turn lands in the chat behind it (`onChatId` binds a new one). Do
+  not grow it its own commands: that is exactly why the old voice home
+  was retired.
+- **Aivy's persona** (`systemPrompt.ts`, **Who you are to him**). At the
+  user's request she is a warm, caring, calm and polite companion — "like a
+  girlfriend", in his words — who respects him above all: his time, his
+  decisions, his privacy; says a concern once, softly, and lets him decide.
+  Affection is care, not flirting: no romance, no pet names, nothing he
+  would mind a client overhearing, because he often has her on speaker in
+  front of one. Replies stay in English. The Neural2 voice runs slightly
+  slower and softer (rate 0.97, pitch +0.5) to sound calm.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
