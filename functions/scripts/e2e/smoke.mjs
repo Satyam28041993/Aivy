@@ -77,7 +77,11 @@ async function say(text, opts = {}) {
     return { reply: "", drafts: [], error: true };
   }
   if (res.chatId) chatId = res.chatId;
-  replies.push({ text: res.reply, withCard: (res.drafts ?? []).length > 0 });
+  replies.push({
+    text: res.reply,
+    withCard: (res.drafts ?? []).length > 0,
+    cardLabels: (res.drafts ?? []).flatMap((d) => (d.lines ?? []).map((l) => l.label)),
+  });
   console.log(`🤖 AIVY: ${res.reply}`);
   for (const d of res.drafts ?? []) {
     console.log(`   ┌ CARD [${d.kind}] ${d.title}  (id ${d.id})`);
@@ -321,6 +325,10 @@ async function main() {
   check("never claims 'saved/deleted' before the confirm tap", early.length === 0, early.map((r) => r.text.slice(0, 120)).join(" | "));
   const doneTooSoon = replies.filter((r) => r.withCard && /\bI(?: have|'ve) (?:set|added|updated|saved|recorded|deleted|restored)\b/i.test(r.text));
   check("words a pending card as waiting, not 'I have set…'", doneTooSoon.length === 0, doneTooSoon.map((r) => r.text.slice(0, 100)).join(" | "));
+  const pasted = replies.filter(
+    (r) => r.withCard && r.cardLabels.filter((l) => r.text.includes(`${l}:`)).length >= 3,
+  );
+  check("does not paste the card's lines into the chat", pasted.length === 0, pasted.map((r) => r.text.slice(0, 80)).join(" | "));
   const ids = replies.filter((r) => /\b(?:visit|contact|trash)[ _]?id\b/i.test(r.text));
   check("never shows record ids", ids.length === 0, ids.map((r) => r.text.slice(0, 100)).join(" | "));
   const lost = replies.filter((r) => /did not catch that/i.test(r.text));
