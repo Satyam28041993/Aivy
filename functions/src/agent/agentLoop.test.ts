@@ -328,3 +328,28 @@ describe("history", () => {
     expect(JSON.stringify(res.newContents)).not.toContain("inlineData");
   });
 });
+
+describe("after the live smoke test", () => {
+  it("nudges once when the model goes quiet after a tool asked for details", async () => {
+    dispatchMock.mockResolvedValue({ ok: false, reason: "needs_detail", message: "ask for the contact" });
+    const empty: GeminiResponse = { candidates: [{ content: { parts: [] } }] };
+    const s = scripted(call("record_visit", { client_name: "Bajaj" }), empty, say("Who did you meet there?"));
+    const r = await runAgentTurn({ ...base, userText: "visit record karo", transport: s.transport });
+    expect(r.reply).toBe("Who did you meet there?");
+    // The nudge is for this turn only; it never reaches stored history.
+    expect(JSON.stringify(r.newContents)).not.toContain("Reply to me now");
+  });
+
+  it("never shows the model's thought summary as the reply", async () => {
+    const s = scripted({
+      candidates: [{ content: { parts: [{ text: "thinking…", thought: true } as never, { text: "Done." }] } }],
+    });
+    const r = await runAgentTurn({ ...base, userText: "hi", transport: s.transport });
+    expect(r.reply).toBe("Done.");
+  });
+
+  it("replays a confirmed card as the user's tap, then the result", async () => {
+    const { confirmedTurns } = await import("./agentLoop");
+    expect(confirmedTurns("Visit saved.").map((c) => c.role)).toEqual(["user", "model"]);
+  });
+});

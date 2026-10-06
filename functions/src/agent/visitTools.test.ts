@@ -156,3 +156,11 @@ describe("list_visits periods", () => {
     expect(new Date(week.fromMs).toISOString()).toBe("2026-10-04T18:30:00.000Z"); // Mon 5 Oct, IST midnight
   });
 });
+
+describe("location labels", () => {
+  it("drops Google's plus code from the front of an address", async () => {
+    const { stripPlusCode } = await import("./tools/visitTools");
+    expect(stripPlusCode("R6VQ+95C, Bajaj Nagar, Waluj, Maharashtra 431136")).toBe("Bajaj Nagar, Waluj, Maharashtra 431136");
+    expect(stripPlusCode("Waluj MIDC, Aurangabad")).toBe("Waluj MIDC, Aurangabad");
+  });
+});

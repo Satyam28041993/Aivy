@@ -40,7 +40,9 @@ export interface RoutePoint {
 
 /** Where a visit was, for routing: its pin if the phone gave one, else its words. */
 export function visitPoint(v: VisitRecord): RoutePoint {
-  const label = v.location ? `${v.clientName} (${v.location})` : v.clientName;
+  // The client's name is what the company reads on a claim; the address only
+  // steers the route.
+  const label = v.clientName;
   const where: string | Coords =
     v.lat != null && v.lng != null
       ? { lat: v.lat, lng: v.lng }

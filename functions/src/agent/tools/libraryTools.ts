@@ -78,7 +78,15 @@ export async function saveContactTool(
   if (!name) {
     return fail("needs_detail", "What is their name? I need at least that to save a contact.");
   }
-  const phoneRaw = str(args.phone);
+  // A card often prints two numbers ("+91 98220 12345, 0240 255 1234"): the
+  // first that reads as a phone is the contact's, the rest go in the notes.
+  const numbers = str(args.phone)
+    .split(/[,;/|]|\band\b|\bor\b/i)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const firstGood = numbers.findIndex((x) => normalizeIndiaPhone(x) != null);
+  const phoneRaw = firstGood >= 0 ? numbers[firstGood]! : (numbers[0] ?? "");
+  const otherNumbers = numbers.filter((_, i) => i !== firstGood && firstGood >= 0);
   const phone = normalizeIndiaPhone(phoneRaw) ?? "";
   if (phoneRaw && !phone) {
     return fail(
@@ -88,7 +96,9 @@ export async function saveContactTool(
   }
   const email = str(args.email);
   const company = str(args.company);
-  const notes = str(args.notes);
+  const notes = [str(args.notes), otherNumbers.length ? `Other numbers: ${otherNumbers.join(", ")}` : ""]
+    .filter(Boolean)
+    .join("\n");
   if (!target && !phone && !email) {
     return fail(
       "needs_detail",

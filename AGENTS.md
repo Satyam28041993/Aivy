@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after delete-with-confirmation, the AI usage screen and the file-library merge._travel_expense`) and the visit location question._
+_Last updated: after the first live E2E smoke run and its fixes._travel_expense`) and the visit location question._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -344,6 +344,26 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   request — system prompt, history, tool results — which is why it dwarfs
   the message. On the free tier the real bill is nothing; the screen says so.
   Prices live in `PRICES`, pinned by `aiUsage.test.ts`.
+- **E2E smoke** (`.github/workflows/e2e-smoke.yml`,
+  `functions/scripts/e2e/smoke.mjs`). This environment cannot reach
+  `cloudfunctions.net` or Cloud Run, so the live end-to-end run happens on
+  GitHub Actions: a throwaway anonymous user talks to the deployed agent in
+  Hinglish — visit with the location question and follow-up, a second visit,
+  the day's travel, a fictional visiting card's front and back
+  (`card_front.png`, `card_back.png`), delete and undo — then reads Firestore
+  back. Push a change under `functions/scripts/e2e/` (bump `RUN`) to run it
+  against what is deployed. **Read the transcript, not just the ticks**: the
+  first run passed 28/28 and still showed five bugs, fixed in the same push —
+  - a confirmed card's result was stored as a second assistant line straight
+    after the card, so the model learned to write "Saved —" before anyone
+    tapped. Commit rows now replay as the user's tap, then the result
+    (`confirmedTurns`);
+  - an empty answer after a tool asked for details came out as "I did not
+    catch that" — the loop now nudges once;
+  - a card with a mobile and a landline in one field was refused — the first
+    good number is the phone, the rest go in the notes;
+  - Google's plus code ("R6VQ+95C, …") led the visit location — stripped;
+  - a delete card promised to cancel a follow-up the visit never had.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

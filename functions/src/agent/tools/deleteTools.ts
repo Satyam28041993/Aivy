@@ -37,13 +37,15 @@ const KIND_LABEL: Record<DeleteKind, string> = {
 };
 
 /** What else goes with it, said plainly on the card. */
-function sideEffects(kind: DeleteKind, hasSheet: boolean): string {
+function sideEffects(kind: DeleteKind, hasSheet: boolean, hasReminder: boolean): string {
   switch (kind) {
     case "task":
     case "project":
       return "Its steps go too, and its reminders are cancelled.";
-    case "visit":
-      return `Its follow-up reminder is cancelled${hasSheet ? " and its DSR sheet row is cleared" : ""}.`;
+    case "visit": {
+      const bits = [hasReminder ? "its follow-up reminder is cancelled" : "", hasSheet ? "its DSR sheet row is cleared" : ""].filter(Boolean);
+      return bits.length ? `${bits.join(" and ").replace(/^./, (c) => c.toUpperCase())}.` : "";
+    }
     case "travel_expense":
       return hasSheet ? "Its rows in the expense sheet are cleared." : "";
     case "quotation":
@@ -96,7 +98,11 @@ export async function deleteRecordTool(ctx: ToolContext, args: Record<string, un
     label: targets.length > 1 ? `${i + 1}.` : KIND_LABEL[kind],
     value: t.label,
   }));
-  const effect = sideEffects(kind, targets.some((t) => t.sheetRows));
+  const effect = sideEffects(
+    kind,
+    targets.some((t) => t.sheetRows),
+    targets.some((t) => t.reminderIds.length > 0),
+  );
   if (effect) lines.push({ label: "Also", value: effect });
   lines.push({ label: "Undo", value: "A copy is kept in trash — say \"wapas lao\" to bring it back." });
 

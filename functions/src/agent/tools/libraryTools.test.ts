@@ -124,6 +124,15 @@ describe("save_contact", () => {
     expect(draft.lines.find((l) => l.label === "Card photo")?.value).toMatch(/Front \+ back/);
   });
 
+  it("keeps the mobile as the phone and the landline in the notes when a card prints two", async () => {
+    findByPhoneMock.mockResolvedValue(null);
+    const res = await saveContactTool(CTX, { name: "Rahul Verma", phone: "+91 98220 12345, 0240 255 1234" });
+    expect(res.ok).toBe(true);
+    const data = lastDraft().data as Extract<DraftData, { kind: "saved_contact" }>;
+    expect(data.phone).toBe("919822012345");
+    expect(data.notes).toContain("0240 255 1234");
+  });
+
   it("needs a name", async () => {
     const res = await saveContactTool(CTX, { phone: "9876543210" });
     expect(res.ok).toBe(false);

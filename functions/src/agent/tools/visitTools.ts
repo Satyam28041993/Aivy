@@ -30,6 +30,14 @@ function periodOf(raw: unknown): DayPeriod | null {
   return v === "morning" || v === "afternoon" || v === "evening" || v === "night" ? v : null;
 }
 
+/**
+ * Google answers a pin with a plus code first ("R6VQ+95C, Bajaj Nagar, …"),
+ * which means nothing on a report the company reads.
+ */
+export function stripPlusCode(label: string): string {
+  return label.replace(/^\s*[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\s*,?\s*/i, "").trim();
+}
+
 export const VISIT_TYPES = ["New", "Follow-up", "Demo", "Service", "Payment collection", "Other"];
 
 /** Fields worth asking about before the card is drawn, in the order to ask. */
@@ -102,9 +110,11 @@ export async function recordVisitTool(ctx: ToolContext, args: Record<string, unk
   const pin = args.at_client_location === true && ctx.coords ? { lat: ctx.coords.lat, lng: ctx.coords.lng } : null;
   if (!location && pin) {
     location =
-      (await nearestPlaceLabel(pin).catch(() => null)) ??
-      (await reverseGeocode(pin).catch(() => null)) ??
-      "";
+      stripPlusCode(
+        (await nearestPlaceLabel(pin).catch(() => null)) ??
+          (await reverseGeocode(pin).catch(() => null)) ??
+          "",
+      );
   }
 
   const rawType = str(args.visit_type);

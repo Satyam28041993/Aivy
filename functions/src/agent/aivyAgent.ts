@@ -14,7 +14,7 @@ import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import { DateTime } from "luxon";
 
-import { MODEL, runAgentTurn } from "./agentLoop";
+import { confirmedTurns, MODEL, runAgentTurn } from "./agentLoop";
 import { buildSystemPrompt } from "./systemPrompt";
 import { commitDraft } from "./commit";
 import { getUserMemory } from "./userMemory";
@@ -313,7 +313,14 @@ export const aivyAgentCommit = onCall(
     if (chatId && result.ok) {
       // The next turn needs to know this exists, or "usko" has nothing to bind to.
       await noteSaved(uid, chatId, result.summary);
-      await appendMessage(uid, chatId, { role: "assistant", text: result.message });
+      // Replayed to the model as the user confirming, then the result — not
+      // as a second assistant line straight after the card. Two model turns
+      // in a row taught it to write "Saved —" itself, before anyone tapped.
+      await appendMessage(uid, chatId, {
+        role: "assistant",
+        text: result.message,
+        modelParts: confirmedTurns(result.message),
+      });
       await touchChat(uid, chatId, { lastMessage: result.message });
     }
 

@@ -131,8 +131,21 @@ function partsOf(res: GeminiResponse): GeminiPart[] {
   return res.candidates?.[0]?.content?.parts ?? [];
 }
 
+/**
+ * How a confirmed card goes into history: the user's tap, then the result.
+ * The display row shows only the result; the model needs to see who acted.
+ */
+export function confirmedTurns(resultMessage: string): GeminiContent[] {
+  return [
+    { role: "user", parts: [{ text: "(I tapped confirm on the card.)" }] },
+    { role: "model", parts: [{ text: resultMessage }] },
+  ];
+}
+
 function textOf(parts: GeminiPart[]): string {
   return parts
+    // Thought summaries are the model talking to itself, never the reply.
+    .filter((p) => !(p as { thought?: boolean }).thought)
     .map((p) => (typeof p.text === "string" ? p.text : ""))
     .join("")
     .trim();
@@ -221,6 +234,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let reply = "";
   let hops = 0;
   let usage: TurnUsage = { ...EMPTY_USAGE };
+  let nudged = false;
 
   while (hops < maxHops) {
     // Snapshot: `contents` keeps growing as the loop runs, and a transport that
@@ -239,6 +253,16 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     const text = textOf(parts);
 
     if (calls.length === 0) {
+      // An empty answer after a tool said what to ask happens now and then;
+      // one nudge gets the question out instead of "I did not catch that".
+      if (!text && !nudged && hops < maxHops && trace.length > 0) {
+        nudged = true;
+        contents.push({
+          role: "user",
+          parts: [{ text: "(Reply to me now in plain words — ask what the tool said is missing, or tell me what you did.)" }],
+        });
+        continue;
+      }
       reply = text;
       if (text) {
         const modelTurn: GeminiContent = { role: "model", parts: [{ text }] };
