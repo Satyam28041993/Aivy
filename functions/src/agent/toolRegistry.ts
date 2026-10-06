@@ -1100,6 +1100,8 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "save_place",
   "add_project_items",
   "create_task",
+  "record_visit",
+  "set_visit_followup",
 ]);
 
 export function isKnownTool(name: string): boolean {
