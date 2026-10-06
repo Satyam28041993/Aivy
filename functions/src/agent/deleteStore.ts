@@ -36,6 +36,7 @@ export const DELETE_KINDS = [
   "quotation",
   "order",
   "payment_due",
+  "client",
 ] as const;
 
 export type DeleteKind = (typeof DELETE_KINDS)[number];
@@ -107,12 +108,14 @@ export async function findDeleteTargets(
   uid: string,
   kind: DeleteKind,
   query: string,
-  opts: { id?: string; timezone: string; dayKey?: string | null },
+  opts: { id?: string; timezone: string; dayKey?: string | null; all?: boolean },
 ): Promise<DeleteTarget[]> {
   const tz = opts.timezone;
+  // "Jo bhi orders hai sab delete karo": every record of the kind, no words.
+  const everything = opts.all === true && !query.trim() && !opts.id;
   const byId = (docs: Doc[]) => (opts.id ? docs.filter((d) => d.id === opts.id) : null);
   const pick = (docs: Doc[], fields: (d: Doc) => string[]) =>
-    byId(docs) ?? docs.filter((d) => matchesQuery(fields(d), query));
+    byId(docs) ?? (everything ? docs : docs.filter((d) => matchesQuery(fields(d), query)));
 
   switch (kind) {
     case "reminder": {
@@ -157,7 +160,11 @@ export async function findDeleteTargets(
     case "travel_expense": {
       const docs = await scan(uid, "travelExpenses", { order: "dateMs" });
       const wanted = opts.id || opts.dayKey || "";
-      const hits = wanted ? docs.filter((d) => d.id === wanted) : docs.filter((d) => matchesQuery([s(d.data.dateLabel), d.id], query));
+      const hits = wanted
+        ? docs.filter((d) => d.id === wanted)
+        : everything
+          ? docs
+          : docs.filter((d) => matchesQuery([s(d.data.dateLabel), d.id], query));
       return hits.map((d) => {
         const legs = Array.isArray(d.data.legs) ? d.data.legs.length : 0;
         return {
@@ -190,7 +197,9 @@ export async function findDeleteTargets(
       const data = snap.data() ?? {};
       return Object.entries(data)
         .filter(([k, v]) => k !== "updatedAtMs" && typeof v === "string")
-        .filter(([k, v]) => (opts.id ? k === opts.id : matchesQuery([k.replace(/_/g, " "), v as string], query)))
+        .filter(([k, v]) =>
+          opts.id ? k === opts.id : everything || matchesQuery([k.replace(/_/g, " "), v as string], query),
+        )
         .map(([k, v]) => ({
           kind,
           path: snap.ref.path,
@@ -210,6 +219,33 @@ export async function findDeleteTargets(
         reminderIds: [],
         reminderLinks: [],
       }));
+    }
+    case "client": {
+      // Only the client's own entry goes. Quotations, orders, dues and visits
+      // keep the client's name on them and stay until deleted themselves —
+      // the card says how many there are.
+      const docs = await scan(uid, "clients");
+      const hits = pick(docs, (d) => [s(d.data.name)]);
+      const linked = async (id: string) => {
+        let total = 0;
+        for (const col of ["quotations", "orders", "payments", "visits"]) {
+          const snap = await userDoc(uid).collection(col).where("clientId", "==", id).limit(100).get();
+          total += snap.docs.length;
+        }
+        return total;
+      };
+      const out: DeleteTarget[] = [];
+      for (const d of hits.slice(0, 50)) {
+        const n = await linked(d.id).catch(() => 0);
+        out.push({
+          kind,
+          path: d.path,
+          label: n > 0 ? `${s(d.data.name)} (${n} linked record${n === 1 ? "" : "s"} stay)` : s(d.data.name),
+          reminderIds: [],
+          reminderLinks: [],
+        });
+      }
+      return out;
     }
     case "quotation":
     case "order":

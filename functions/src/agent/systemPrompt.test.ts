@@ -144,6 +144,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("site:dinolabeldigital.com");
   });
 
+  it("can delete, and overrides an earlier 'I cannot delete' in the same chat", () => {
+    // The user hit this live: a chat that had said "I cannot delete" before
+    // the tool existed kept refusing after it was deployed.
+    expect(prompt).toContain("delete_record");
+    expect(prompt).toContain("You can\ndelete.");
+    expect(prompt).toMatch(/out of date — do not repeat it/);
+  });
+
   it("tells the model how to file an attached visiting card or rate card", () => {
     expect(prompt).toContain("save_contact");
     expect(prompt).toContain("save_library_item");

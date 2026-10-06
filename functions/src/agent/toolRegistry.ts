@@ -1164,7 +1164,8 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: "delete_record",
     description:
       "Delete something they ask to delete ('ye reminder delete karo', 'Bajaj " +
-      "wala visit hata do', 'kal ka travel expense hatao'). Finds it; if " +
+      "wala visit hata do', 'kal ka travel expense hatao', 'jo bhi orders hai " +
+      "sab delete karo' → all_matches=true with no query). Finds it; if " +
       "several match it returns the options — ask which (or whether all) and " +
       "call again with its id or all_matches=true. Draws a delete card; " +
       "nothing goes until they confirm. A copy is kept in trash. Money " +
@@ -1175,7 +1176,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         kind: { type: "string", enum: [...DELETE_KINDS] },
         query: { type: "string", description: "How they named it: title, client, person, place, or a date ('kal', '3 Oct')." },
         id: { type: "string", description: "Exact id from the options of a previous call, or from 'recently saved'." },
-        all_matches: { type: "boolean", description: "True only when they said to delete every match." },
+        all_matches: { type: "boolean", description: "True only when they said to delete every match, or all of that kind ('saare', 'jo bhi hai')." },
       },
       required: ["kind"],
     },

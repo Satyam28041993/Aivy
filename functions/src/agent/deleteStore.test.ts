@@ -117,6 +117,25 @@ describe("finding what to delete", () => {
   });
 });
 
+describe("all of a kind, and clients", () => {
+  it("'jo bhi orders hai sab' finds every order with no words given", async () => {
+    store.set("users/u/orders/o1", { clientName: "Exide", amount: 100, createdAtMs: 1 });
+    store.set("users/u/orders/o2", { clientName: "Bajaj", amount: 200, createdAtMs: 2 });
+    expect(await findDeleteTargets("u", "order", "", { ...TZ, all: true })).toHaveLength(2);
+    expect(await findDeleteTargets("u", "order", "", TZ)).toHaveLength(0);
+  });
+
+  it("deletes a client's entry and says its records stay", async () => {
+    store.set("users/u/clients/c1", { name: "Bajaj Auto" });
+    store.set("users/u/quotations/q1", { clientId: "c1", clientName: "Bajaj Auto", amount: 5 });
+    const [t] = await findDeleteTargets("u", "client", "bajaj", TZ);
+    expect(t!.label).toMatch(/1 linked record stay/);
+    await deleteTarget("u", t!);
+    expect(store.has("users/u/clients/c1")).toBe(false);
+    expect(store.has("users/u/quotations/q1")).toBe(true);
+  });
+});
+
 describe("deleting", () => {
   it("keeps a copy in trash, cancels the follow-up, blanks the DSR row — and can bring it back", async () => {
     store.set("users/u/meta/dsr", { spreadsheetId: "S1" });

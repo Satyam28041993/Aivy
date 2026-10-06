@@ -34,6 +34,7 @@ const KIND_LABEL: Record<DeleteKind, string> = {
   quotation: "Quotation",
   order: "Order",
   payment_due: "Payment due",
+  client: "Client",
 };
 
 /** What else goes with it, said plainly on the card. */
@@ -50,6 +51,8 @@ function sideEffects(kind: DeleteKind, hasSheet: boolean, hasReminder: boolean):
       return hasSheet ? "Its rows in the expense sheet are cleared." : "";
     case "quotation":
       return "Its follow-up reminder is cancelled.";
+    case "client":
+      return "Only the client entry goes; their quotations, orders, dues and visits stay until you delete them too.";
     case "reminder":
       return "The alarm is cancelled.";
     default:
@@ -76,15 +79,23 @@ export async function deleteRecordTool(ctx: ToolContext, args: Record<string, un
     });
     if (when.epochMs != null) day = dayKey(when.epochMs, ctx.timezone);
   }
-  if (!query && !id) {
-    return fail("needs_detail", `Which ${KIND_LABEL[kind].toLowerCase()}? Give a name, client or date.`);
+  const all = args.all_matches === true;
+  if (!query && !id && !all) {
+    return fail(
+      "needs_detail",
+      `Which ${KIND_LABEL[kind].toLowerCase()}? Give a name, client or date — or, if they said all of them, call again with all_matches=true.`,
+    );
   }
 
-  const found = await findDeleteTargets(ctx.uid, kind, query, { id: id || undefined, timezone: ctx.timezone, dayKey: day });
+  const found = await findDeleteTargets(ctx.uid, kind, query, {
+    id: id || undefined,
+    timezone: ctx.timezone,
+    dayKey: day,
+    all,
+  });
   if (found.length === 0) {
     return fail("nothing_found", `No ${KIND_LABEL[kind].toLowerCase()} matches "${query || id}". Say it differently, or check the name.`);
   }
-  const all = args.all_matches === true;
   if (found.length > 1 && !all) {
     return fail(
       "needs_detail",
@@ -92,7 +103,7 @@ export async function deleteRecordTool(ctx: ToolContext, args: Record<string, un
       found.slice(0, 8).map((t) => ({ id: t.memoryKey ?? t.path.split("/").pop()!, label: t.label })),
     );
   }
-  const targets = all ? found.slice(0, 20) : found;
+  const targets = all ? found.slice(0, 50) : found;
 
   const lines: DraftCardLine[] = targets.map((t, i) => ({
     label: targets.length > 1 ? `${i + 1}.` : KIND_LABEL[kind],

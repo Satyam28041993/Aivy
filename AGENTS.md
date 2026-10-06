@@ -333,8 +333,14 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   day's expense rows, because later records remember their row numbers.
   Restore puts the document back; a visit rewrites its row on the next sync,
   a day of travel is appended again; cancelled reminders stay cancelled.
-  Received money is the ledger and is never offered. Clients themselves are
-  not deletable yet — too much hangs off them.
+  Received money is the ledger and is never offered. "Jo bhi orders hai sab
+  delete karo" is `all_matches` with no query (up to 50 on one card).
+  Clients can be deleted too: only the client entry goes, and the card says
+  how many quotations/orders/dues/visits carry its name and stay.
+  **A chat that said "I cannot delete" before the tool existed kept refusing
+  after it shipped** — the model repeats itself. The prompt now says a past
+  refusal in the chat is out of date (pinned in `systemPrompt.test.ts`).
+  The same will happen with any new capability: say so in the prompt.
 - **AI usage & cost** (`agent/aiUsage.ts`, `lib/features/ai_usage/`). Every
   chat turn and morning brief writes `users/{uid}/aiUsage`: the user's
   message, the reply, the tools called, Gemini's own token counts summed
