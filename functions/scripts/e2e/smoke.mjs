@@ -365,7 +365,9 @@ async function main() {
   check("firestore: trash kept a copy", trash.length >= 1);
   const usage = await list("aiUsage");
   const usd = usage.reduce((a, u) => a + (u.costUsd ?? 0), 0);
-  check("firestore: AI usage logged per turn with tokens", usage.length >= 8 && usage.every((u) => u.inputTokens > 0), `${usage.length} calls, $${usd.toFixed(4)}`);
+  check("firestore: AI usage logged per turn with tokens", usage.length >= 8 &&
+      usage.filter((u) => u.model !== "cloud-tts-neural2").every((u) => u.inputTokens > 0) &&
+      usage.some((u) => u.source === "voice"), `${usage.length} calls, $${usd.toFixed(4)}`);
 
   const priya = contacts.filter((c) => /priya/i.test(c.name ?? ""));
   check(
