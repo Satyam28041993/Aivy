@@ -35,6 +35,8 @@ let token = "";
 let uid = "";
 let chatId = "";
 const checks = [];
+/** Every reply, with whether it came with a card — for the transcript checks. */
+const replies = [];
 
 function check(name, ok, detail = "") {
   checks.push({ name, ok: Boolean(ok), detail });
@@ -75,6 +77,7 @@ async function say(text, opts = {}) {
     return { reply: "", drafts: [], error: true };
   }
   if (res.chatId) chatId = res.chatId;
+  replies.push({ text: res.reply, withCard: (res.drafts ?? []).length > 0 });
   console.log(`🤖 AIVY: ${res.reply}`);
   for (const d of res.drafts ?? []) {
     console.log(`   ┌ CARD [${d.kind}] ${d.title}  (id ${d.id})`);
@@ -232,6 +235,26 @@ async function main() {
     check("card: number found later", /98220\s?12345|9822012345/.test(lookup.reply));
   }
 
+  // --- 4b. A card whose back comes in a later message --------------------
+  console.log("\n════════ 4b. Card front now, back later ════════");
+  let f2;
+  let b2;
+  try {
+    f2 = await upload("card2_front.png");
+    b2 = await upload("card2_back.png");
+  } catch (err) {
+    check("card 2: upload", false, String(err));
+  }
+  if (f2 && b2) {
+    const k1 = await untilCard("saved_contact", "ye card save karo", ["haan save karo"], { attachments: [f2] });
+    if (k1.card) await confirm(k1.card);
+    const k2 = await untilCard("saved_contact", "ye uska back hai", ["haan isi Priya wale card ka back hai, add kar do"], {
+      attachments: [b2],
+    });
+    check("card 2: back updates the same contact", k2.card && /update/i.test(k2.card.title ?? ""), k2.card?.title);
+    if (k2.card) await confirm(k2.card);
+  }
+
   // --- 5. Delete + undo ---------------------------------------------------
   console.log("\n════════ 5. Delete with confirmation, then undo ════════");
   const d = await untilCard("delete_record", "Exide wala visit delete kar do", ["haan Exide Industries wala hi"]);
@@ -282,6 +305,22 @@ async function main() {
   const usage = await list("aiUsage");
   const usd = usage.reduce((a, u) => a + (u.costUsd ?? 0), 0);
   check("firestore: AI usage logged per turn with tokens", usage.length >= 8 && usage.every((u) => u.inputTokens > 0), `${usage.length} calls, $${usd.toFixed(4)}`);
+
+  const priya = contacts.filter((c) => /priya/i.test(c.name ?? ""));
+  check(
+    "firestore: Priya is ONE contact with front + back and the plant address",
+    priya.length === 1 && (priya[0].cardImages ?? []).length === 2 && /shendra/i.test(priya[0].notes ?? ""),
+    priya.map((c) => `${c.phone} imgs=${(c.cardImages ?? []).length} | ${c.notes}`).join(" || "),
+  );
+
+  // --- 8. The conversation itself ------------------------------------------
+  console.log("\n════════ 8. Transcript checks ════════");
+  const early = replies.filter(
+    (r) => r.withCard && /\b(saved|recorded|restored|deleted|added)\b\s*[—-]/i.test(r.text),
+  );
+  check("never claims 'saved/deleted' before the confirm tap", early.length === 0, early.map((r) => r.text.slice(0, 120)).join(" | "));
+  const lost = replies.filter((r) => /did not catch that/i.test(r.text));
+  check("never answers 'I did not catch that'", lost.length === 0, `${lost.length} time(s)`);
 
   const failed = checks.filter((c) => !c.ok);
   console.log(`\n════════ RESULT: ${checks.length - failed.length}/${checks.length} passed ════════`);
