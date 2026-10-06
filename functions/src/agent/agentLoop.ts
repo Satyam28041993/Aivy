@@ -24,6 +24,11 @@ export interface GeminiPart {
   text?: string;
   functionCall?: { name: string; args?: Record<string, unknown> };
   functionResponse?: { name: string; response: Record<string, unknown> };
+  /**
+   * Current-turn file bytes only. History must never carry this — a conversation
+   * that replayed base64 would grow until the next turn failed.
+   */
+  inlineData?: { mimeType: string; data: string };
 }
 
 export interface GeminiContent {
@@ -54,6 +59,13 @@ export interface AgentTurnInput {
   /** Prior turns, oldest first. */
   history: GeminiContent[];
   userText: string;
+  /**
+   * Files for this turn only. They go to the model on the live user part and
+   * are stripped from `newContents`, so the next turn does not replay them.
+   */
+  fileParts?: GeminiPart[];
+  /** Display names, for the history line stored as text. */
+  attachmentNames?: string[];
   maxHops?: number;
   transport?: GeminiTransport;
   geminiKey?: string;
@@ -161,6 +173,19 @@ function toolResponseForModel(result: Awaited<ReturnType<typeof dispatchTool>>):
   return { ok: true, data: result.data };
 }
 
+function historyTextForTurn(userText: string, names?: string[]): string {
+  const body = userText.trim();
+  const pins = (names ?? [])
+    .map((n) => n.trim())
+    .filter(Boolean)
+    .map((n) => `📎 ${n}`)
+    .join("\n");
+  if (body && pins) {
+    return `${body}\n${pins}`;
+  }
+  return pins || body;
+}
+
 /** Runs one user turn to completion. */
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResult> {
   const maxHops = input.maxHops ?? 5;
@@ -172,13 +197,19 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       })(),
     );
 
+  const historyText = historyTextForTurn(input.userText, input.attachmentNames);
+  const liveParts: GeminiPart[] = [
+    { text: historyText || input.userText },
+    ...(input.fileParts ?? []),
+  ];
+
   const contents: GeminiContent[] = [
     ...input.history,
-    { role: "user", parts: [{ text: input.userText }] },
+    { role: "user", parts: liveParts },
   ];
-  // Everything produced this turn, for persisting as history.
+  // Text and filenames only — never the file bytes.
   const newContents: GeminiContent[] = [
-    { role: "user", parts: [{ text: input.userText }] },
+    { role: "user", parts: [{ text: historyText || input.userText }] },
   ];
 
   const drafts: AgentDraft[] = [];

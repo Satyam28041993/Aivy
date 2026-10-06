@@ -13,6 +13,14 @@ on:
         description: "Also deploy Cloud Functions (the agent, reminders, push)"
         type: boolean
         default: true
+  # Same idea as Build APK's `apk/**`. workflow_dispatch needs Actions:write,
+  # which the git-push token does not have, so a push to `deploy/**` is how
+  # hosting + functions ship from here. A push MUST deploy functions — an
+  # unset `inputs.deploy_functions` is the old trap (hosting updates, server
+  # does not, the run stays green).
+  push:
+    branches:
+      - "deploy/**"
 
 concurrency:
   group: deploy-web
@@ -70,7 +78,7 @@ jobs:
       # agent's pending-draft lookup is a composite query, so deploying the
       # functions without the index would leave it failing at runtime.
       - name: Deploy Firestore rules & indexes
-        if: ${{ inputs.deploy_functions }}
+        if: ${{ github.event_name == 'push' || inputs.deploy_functions }}
         run: |
           firebase deploy --only firestore:rules,firestore:indexes \
             --project aivy-5c031 --non-interactive
@@ -85,7 +93,7 @@ jobs:
       # reported and skipped. Once a name has been through a green deploy it
       # can be dropped from the list.
       - name: Delete retired functions
-        if: ${{ inputs.deploy_functions }}
+        if: ${{ github.event_name == 'push' || inputs.deploy_functions }}
         run: |
           for fn in aivyProcess markOrderDispatched aivyVoiceAsk elevenLabsTts \
                     googleSpeechSynthesize userSendWhatsapp testWhatsapp \
@@ -100,7 +108,7 @@ jobs:
           done
 
       - name: Build & deploy Functions
-        if: ${{ inputs.deploy_functions }}
+        if: ${{ github.event_name == 'push' || inputs.deploy_functions }}
         working-directory: functions
         run: |
           npm ci
@@ -114,7 +122,7 @@ jobs:
       # rejected before it ever reaches the function. Applying the binding
       # directly is idempotent and fixes it without recreating anything.
       - name: Ensure agent callables are publicly invokable
-        if: ${{ inputs.deploy_functions }}
+        if: ${{ github.event_name == 'push' || inputs.deploy_functions }}
         run: |
           for svc in aivyagent aivyagentcommit aivyagentchats aivyresetdata aivytestpush aivymorningbrief; do
             echo "--- $svc"

@@ -7,7 +7,9 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../../core/firebase/firebase_session.dart';
 import '../../../core/location/device_location.dart';
+import '../models/agent_attachment.dart';
 import '../models/agent_models.dart';
+import 'agent_file_uploader.dart';
 
 /// Client for the agent backend.
 ///
@@ -19,13 +21,16 @@ class AgentService {
     FirebaseFunctions? functions,
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
+    AgentFileUploader? uploader,
   })  : _functions = functions ?? FirebaseSession.functions,
         _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseSession.auth;
+        _auth = auth ?? FirebaseSession.auth,
+        _uploader = uploader ?? AgentFileUploader();
 
   final FirebaseFunctions _functions;
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final AgentFileUploader _uploader;
 
   String? _cachedTimezone;
 
@@ -74,19 +79,28 @@ class AgentService {
   // Calls
   // -------------------------------------------------------------------------
 
-  /// Sends one user message. [chatId] null starts a new conversation.
+  /// Uploads [files] then sends one turn. [chatId] null starts a new conversation.
+  ///
+  /// Text may be empty when a file is attached — a visiting card does not need
+  /// a caption. Bytes go to Storage; the callable only sees the path.
   Future<AgentTurnResponse> send({
     required String text,
     String? chatId,
+    List<AgentPendingFile> files = const [],
   }) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) {
+    if (!canSendAgentTurn(text: trimmed, attachmentCount: files.length)) {
       throw ArgumentError.value(text, 'text', 'must not be empty');
     }
     await _ensureAuth();
+    final uid = _auth.currentUser?.uid ?? '';
+    final attachments = <AgentFileRef>[];
+    for (final file in files.take(kAgentMaxAttachments)) {
+      attachments.add(await _uploader.upload(uid: uid, file: file));
+    }
     final callable = _functions.httpsCallable(
       'aivyAgent',
-      options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 180)),
     );
     // Both are best-effort and both are fetched together, so a slow GPS does
     // not add to a slow token refresh.
@@ -105,6 +119,8 @@ class AgentService {
       if (googleToken != null) 'googleAccessToken': googleToken,
       if (position != null) 'lat': position.latitude,
       if (position != null) 'lng': position.longitude,
+      if (attachments.isNotEmpty)
+        'attachments': attachments.map((a) => a.toPayload()).toList(growable: false),
     });
     return AgentTurnResponse.fromMap(Map<String, dynamic>.from(res.data));
   }

@@ -25,7 +25,9 @@ export type DraftKind =
   | "saved_place"
   | "visit"
   | "visit_followup"
-  | "travel_expense";
+  | "travel_expense"
+  | "saved_contact"
+  | "library_item";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -200,6 +202,31 @@ export interface TravelExpenseDraftData {
   timezone: string;
 }
 
+export interface SavedContactDraftData {
+  kind: "saved_contact";
+  name: string;
+  phone: string;
+  company: string;
+  email: string;
+  notes: string;
+  /** True when this number is already saved and the card updates it. */
+  replacing: boolean;
+  existingId: string | null;
+}
+
+export interface LibraryItemDraftData {
+  kind: "library_item";
+  title: string;
+  libraryKind: "brochure" | "rate_card" | "training" | "product" | "other";
+  sourceName: string;
+  mimeType: string;
+  storagePath: string;
+  excerpt: string;
+  facts: Array<{ label: string; value: string }>;
+  replacing: boolean;
+  existingId: string | null;
+}
+
 /** One thing to remember, filed under a key of its own. */
 export interface RememberedFact {
   /** Stable subject key — "wife", "anniversary", "city". */
@@ -282,7 +309,9 @@ export type DraftData =
   | SavedPlaceDraftData
   | VisitDraftData
   | VisitFollowupDraftData
-  | TravelExpenseDraftData;
+  | TravelExpenseDraftData
+  | SavedContactDraftData
+  | LibraryItemDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {

@@ -143,4 +143,12 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("site:geipl.com");
     expect(prompt).toContain("site:dinolabeldigital.com");
   });
+
+  it("tells the model how to file an attached visiting card or rate card", () => {
+    expect(prompt).toContain("save_contact");
+    expect(prompt).toContain("save_library_item");
+    expect(prompt).toContain("search_library");
+    expect(prompt).toContain("remember_fact");
+    expect(prompt).toMatch(/do not dump the whole page into/i);
+  });
 });

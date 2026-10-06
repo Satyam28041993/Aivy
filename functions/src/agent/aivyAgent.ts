@@ -31,6 +31,11 @@ import {
   titleFromText,
   touchChat,
 } from "./chatStore";
+import {
+  historyLineForAttachments,
+  loadInlineParts,
+  parseAttachmentRefs,
+} from "./fileParts";
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
@@ -47,7 +52,7 @@ const REGION = "us-central1";
  * unreachable from the browser, which surfaces as a CORS error because the
  * preflight is rejected before it reaches the function.
  */
-const AGENT_BUILD = "v6-location";
+const AGENT_BUILD = "v7-files";
 
 function requireUid(auth: { uid: string } | undefined): string {
   if (!auth?.uid) {
@@ -108,8 +113,8 @@ function coordsFrom(payload: Record<string, unknown>): { lat: number; lng: numbe
 export const aivyAgent = onCall(
   {
     region: REGION,
-    timeoutSeconds: 120,
-    memory: "512MiB",
+    timeoutSeconds: 180,
+    memory: "1GiB",
     secrets: [geminiApiKey],
     // A warm instance keeps the first message of a session off the cold-start
     // cliff, which is the single most noticeable delay on this screen.
@@ -119,10 +124,16 @@ export const aivyAgent = onCall(
     const uid = requireUid(request.auth);
     const payload = (request.data ?? {}) as Record<string, unknown>;
 
+    const attachments = parseAttachmentRefs(payload.attachments);
     const userText = str(payload.text);
-    if (!userText) {
-      throw new HttpsError("invalid-argument", "text is required");
+    if (!userText && attachments.length === 0) {
+      throw new HttpsError("invalid-argument", "text or attachments required");
     }
+    const promptText = userText || "Please look at this.";
+    const displayText = historyLineForAttachments(
+      userText,
+      attachments.map((a) => a.name),
+    );
 
     // Google token for this turn only. It is deliberately never written to
     // Firestore or logged — it lives in memory for the length of the call and
@@ -164,7 +175,15 @@ export const aivyAgent = onCall(
       hasLiveLocation: coords != null,
     });
 
-    await appendMessage(uid, chatId, { role: "user", text: userText });
+    await appendMessage(uid, chatId, { role: "user", text: displayText || promptText });
+
+    const loaded = attachments.length
+      ? await loadInlineParts(uid, attachments)
+      : { parts: [], skipped: [] as string[] };
+    const skippedNote =
+      loaded.skipped.length > 0
+        ? `\n(Could not read: ${loaded.skipped.join(", ")}.)`
+        : "";
 
     let turn;
     try {
@@ -180,7 +199,9 @@ export const aivyAgent = onCall(
         },
         systemPrompt,
         history,
-        userText,
+        userText: `${promptText}${skippedNote}`,
+        fileParts: loaded.parts,
+        attachmentNames: attachments.map((a) => a.name),
         geminiKey: key,
       });
     } catch (e) {
@@ -221,7 +242,7 @@ export const aivyAgent = onCall(
 
     await touchChat(uid, chatId, {
       lastMessage: turn.reply,
-      ...(chat.lastMessage ? {} : { title: titleFromText(userText) }),
+      ...(chat.lastMessage ? {} : { title: titleFromText(userText || attachments[0]?.name || "📎 file") }),
     });
 
     logger.info("aivyAgent turn", {
@@ -231,6 +252,7 @@ export const aivyAgent = onCall(
       hops: turn.hops,
       google: googleToken != null,
       located: coords != null,
+      files: attachments.length,
       tools: turn.trace.map((t) => `${t.name}:${t.ok ? "ok" : t.reason}`),
       drafts: turn.drafts.length,
     });

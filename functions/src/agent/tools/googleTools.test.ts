@@ -11,6 +11,11 @@ const peopleSearchMock = vi.fn();
 const calendarListMock = vi.fn();
 const gmailListMock = vi.fn();
 const prefsMock = vi.fn();
+const searchCrmMock = vi.fn();
+
+vi.mock("../contactStore", () => ({
+  searchCrmContacts: (...a: unknown[]) => searchCrmMock(...a),
+}));
 
 vi.mock("../draftStore", () => ({
   createDraft: (input: Record<string, unknown>) => {
@@ -79,6 +84,7 @@ beforeEach(() => {
   calendarListMock.mockReset();
   gmailListMock.mockReset();
   prefsMock.mockReset().mockReturnValue({});
+  searchCrmMock.mockReset().mockResolvedValue([]);
 });
 
 describe("without a Google token", () => {
@@ -89,7 +95,6 @@ describe("without a Google token", () => {
       appendSheetRowTool(NO_GOOGLE, { cells: ["a"] }),
       listCalendarEventsTool(NO_GOOGLE, {}),
       listRecentEmailsTool(NO_GOOGLE, {}),
-      findContactTool(NO_GOOGLE, { query: "rohan" }),
     ]);
     for (const r of results) {
       expect(r.ok).toBe(false);
@@ -215,5 +220,16 @@ describe("reads", () => {
     peopleSearchMock.mockResolvedValue([]);
     const res = await findContactTool(CTX, { query: "zzz" });
     expect(res.ok === false && res.reason).toBe("nothing_found");
+  });
+
+  it("returns a saved contact without needing Google", async () => {
+    searchCrmMock.mockResolvedValue([
+      { name: "Rohan Traders", email: "", phone: "919876543210", company: "Rohan" },
+    ]);
+    const res = await findContactTool(NO_GOOGLE, { query: "rohan" });
+    expect(res.ok).toBe(true);
+    const data = res.ok && res.kind === "data" ? (res.data as { contacts: Array<{ name: string }> }) : { contacts: [] };
+    expect(data.contacts[0]!.name).toBe("Rohan Traders");
+    expect(peopleSearchMock).not.toHaveBeenCalled();
   });
 });

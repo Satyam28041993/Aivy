@@ -24,6 +24,7 @@ import {
   peopleSearch,
 } from "../google/workspace";
 import type { DraftCardLine } from "../draftTypes";
+import { searchCrmContacts } from "../contactStore";
 import { dataResult, draftResult, fail, type ToolContext, type ToolResult } from "../toolTypes";
 
 const NO_TOKEN =
@@ -370,29 +371,61 @@ export async function findContactTool(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const token = tokenOf(ctx);
-  if (!token) {
-    return fail("failed", NO_TOKEN);
-  }
   const q = str(args.query);
   if (!q) {
     return fail("needs_detail", "Whose contact should I look up?");
   }
-  let rows;
-  try {
-    rows = await peopleSearch(token, q);
-  } catch (e) {
-    return googleFailure(e);
+
+  const crm = await searchCrmContacts(ctx.uid, q, 8);
+  const contacts: Array<{ name: string; email: string; phone: string; source: string }> = crm.map(
+    (r) => ({
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      source: "saved",
+    }),
+  );
+
+  const token = tokenOf(ctx);
+  if (token) {
+    try {
+      const rows = await peopleSearch(token, q);
+      const seen = new Set(
+        contacts.map((c) => c.phone || c.email.toLowerCase()).filter(Boolean),
+      );
+      for (const r of rows) {
+        const phone = r.phones[0] ?? "";
+        const email = r.emails[0] ?? "";
+        const key = phone || email.toLowerCase();
+        if (key && seen.has(key)) {
+          continue;
+        }
+        if (key) {
+          seen.add(key);
+        }
+        contacts.push({
+          name: r.name,
+          email,
+          phone,
+          source: "google",
+        });
+        if (contacts.length >= 8) {
+          break;
+        }
+      }
+    } catch (e) {
+      // CRM already answered; a Google failure must not hide that.
+      if (contacts.length === 0) {
+        return googleFailure(e);
+      }
+    }
   }
-  if (rows.length === 0) {
+
+  if (contacts.length === 0) {
     return fail("nothing_found", `No contact found for "${q}".`);
   }
   return dataResult({
-    count: rows.length,
-    contacts: rows.slice(0, 8).map((r) => ({
-      name: r.name,
-      email: r.emails[0] ?? "",
-      phone: r.phones[0] ?? "",
-    })),
+    count: contacts.length,
+    contacts: contacts.slice(0, 8),
   });
 }

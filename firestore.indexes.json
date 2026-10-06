@@ -201,6 +201,20 @@
       ]
     },
     {
+      "collectionGroup": "library",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "titleKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "agent_drafts",
       "queryScope": "COLLECTION",
       "fields": [

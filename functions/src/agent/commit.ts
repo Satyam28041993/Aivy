@@ -29,6 +29,8 @@ import { savePlace } from "./placesStore";
 import { saveVisit, setVisitFollowUp, syncVisitsToSheet } from "./visitStore";
 import { dayKey, expensePromptId, getExpense, saveExpense, syncExpensesToSheet } from "./expenseStore";
 import { cancelReminders } from "./reminderCancel";
+import { saveContact } from "./contactStore";
+import { saveLibraryItem } from "./libraryStore";
 import { normalizeName } from "./nameNormalize";
 import {
   effectiveRemainingAmount,
@@ -56,6 +58,8 @@ import type {
   ProjectItemsDraftData,
   TaskDraftData,
   SavedPlaceDraftData,
+  SavedContactDraftData,
+  LibraryItemDraftData,
   SheetRowDraftData,
   VisitDraftData,
   VisitFollowupDraftData,
@@ -935,6 +939,54 @@ async function commitTravelExpense(
   };
 }
 
+async function commitSavedContact(
+  uid: string,
+  d: SavedContactDraftData,
+): Promise<CommitResult> {
+  const contact = await saveContact(uid, {
+    name: d.name,
+    phone: d.phone || null,
+    company: d.company || null,
+    email: d.email || null,
+    notes: d.notes || null,
+    source: "visiting_card",
+    existingId: d.existingId,
+  });
+  const who = [contact.name, contact.company].filter(Boolean).join(" · ");
+  return {
+    ok: true,
+    message: d.replacing ? `Updated ${who}.` : `Saved ${who}.`,
+    createdIds: [contact.id],
+    summary: `saved contact ${contact.name}`,
+  };
+}
+
+async function commitLibraryItem(
+  uid: string,
+  d: LibraryItemDraftData,
+): Promise<CommitResult> {
+  const item = await saveLibraryItem(uid, {
+    title: d.title,
+    kind: d.libraryKind,
+    sourceName: d.sourceName || null,
+    mimeType: d.mimeType || null,
+    storagePath: d.storagePath || null,
+    excerpt: d.excerpt || null,
+    facts: d.facts,
+    existingId: d.existingId,
+  });
+  const n = item.facts.length;
+  const factsNote = n === 0 ? "" : n === 1 ? ", 1 fact" : `, ${n} facts`;
+  return {
+    ok: true,
+    message: d.replacing
+      ? `Updated "${item.title}" in the library${factsNote}.`
+      : `Filed "${item.title}" in the library${factsNote}.`,
+    createdIds: [item.id],
+    summary: `library ${item.kind} ${item.title}`,
+  };
+}
+
 /** Replays one confirmed draft. Idempotent: a committed draft is not redone. */
 export async function commitDraft(
   uid: string,
@@ -991,6 +1043,12 @@ export async function commitDraft(
       break;
     case "saved_place":
       result = await commitSavedPlace(uid, draft.data);
+      break;
+    case "saved_contact":
+      result = await commitSavedContact(uid, draft.data);
+      break;
+    case "library_item":
+      result = await commitLibraryItem(uid, draft.data);
       break;
     case "project_items":
       result = await commitProjectItems(uid, draft.data);
