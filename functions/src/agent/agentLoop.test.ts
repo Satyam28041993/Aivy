@@ -348,6 +348,18 @@ describe("after the live smoke test", () => {
     expect(s.calls()).toBe(3);
   });
 
+  it("after three empties, asks once more with tools off, cold", async () => {
+    const empty: GeminiResponse = { candidates: [{ content: { parts: [] }, finishReason: "MALFORMED_FUNCTION_CALL" }] };
+    const s = scripted(empty, empty, empty, say("Are you at Bajaj right now?"));
+    const r = await runAgentTurn({ ...base, userText: "haan main abhi Bajaj pe hu", transport: s.transport });
+    expect(r.reply).toBe("Are you at Bajaj right now?");
+    const reqs = s.seen as Array<{ generationConfig: { temperature: number }; toolConfig?: unknown }>;
+    expect(reqs[0]!.generationConfig.temperature).toBe(0.7);
+    expect(reqs[1]!.generationConfig.temperature).toBe(0);
+    expect(reqs[3]!.toolConfig).toEqual({ functionCallingConfig: { mode: "NONE" } });
+    expect(reqs[2]!.toolConfig).toBeUndefined();
+  });
+
   it("nudges an empty first answer too, before any tool ran", async () => {
     const empty: GeminiResponse = { candidates: [{ content: { parts: [] }, finishReason: "MALFORMED_FUNCTION_CALL" }] };
     const s = scripted(empty, say("Which client did you visit?"));

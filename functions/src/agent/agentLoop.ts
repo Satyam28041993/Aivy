@@ -42,6 +42,7 @@ export interface GeminiRequest {
   contents: GeminiContent[];
   tools: Array<{ functionDeclarations: typeof TOOL_DECLARATIONS }>;
   generationConfig: Record<string, unknown>;
+  toolConfig?: { functionCallingConfig: { mode: "AUTO" | "NONE" } };
 }
 
 export interface GeminiResponse {
@@ -242,14 +243,20 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let usage: TurnUsage = { ...EMPTY_USAGE };
   let emptyRetries = 0;
 
-  while (hops < maxHops) {
+  // Empty-answer retries do not spend the tool budget.
+  while (hops < maxHops + emptyRetries) {
     // Snapshot: `contents` keeps growing as the loop runs, and a transport that
     // logs or retries asynchronously must not see it change underneath it.
     const res = await transport({
       systemInstruction: { parts: [{ text: input.systemPrompt }] },
       contents: contents.map((c) => ({ role: c.role, parts: [...c.parts] })),
       tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+      // After an empty answer, retry cold: a malformed call is usually the
+      // model improvising, and temperature 0 is what stops it.
+      generationConfig: { temperature: emptyRetries > 0 ? 0 : 0.7, maxOutputTokens: 2048 },
+      // Last resort: no tools at all, so it cannot produce a broken call and
+      // must answer in words — at worst, ask again.
+      ...(emptyRetries >= 3 ? { toolConfig: { functionCallingConfig: { mode: "NONE" as const } } } : {}),
     });
     hops++;
     usage = addUsage(usage, res.usageMetadata);
@@ -264,7 +271,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       // One nudge gets a real answer instead of "I did not catch that".
       // First a plain retry (a malformed call is usually a one-off), then a
       // nudge. Live runs saw two empties in a row, so one chance was not enough.
-      if (!text && emptyRetries < 2 && hops < maxHops) {
+      if (!text && emptyRetries < 3) {
         emptyRetries++;
         logger.warn("agent: empty model answer, retrying", {
           finishReason: res.candidates?.[0]?.finishReason ?? "none",
@@ -275,6 +282,18 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
           contents.push({
             role: "user",
             parts: [{ text: "(Reply to me now — ask what the tool said is missing, or do what I asked.)" }],
+          });
+        }
+        if (emptyRetries === 3) {
+          contents.push({
+            role: "user",
+            parts: [
+              {
+                text:
+                  "(Tools are paused for this one reply. Answer in words: ask me the one thing you still need. " +
+                  "Do not say anything was saved.)",
+              },
+            ],
           });
         }
         continue;

@@ -381,6 +381,11 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   the empty-answer handling now covers every empty answer and logs the
   finish reason. A later run saw two empties in a row, so it is a plain
   retry first, then a nudge (two chances) before "I did not catch that".
+  It kept happening on one turn — "haan main abhi Bajaj Auto pe hi hu"
+  after Aivy asked two things at once — three runs in a row. Retries now go
+  at temperature 0, and the third goes with tools off (`toolConfig` NONE)
+  so a malformed call is impossible and she has to ask in words. Retries
+  do not spend the hop budget.
   The fourth had "I have updated…" and the card's lines pasted into the
   chat; every draft result now carries a `reply_rule`. The fifth run was
   35/35 with a clean transcript, and the APK was built from that head.
