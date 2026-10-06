@@ -144,6 +144,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("site:dinolabeldigital.com");
   });
 
+  it("knows it has a voice, and keeps a spoken reply short", () => {
+    expect(prompt).toContain("You have a voice.");
+    expect(prompt).not.toContain("will be read aloud.**");
+    const spoken = buildSystemPrompt({ ...CTX, spoken: true });
+    expect(spoken).toContain("**This message was spoken, and your reply will be read aloud.**");
+    expect(spoken).toMatch(/one\s+or two short sentences/);
+  });
+
   it("can delete, and overrides an earlier 'I cannot delete' in the same chat", () => {
     // The user hit this live: a chat that had said "I cannot delete" before
     // the tool existed kept refusing after it was deployed.

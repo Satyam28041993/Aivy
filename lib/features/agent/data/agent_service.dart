@@ -87,6 +87,7 @@ class AgentService {
     required String text,
     String? chatId,
     List<AgentPendingFile> files = const [],
+    bool spoken = false,
   }) async {
     final trimmed = text.trim();
     if (!canSendAgentTurn(text: trimmed, attachmentCount: files.length)) {
@@ -121,6 +122,8 @@ class AgentService {
       if (position != null) 'lng': position.longitude,
       if (attachments.isNotEmpty)
         'attachments': attachments.map((a) => a.toPayload()).toList(growable: false),
+      // The reply will be read aloud, so Aivy keeps it short.
+      if (spoken) 'spoken': true,
     });
     return AgentTurnResponse.fromMap(Map<String, dynamic>.from(res.data));
   }

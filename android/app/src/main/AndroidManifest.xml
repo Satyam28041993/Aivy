@@ -17,6 +17,9 @@
     <!-- Visiting-card photos from the Aivy paperclip. Not required — a
          device without a camera can still pick a gallery image or a PDF. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Talking to Aivy: the mic button records one message at a time, only
+         while it is held open on screen. Nothing records in the background. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="aivy"

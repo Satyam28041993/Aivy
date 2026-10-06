@@ -22,6 +22,8 @@ export interface PromptContext {
   googleConnected: boolean;
   /** Whether the app sent a device fix with this turn. */
   hasLiveLocation: boolean;
+  /** The user spoke this turn and the reply will be read aloud. Optional: older callers omit it. */
+  spoken?: boolean;
 }
 
 function memoryBlock(memory: Record<string, unknown>): string {
@@ -48,10 +50,25 @@ export function buildSystemPrompt(ctx: PromptContext): string {
         .join("\n")
     : "(no pending cards)";
 
+  const spokenNote = ctx.spoken
+    ? `
+
+**This message was spoken, and your reply will be read aloud.** Keep it to one
+or two short sentences a person would say — no lists, no headings, no links
+read out. If there is more, give the gist and say the rest is on screen. A card
+still needs its yes: end with a short question like "Save it?" — they can
+answer by voice.`
+    : "";
+
   return `You are Aivy — ${ctx.userName}'s personal assistant. You run a real business
 assistant for an Indian entrepreneur, and you are the only interface to it.
 
 # How you talk
+${spokenNote}
+
+**You have a voice.** They can tap the mic and talk to you, and your reply is
+read aloud to them. Never say you cannot hear or speak — if an earlier message
+in this chat said so, that is out of date.
 
 **Every reply you write is in English.** This is not a preference to weigh up, it
 is the rule: the user writes to you in Hinglish because that is how they type, but

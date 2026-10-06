@@ -52,6 +52,12 @@ export const EMPTY_USAGE: TurnUsage = {
  */
 export const PRICES: Record<string, { input: number; output: number; cachedInput: number }> = {
   "gemini-2.5-flash": { input: 0.3, output: 2.5, cachedInput: 0.03 },
+  // The same model hearing audio: audio input is billed at $1.00.
+  "gemini-2.5-flash-audio": { input: 1.0, output: 2.5, cachedInput: 0.1 },
+  // Gemini TTS, the fallback voice: text in, audio tokens out at $10.
+  "gemini-2.5-flash-preview-tts": { input: 0.5, output: 10, cachedInput: 0.05 },
+  // Cloud TTS is per character, passed as extraUsd; no tokens.
+  "cloud-tts-neural2": { input: 0, output: 0, cachedInput: 0 },
 };
 
 /** Rupees per dollar for the ₹ figure. Rough on purpose — it is an estimate. */
@@ -90,17 +96,19 @@ function clip(s: string, max: number): string {
 export async function logAiUsage(
   uid: string,
   row: {
-    source: "chat" | "brief";
+    source: "chat" | "brief" | "voice";
     model: string;
     input: string;
     output: string;
     tools?: string[];
     usage: TurnUsage;
     chatId?: string | null;
+    /** Cost not counted in tokens — Cloud TTS bills per character. */
+    extraUsd?: number;
   },
 ): Promise<void> {
   try {
-    const usd = costUsd(row.model, row.usage);
+    const usd = Math.round((costUsd(row.model, row.usage) + (row.extraUsd ?? 0)) * 1_000_000) / 1_000_000;
     const data: Record<string, unknown> = {
       atMs: Date.now(),
       source: row.source,

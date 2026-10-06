@@ -60,6 +60,8 @@ dependencies:
   file_picker: ^11.0.2
   file_saver: ^0.3.1
   image_picker: ^1.1.2
+  # Mic for talking to Aivy — PCM streamed, no temp files (lib/features/agent/voice).
+  record: ^6.2.0
   # Not pinned to 0.4.3 any more: that version wants firebase_core_platform_
   # interface ^6, which nothing current can be resolved alongside.
   firebase_app_check: ^0.4.7

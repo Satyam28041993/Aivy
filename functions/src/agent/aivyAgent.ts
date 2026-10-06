@@ -175,6 +175,7 @@ export const aivyAgent = onCall(
       })),
       googleConnected: googleToken != null,
       hasLiveLocation: coords != null,
+      spoken: payload.spoken === true,
     });
 
     await appendMessage(uid, chatId, { role: "user", text: displayText || promptText });

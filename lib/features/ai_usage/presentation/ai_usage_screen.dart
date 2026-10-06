@@ -261,7 +261,14 @@ class _UsageCardState extends State<_UsageCard> {
             children: [
               Text(DateFormat('d MMM, h:mm a').format(r.at), style: AivyUi.soft(context)),
               const SizedBox(width: 8),
-              AivyPill(r.source == 'brief' ? 'Brief' : 'Chat', color: AivyUi.brand),
+              AivyPill(
+                r.source == 'brief'
+                    ? 'Brief'
+                    : r.source == 'voice'
+                        ? 'Voice'
+                        : 'Chat',
+                color: r.source == 'voice' ? AivyUi.info : AivyUi.brand,
+              ),
               const Spacer(),
               Text(
                 '₹${r.costInr.toStringAsFixed(3)}',

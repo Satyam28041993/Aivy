@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the live E2E runs, delete-all and clients, and APK build36._
+_Last updated: after Aivy got her voice back (mic, transcribe, speak)._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -152,8 +152,10 @@ its eighty members had a caller. Each deletion was decided by counting callers
 and following the call graph, not by reading names — `paymentSettlement`,
 `webSearch` and `readNudgeState` all looked equally orphaned and are all live.
 
-**Nothing voice-related is left in the app.** `audio_service.dart` plays the
-reminder sound and is not speech. `firebase_storage` and `storage.rules` are
+**Voice is back — as a way into the same chat, not a second assistant.** The
+old voice home was retired (e6e5c80) for being a fork in the road with its own
+command system. Now the mic sits in the Aivy composer; what is heard is sent as
+an ordinary turn. `audio_service.dart` still only plays the reminder sound. `firebase_storage` and `storage.rules` are
 now used by the Aivy paperclip — a photo or PDF uploads to
 `users/{uid}/agent_files/` before the turn.
 
@@ -382,6 +384,25 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   The fourth had "I have updated…" and the card's lines pasted into the
   chat; every draft result now carries a `reply_rule`. The fifth run was
   35/35 with a clean transcript, and the APK was built from that head.
+- **Voice** (`functions/src/voice/aivyVoice.ts`, `lib/features/agent/voice/`).
+  Empty composer shows a mic. Tap, speak, pause: `VoiceRecorder` streams
+  16 kHz PCM (`record`), stops itself after 1.6 s of quiet (7 s with no speech
+  cancels; 55 s cap), and sends a WAV to **`aivyTranscribe`** — Gemini 2.5
+  Flash, told to write Roman Hinglish, never Devanagari, because a Hindi
+  recogniser writes "Bajaj Auto" as "बजाज ऑटो" and that would land in the DSR
+  sheet. The words go out as a normal turn with `spoken: true`, which makes
+  the prompt ask for one or two sayable sentences; the reply goes to
+  **`aivySpeak`** — Cloud TTS Neural2 `en-IN-Neural2-A` under the functions'
+  service account (as the retired `googleSpeechCloud` did), falling back to
+  Gemini TTS (voice Kore, PCM wrapped as WAV) if Cloud TTS fails, so a missing
+  API role costs the voice, not the reply. `speakableText` strips `**`,
+  emoji, bullets and links, and says ₹ as rupees. A short spoken "haan" /
+  "nahi" (`readVoiceAnswer` — "haan, 10 din baad…" is *not* short) answers
+  the one waiting card directly; a delete card needs "haan" twice. Tap the
+  mic while she talks to stop her. Voice calls are logged in AI usage as
+  `source: voice` (Cloud TTS priced per character via `extraUsd`). Both
+  callables are in the deploy invoker list. The prompt says she has a voice,
+  so an older "I cannot speak" in a chat does not stick.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

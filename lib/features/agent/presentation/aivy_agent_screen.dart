@@ -15,6 +15,9 @@ import '../../../core/theme/aivy_theme.dart';
 import '../data/agent_service.dart';
 import '../models/agent_attachment.dart';
 import '../models/agent_models.dart';
+import '../voice/voice_intent.dart';
+import '../voice/voice_recorder.dart';
+import '../voice/voice_service.dart';
 import 'widgets/agent_history_drawer.dart';
 import 'widgets/agent_message_bubble.dart';
 
@@ -71,6 +74,16 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
 
   final List<AgentPendingFile> _pendingFiles = [];
   final ImagePicker _images = ImagePicker();
+
+  // Voice: the mic is another way to type, and the reply is read aloud only
+  // when the question was spoken.
+  final VoiceRecorder _recorder = VoiceRecorder();
+  final VoiceService _voice = VoiceService();
+  bool _listening = false;
+  bool _hearing = false;
+
+  /// A delete card that got one spoken "haan" and waits for the second.
+  String? _armedDeleteId;
 
   /// Whether Gmail/Calendar/Sheets are reachable from this device. Null until
   /// checked; always false on web, where the Google REST stack does not run.
@@ -174,6 +187,8 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     _input.dispose();
     _inputFocus.dispose();
     _scroll.dispose();
+    unawaited(_recorder.dispose());
+    unawaited(_voice.dispose());
     super.dispose();
   }
 
@@ -258,7 +273,7 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     );
   }
 
-  Future<void> _send() async {
+  Future<void> _send({bool spoken = false}) async {
     final text = _input.text.trim();
     final files = List<AgentPendingFile>.from(_pendingFiles);
     if (!canSendAgentTurn(text: text, attachmentCount: files.length) || _sending) {
@@ -274,9 +289,12 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     _scrollToEnd();
 
     try {
-      final res = await _service.send(text: text, chatId: _chatId, files: files);
+      final res = await _service.send(text: text, chatId: _chatId, files: files, spoken: spoken);
       if (!mounted) {
         return;
+      }
+      if (spoken && res.reply.isNotEmpty) {
+        unawaited(_voice.speak(res.reply));
       }
       if (res.chatId.isNotEmpty && res.chatId != _chatId) {
         _bindChat(res.chatId);
@@ -477,15 +495,20 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
     return 'Could not send — try again.';
   }
 
-  Future<void> _confirmDraft(AgentDraft draft) async {
+  void _confirmDraft(AgentDraft draft) {
+    unawaited(_commitDraft(draft));
+  }
+
+  /// Confirms a card; returns the server's answer so a spoken confirm can say it.
+  Future<AgentCommitResult?> _commitDraft(AgentDraft draft) async {
     if (_busyDraftId != null) {
-      return;
+      return null;
     }
     setState(() => _busyDraftId = draft.id);
     try {
       final res = await _service.commit(draftId: draft.id, chatId: _chatId);
       if (!mounted) {
-        return;
+        return res;
       }
       setState(() {
         _draftStatus[draft.id] = res.ok ? 'committed' : 'pending';
@@ -493,15 +516,118 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
       if (!res.ok && res.message.isNotEmpty) {
         _snack(res.message);
       }
+      return res;
     } catch (_) {
       if (mounted) {
         _snack('Could not save — try again.');
       }
+      return null;
     } finally {
       if (mounted) {
         setState(() => _busyDraftId = null);
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Voice
+  // -------------------------------------------------------------------------
+
+  /// The one card still waiting in the latest reply, if there is exactly one.
+  AgentDraft? _waitingCard() {
+    for (var i = _messages.length - 1; i >= 0 && i >= _messages.length - 3; i--) {
+      final m = _messages[i];
+      if (m.role != AgentRole.assistant || m.drafts.isEmpty) {
+        continue;
+      }
+      final waiting = m.drafts
+          .where((d) => (_draftStatus[d.id] ?? d.status) == 'pending')
+          .toList(growable: false);
+      return waiting.length == 1 ? waiting.first : null;
+    }
+    return null;
+  }
+
+  Future<void> _onMic() async {
+    if (_voice.speaking.value) {
+      await _voice.stop();
+      return;
+    }
+    if (_listening) {
+      await _recorder.stop();
+      return;
+    }
+    if (_sending || _hearing) {
+      return;
+    }
+    unawaited(_voice.stop());
+    HapticFeedback.mediumImpact();
+    Uint8List? wav;
+    setState(() => _listening = true);
+    try {
+      wav = await _recorder.record();
+    } catch (e) {
+      debugPrint('[Voice] record failed: $e');
+      if (mounted) {
+        _snack('Mic is not available — allow microphone access in settings.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _listening = false);
+      }
+    }
+    if (wav == null || !mounted) {
+      return;
+    }
+    setState(() => _hearing = true);
+    String said = '';
+    try {
+      said = await _voice.transcribe(wav);
+    } catch (e) {
+      debugPrint('[Voice] transcribe failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _hearing = false);
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    if (said.isEmpty) {
+      _snack("Didn't catch that — tap the mic and say it again.");
+      return;
+    }
+    await _onSpoken(said);
+  }
+
+  /// A short "haan"/"nahi" answers the waiting card; anything else is a turn.
+  Future<void> _onSpoken(String said) async {
+    final card = _waitingCard();
+    final answer = readVoiceAnswer(said);
+    if (card != null && answer == VoiceAnswer.yes) {
+      // Deleting asks twice: one stray "haan" must not lose a record.
+      if (card.kind == 'delete_record' && _armedDeleteId != card.id) {
+        setState(() => _armedDeleteId = card.id);
+        _snack('Say "haan" once more to delete.');
+        unawaited(_voice.speak('Delete it for sure? Say yes once more.'));
+        return;
+      }
+      _armedDeleteId = null;
+      final res = await _commitDraft(card);
+      if (res != null && res.message.isNotEmpty) {
+        unawaited(_voice.speak(res.message));
+      }
+      return;
+    }
+    if (card != null && answer == VoiceAnswer.no) {
+      _armedDeleteId = null;
+      _cancelDraft(card);
+      unawaited(_voice.speak('Okay, cancelled.'));
+      return;
+    }
+    _armedDeleteId = null;
+    _input.text = said;
+    await _send(spoken: true);
   }
 
   /// "Badlo" hands the correction back to speech rather than a field picker —
@@ -950,18 +1076,26 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
                       fontSize: 15,
                       height: 1.4,
                     ),
-                    decoration: const InputDecoration(
-                      hintText: 'Type anything, or attach a file…',
-                      hintStyle: TextStyle(color: Color(0xFF475569), fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: _listening
+                          ? 'Listening… speak, then pause'
+                          : _hearing
+                              ? 'Getting your words…'
+                              : 'Type, speak, or attach a file…',
+                      hintStyle: TextStyle(
+                        color: _listening ? const Color(0xFFF87171) : const Color(0xFF475569),
+                        fontSize: 15,
+                      ),
                       border: InputBorder.none,
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 13),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 13),
                     ),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: _sendButton(),
+                  // Empty composer → the mic; anything typed or attached → send.
+                  child: _canSend ? _sendButton() : _micButton(),
                 ),
               ],
             ),
@@ -1000,6 +1134,66 @@ class _AivyAgentScreenState extends State<AivyAgentScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _micButton() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _voice.speaking,
+      builder: (context, speaking, _) {
+        return ValueListenableBuilder<double>(
+          valueListenable: _recorder.level,
+          builder: (context, level, _) {
+            final busy = _hearing || (_sending && !_listening);
+            final Color bg = _listening
+                ? const Color(0xFFEF4444)
+                : speaking
+                    ? AivyUi.brand
+                    : const Color(0xFF1E293B);
+            final IconData icon = _listening
+                ? Icons.stop_rounded
+                : speaking
+                    ? Icons.volume_off_rounded
+                    : Icons.mic_rounded;
+            return Tooltip(
+              message: _listening
+                  ? 'Stop'
+                  : speaking
+                      ? 'Stop speaking'
+                      : 'Speak to Aivy',
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 90),
+                padding: EdgeInsets.all(_listening ? 1 + level * 5 : 0),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _listening ? const Color(0xFFEF4444).withValues(alpha: 0.25) : Colors.transparent,
+                ),
+                child: Material(
+                  color: bg,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: busy ? null : () => unawaited(_onMic()),
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: busy
+                          ? const Padding(
+                              padding: EdgeInsets.all(11),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(Color(0xFF94A3B8)),
+                              ),
+                            )
+                          : Icon(icon, size: 21, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

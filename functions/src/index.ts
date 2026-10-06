@@ -33,6 +33,7 @@ export {
 } from "./clientStatsTriggers";
 export { syncClientStats } from "./syncClientStats";
 export { aivyAgent, aivyAgentChats, aivyAgentCommit } from "./agent/aivyAgent";
+export { aivySpeak, aivyTranscribe } from "./voice/aivyVoice";
 export { aivyResetData } from "./agent/resetData";
 export { aivyTestPush } from "./push";
 export { checkOccasions } from "./occasionReminders";
