@@ -209,6 +209,8 @@ export interface SavedContactDraftData {
   company: string;
   email: string;
   notes: string;
+  /** Storage paths of the card photos sent with it. Optional for older drafts. */
+  cardImages?: string[];
   /** True when this number is already saved and the card updates it. */
   replacing: boolean;
   existingId: string | null;

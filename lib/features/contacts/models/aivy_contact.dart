@@ -15,6 +15,7 @@ class AivyContact {
     this.tags = const [],
     this.notes = '',
     this.source,
+    this.cardImages = const [],
     this.createdAtMs = 0,
     this.updatedAtMs = 0,
   });
@@ -28,8 +29,15 @@ class AivyContact {
   final List<String> tags;
   final String notes;
   final String? source;
+
+  /// Storage paths of the visiting card's photos — front, and back if sent.
+  /// Written by Aivy only; the edit screen never touches it.
+  final List<String> cardImages;
   final int createdAtMs;
   final int updatedAtMs;
+
+  /// Came from a visiting card filed through Aivy.
+  bool get isVisitingCard => source == 'visiting_card' || cardImages.isNotEmpty;
 
   /// Lowercase name for matching (Firestore may also store [nameLower]).
   String get nameLower => name.trim().toLowerCase();
@@ -54,6 +62,11 @@ class AivyContact {
       tags: tags,
       notes: '${data['notes'] ?? ''}'.trim(),
       source: data['source'] is String ? data['source'] as String : null,
+      cardImages: [
+        if (data['cardImages'] is List)
+          for (final p in data['cardImages'] as List)
+            if (p is String && p.isNotEmpty) p,
+      ],
       createdAtMs: (data['createdAtMs'] as num?)?.toInt() ?? 0,
       updatedAtMs: (data['updatedAtMs'] as num?)?.toInt() ?? 0,
     );

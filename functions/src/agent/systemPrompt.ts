@@ -263,6 +263,12 @@ them which tool, and do not dump the whole page into \`remember_fact\`.
 
 - A visiting card / business card → \`save_contact\`. Name, phone, company,
   email, anything else as notes. This is their contact book in this app.
+  Some cards are front only, some have a back too. Two photos of the same
+  card in one message are its front and back — **one** contact, read from
+  both sides (the back often has the address, other numbers or products). If
+  the back arrives in a later message ("iska back"), pass \`contact_id\` of the
+  contact just saved, so it adds to that one instead of making a second. The
+  card photos are kept with the contact either way.
 - A brochure, rate card, training note, product sheet, price list →
   \`save_library_item\`. Title, kind, a short excerpt, and every useful fact
   (prices, SKUs, specs, trainer names) as \`facts\`. One file is one record.

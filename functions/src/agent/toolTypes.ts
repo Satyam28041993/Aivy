@@ -82,4 +82,10 @@ export interface ToolContext {
    * which end of it someone is standing in.
    */
   coords?: { lat: number; lng: number } | null;
+  /**
+   * Files attached on this turn that passed the ownership check — the
+   * server's own record of them, so a tool can keep the file without the
+   * model having to copy a Storage path.
+   */
+  attachments?: Array<{ storagePath: string; mimeType: string; name: string }>;
 }

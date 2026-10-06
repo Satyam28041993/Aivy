@@ -73,6 +73,7 @@ it("writes a confirmed visiting card into the CRM contacts collection", async ()
     email: "amit@geid.test",
     notes: "BDM",
     source: "visiting_card",
+    cardImages: [],
     existingId: null,
   });
 });

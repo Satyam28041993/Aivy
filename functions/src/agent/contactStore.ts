@@ -24,6 +24,8 @@ export interface CrmContact {
   tags: string[];
   notes: string;
   source: string;
+  /** Storage paths of the card's photos — the front, and the back when there is one. */
+  cardImages: string[];
   createdAtMs: number;
   updatedAtMs: number;
 }
@@ -35,9 +37,14 @@ export interface SaveContactInput {
   email?: string | null;
   notes?: string | null;
   source?: string;
+  /** Photos of the card on this save; added to any it already has. */
+  cardImages?: string[];
   /** When set, update this row rather than creating one. */
   existingId?: string | null;
 }
+
+/** The most card photos kept — front and back, plus a retake of each. */
+export const MAX_CARD_IMAGES = 4;
 
 function contactsRef() {
   return getFirestore().collection("contacts");
@@ -100,6 +107,9 @@ function contactFrom(id: string, data: FirebaseFirestore.DocumentData): CrmConta
     tags,
     notes: `${data.notes ?? ""}`.trim(),
     source: `${data.source ?? "manual"}`.trim() || "manual",
+    cardImages: Array.isArray(data.cardImages)
+      ? (data.cardImages as unknown[]).filter((p): p is string => typeof p === "string" && p.length > 0)
+      : [],
     createdAtMs: Number(data.createdAtMs ?? 0) || 0,
     updatedAtMs: Number(data.updatedAtMs ?? 0) || 0,
   };
@@ -126,24 +136,55 @@ export async function findContactByPhone(
   return contactFrom(d.id, d.data());
 }
 
-export async function saveContact(uid: string, input: SaveContactInput): Promise<CrmContact> {
-  const name = input.name.trim();
-  const phone = normalizeIndiaPhone(input.phone) ?? "";
-  const company = (input.company ?? "").trim();
-  const email = (input.email ?? "").trim();
-  const notes = (input.notes ?? "").trim();
-  const source = (input.source ?? "agent").trim() || "agent";
-  const nowMs = Date.now();
+/** Text that is new, added under what was there; a repeat is not added twice. */
+export function mergeNotes(oldNotes: string, newNotes: string): string {
+  const a = oldNotes.trim();
+  const b = newNotes.trim();
+  if (!b || a.toLowerCase().includes(b.toLowerCase())) return a;
+  if (!a || b.toLowerCase().includes(a.toLowerCase())) return b;
+  return `${a}\n${b}`;
+}
 
-  let ref = input.existingId ? contactsRef().doc(input.existingId) : contactsRef().doc();
-  if (!input.existingId && phone) {
-    const existing = await findContactByPhone(uid, phone);
+/**
+ * Creates a contact, or updates one — by id, or by the same phone number.
+ *
+ * An update only adds: a field left empty this time keeps what was saved, and
+ * notes and card photos are added to. That is what makes the back of a card,
+ * sent after the front, fill the contact in rather than wipe its number.
+ */
+export async function saveContact(uid: string, input: SaveContactInput): Promise<CrmContact> {
+  const nowMs = Date.now();
+  let ref = contactsRef().doc();
+  let old: CrmContact | null = null;
+  if (input.existingId) {
+    const snap = await contactsRef().doc(input.existingId).get();
+    // Someone else's id is not an update target; it becomes a new contact.
+    if (snap.exists && `${snap.data()?.ownerUid ?? ""}` === uid) {
+      ref = contactsRef().doc(input.existingId);
+      old = contactFrom(snap.id, snap.data() ?? {});
+    }
+  }
+  const phoneIn = normalizeIndiaPhone(input.phone) ?? "";
+  if (!old && phoneIn) {
+    const existing = await findContactByPhone(uid, phoneIn);
     if (existing) {
       ref = contactsRef().doc(existing.id);
+      old = existing;
     }
   }
 
-  const isUpdate = (await ref.get()).exists;
+  const pick = (fresh: string | null | undefined, kept: string | undefined) =>
+    (fresh ?? "").trim() || (kept ?? "");
+  const name = pick(input.name, old?.name);
+  const phone = phoneIn || old?.phone || "";
+  const company = pick(input.company, old?.company);
+  const email = pick(input.email, old?.email);
+  const notes = mergeNotes(old?.notes ?? "", input.notes ?? "");
+  const cardImages = [...new Set([...(old?.cardImages ?? []), ...(input.cardImages ?? [])])].slice(
+    -MAX_CARD_IMAGES,
+  );
+  const source = old?.source || (input.source ?? "agent").trim() || "agent";
+
   const payload: Record<string, unknown> = {
     ownerUid: uid,
     name,
@@ -152,10 +193,11 @@ export async function saveContact(uid: string, input: SaveContactInput): Promise
     company,
     email,
     notes,
+    cardImages,
     updatedAt: FieldValue.serverTimestamp(),
     updatedAtMs: nowMs,
   };
-  if (!isUpdate) {
+  if (!old) {
     payload.tags = [];
     payload.source = source;
     payload.createdAt = FieldValue.serverTimestamp();
@@ -171,12 +213,20 @@ export async function saveContact(uid: string, input: SaveContactInput): Promise
     phone,
     company,
     email,
-    tags: [],
+    tags: old?.tags ?? [],
     notes,
     source,
-    createdAtMs: nowMs,
+    cardImages,
+    createdAtMs: old?.createdAtMs ?? nowMs,
     updatedAtMs: nowMs,
   };
+}
+
+/** One contact of this user's, by id. */
+export async function getContact(uid: string, id: string): Promise<CrmContact | null> {
+  const snap = await contactsRef().doc(id).get();
+  if (!snap.exists || `${snap.data()?.ownerUid ?? ""}` !== uid) return null;
+  return contactFrom(snap.id, snap.data() ?? {});
 }
 
 export async function searchCrmContacts(

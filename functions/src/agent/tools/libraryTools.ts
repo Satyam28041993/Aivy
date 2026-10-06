@@ -9,6 +9,7 @@
 import { createDraft } from "../draftStore";
 import {
   findContactByPhone,
+  getContact,
   normalizeIndiaPhone,
 } from "../contactStore";
 import {
@@ -56,11 +57,24 @@ function kindOf(raw: unknown): LibraryKind {
 // save_contact
 // ---------------------------------------------------------------------------
 
+/** The images attached on this turn — a card's front, and its back if sent. */
+function turnImages(ctx: ToolContext): string[] {
+  return (ctx.attachments ?? []).filter((a) => a.mimeType.startsWith("image/")).map((a) => a.storagePath);
+}
+
 export async function saveContactTool(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const name = str(args.name);
+  // A back sent after the front names the contact it belongs to; it may carry
+  // no name or number of its own (an address, a product list).
+  const contactId = str(args.contact_id);
+  const target = contactId ? await getContact(ctx.uid, contactId) : null;
+  if (contactId && !target) {
+    return fail("nothing_found", "That contact was not found — save the front of the card first.");
+  }
+
+  const name = str(args.name) || target?.name || "";
   if (!name) {
     return fail("needs_detail", "What is their name? I need at least that to save a contact.");
   }
@@ -75,30 +89,35 @@ export async function saveContactTool(
   const email = str(args.email);
   const company = str(args.company);
   const notes = str(args.notes);
-  if (!phone && !email) {
+  if (!target && !phone && !email) {
     return fail(
       "needs_detail",
-      "I need a phone number or an email to save this contact — which one is on the card?",
+      "I need a phone number or an email to save this contact — which one is on the card? " +
+        "If this is the back of a card saved a moment ago, call again with that contact_id.",
     );
   }
 
-  const existing = phone ? await findContactByPhone(ctx.uid, phone) : null;
+  const existing = target ?? (phone ? await findContactByPhone(ctx.uid, phone) : null);
+  const images = turnImages(ctx);
+  const sides = images.length + (existing?.cardImages?.length ?? 0);
 
   const lines: DraftCardLine[] = [{ label: "Name", value: name }];
-  if (company) {
-    lines.push({ label: "Company", value: company });
-  }
-  if (phone) {
-    lines.push({ label: "Phone", value: phone });
-  }
-  if (email) {
-    lines.push({ label: "Email", value: email });
-  }
-  if (notes) {
-    lines.push({ label: "Notes", value: notes });
+  const add = (label: string, fresh: string, kept?: string) => {
+    const v = fresh || kept || "";
+    if (v) lines.push({ label, value: v });
+  };
+  add("Company", company, existing?.company);
+  add("Phone", phone, existing?.phone);
+  add("Email", email, existing?.email);
+  add("Notes", notes);
+  if (images.length > 0) {
+    lines.push({
+      label: "Card photo",
+      value: sides >= 2 ? "Front + back saved with the contact" : "Front saved with the contact",
+    });
   }
   if (existing) {
-    lines.push({ label: "Note", value: "Already saved — this will update it." });
+    lines.push({ label: "Note", value: `Adds to ${existing.name} — nothing already saved is removed.` });
   }
 
   const draft = await createDraft({
@@ -115,6 +134,7 @@ export async function saveContactTool(
       company,
       email,
       notes,
+      cardImages: images,
       replacing: existing != null,
       existingId: existing?.id ?? null,
     },
@@ -123,7 +143,7 @@ export async function saveContactTool(
   return draftResult(
     draft,
     existing
-      ? "This number is already saved — the card updates it. Ask them to confirm."
+      ? "This adds to a contact already saved — ask them to confirm."
       : "Ready to save this contact — ask them to confirm.",
   );
 }
@@ -152,8 +172,10 @@ export async function saveLibraryItemTool(
 
   const existing = await findLibraryByTitleKind(ctx.uid, title, kind);
   const sourceName = str(args.source_name);
-  const mimeType = str(args.mime_type);
-  const storagePath = str(args.storage_path);
+  // The file itself comes from this turn's upload; the model never sees the path.
+  const attached = (ctx.attachments ?? [])[0];
+  const mimeType = str(args.mime_type) || attached?.mimeType || "";
+  const storagePath = str(args.storage_path) || attached?.storagePath || "";
 
   const lines: DraftCardLine[] = [
     { label: "Title", value: title },

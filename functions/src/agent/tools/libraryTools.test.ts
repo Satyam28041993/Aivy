@@ -7,6 +7,7 @@ const createDraftMock = vi.fn();
 const findByPhoneMock = vi.fn();
 const findLibraryMock = vi.fn();
 const searchLibraryMock = vi.fn();
+const getContactMock = vi.fn();
 
 vi.mock("../draftStore", () => ({
   createDraft: (input: Record<string, unknown>) => {
@@ -27,6 +28,7 @@ vi.mock("../contactStore", async () => {
   return {
     ...actual,
     findContactByPhone: (...a: unknown[]) => findByPhoneMock(...a),
+    getContact: (...a: unknown[]) => getContactMock(...a),
   };
 });
 
@@ -81,6 +83,45 @@ describe("save_contact", () => {
     expect(data.replacing).toBe(true);
     expect(data.existingId).toBe("c_old");
     expect(lastDraft().title).toBe("Update contact");
+  });
+
+  it("keeps both photos of a card sent together — front and back, one contact", async () => {
+    findByPhoneMock.mockResolvedValue(null);
+    const ctx = {
+      ...CTX,
+      attachments: [
+        { storagePath: "users/u1/agent_files/front.jpg", mimeType: "image/jpeg", name: "front.jpg" },
+        { storagePath: "users/u1/agent_files/back.jpg", mimeType: "image/jpeg", name: "back.jpg" },
+      ],
+    };
+    await saveContactTool(ctx, { name: "Amit Shah", phone: "9876543210", notes: "Plot 12, Waluj MIDC" });
+    expect(createDraftMock).toHaveBeenCalledTimes(1);
+    const draft = lastDraft();
+    const data = draft.data as Extract<DraftData, { kind: "saved_contact" }>;
+    expect(data.cardImages).toEqual(["users/u1/agent_files/front.jpg", "users/u1/agent_files/back.jpg"]);
+    expect(draft.lines.find((l) => l.label === "Card photo")?.value).toMatch(/Front \+ back/);
+  });
+
+  it("adds a back sent later to the contact saved from the front", async () => {
+    getContactMock.mockResolvedValue({
+      id: "c1",
+      name: "Amit Shah",
+      phone: "919876543210",
+      company: "Bajaj",
+      email: "",
+      cardImages: ["users/u1/agent_files/front.jpg"],
+    });
+    const ctx = {
+      ...CTX,
+      attachments: [{ storagePath: "users/u1/agent_files/back.jpg", mimeType: "image/jpeg", name: "back.jpg" }],
+    };
+    const res = await saveContactTool(ctx, { contact_id: "c1", notes: "Address: Plot 12" });
+    expect(res.ok).toBe(true);
+    const draft = lastDraft();
+    const data = draft.data as Extract<DraftData, { kind: "saved_contact" }>;
+    expect(data.existingId).toBe("c1");
+    expect(data.name).toBe("Amit Shah");
+    expect(draft.lines.find((l) => l.label === "Card photo")?.value).toMatch(/Front \+ back/);
   });
 
   it("needs a name", async () => {

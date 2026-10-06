@@ -545,7 +545,10 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: "save_contact",
     description:
       "Save a person they met — almost always from a visiting card they just " +
-      "attached. Name is required, plus a phone or an email. Creates a draft " +
+      "attached. Some cards are front only, some front + back: two photos of " +
+      "one card in one message are ONE contact, read both sides into one call. " +
+      "A back sent later updates the contact saved just before (contact_id). " +
+      "Name plus a phone or an email are needed for a new contact. Creates a draft " +
       "for confirmation. This is their contact book in this app, not a Google " +
       "contact. If the same phone is already saved, the card updates it.",
     parameters: {
@@ -557,10 +560,13 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         email: { type: "string" },
         notes: {
           type: "string",
-          description: "Title, address, or anything else worth keeping.",
+          description: "Title, address, or anything else worth keeping — from the back too.",
+        },
+        contact_id: {
+          type: "string",
+          description: "Only for the back of a card whose front was saved just before: that contact's id from 'recently saved'.",
         },
       },
-      required: ["name"],
     },
   },
   {

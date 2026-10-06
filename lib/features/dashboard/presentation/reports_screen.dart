@@ -15,6 +15,9 @@ import '../../projects/models/project_models.dart';
 import '../../projects/presentation/project_detail_sheet.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../../tasks/models/task_item.dart';
+import '../../contacts/data/contact_service.dart';
+import '../../contacts/models/aivy_contact.dart';
+import '../../contacts/presentation/visiting_cards_screen.dart';
 import '../../expenses/data/expense_repository.dart';
 import '../../expenses/models/travel_expense.dart';
 import '../../expenses/presentation/expenses_screen.dart';
@@ -52,7 +55,7 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-enum _Lens { all, visits, expenses, money, orders, quotes, reminders, work }
+enum _Lens { all, visits, expenses, cards, money, orders, quotes, reminders, work }
 
 class _ReportsScreenState extends State<ReportsScreen> {
   late final ChatRepository _repository;
@@ -61,6 +64,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late final ProjectRepository _projects;
   late final VisitRepository _visits;
   late final ExpenseRepository _expenses;
+  late final ContactService _contacts;
 
   final TextEditingController _search = TextEditingController();
   _Lens _lens = _Lens.all;
@@ -75,6 +79,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _projects = ProjectRepository();
     _visits = VisitRepository();
     _expenses = ExpenseRepository();
+    _contacts = ContactService();
     _search.addListener(() {
       if (mounted) {
         setState(() {});
@@ -164,6 +169,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ),
                     const SizedBox(height: 22),
                   ],
+                  if (_shows(_Lens.cards)) ...[
+                    _CardRecords(
+                      service: _contacts,
+                      userId: widget.userId,
+                      matches: _matches,
+                    ),
+                    const SizedBox(height: 22),
+                  ],
                   if (_shows(_Lens.money)) ...[
                     _MoneyRecords(
                       payments: _payments,
@@ -247,6 +260,7 @@ class _Header extends StatelessWidget {
     _Lens.all: 'All',
     _Lens.visits: 'Visits',
     _Lens.expenses: 'Expenses',
+    _Lens.cards: 'Visiting cards',
     _Lens.money: 'Money',
     _Lens.orders: 'Orders',
     _Lens.quotes: 'Quotations',
@@ -749,6 +763,96 @@ class _ExpenseRecords extends StatelessWidget {
                         onPressed: () => _open(context),
                         icon: const Icon(Icons.two_wheeler_outlined, size: 18),
                         label: const Text('Open expenses · Excel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Visiting cards filed through Aivy — the newest few; all of them, with the
+// card photos and Excel, on their own screen.
+// ---------------------------------------------------------------------------
+
+class _CardRecords extends StatelessWidget {
+  const _CardRecords({
+    required this.service,
+    required this.userId,
+    required this.matches,
+  });
+
+  final ContactService service;
+  final String userId;
+  final bool Function(List<String?>) matches;
+
+  void _open(BuildContext context) {
+    unawaited(VisitingCardsScreen.open(context, userId: userId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AivyContact>>(
+      stream: service.watchContacts(userId),
+      builder: (context, snap) {
+        final rows = (snap.data ?? const <AivyContact>[])
+            .where((c) => c.isVisitingCard)
+            .where((c) => matches([c.name, c.company, c.phone, c.email]))
+            .toList()
+          ..sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AivySectionHeader(
+              title: 'Visiting cards',
+              count: rows.length,
+              action: 'Open all',
+              onAction: () => _open(context),
+            ),
+            if (!snap.hasData)
+              const AivyCard(child: _Loading())
+            else
+              AivyCard(
+                onTap: () => _open(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (rows.isEmpty)
+                      Text(
+                        'No cards yet. Send a photo of a visiting card to Aivy — front, or front and back.',
+                        style: AivyUi.soft(context),
+                      )
+                    else
+                      for (final c in rows.take(3))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.badge_outlined, size: 16, color: AivyUi.inkFaint),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  [c.name, c.company].where((s) => s.isNotEmpty).join(' · '),
+                                  style: AivyUi.body(context),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _open(context),
+                        icon: const Icon(Icons.badge_outlined, size: 18),
+                        label: const Text('Open cards · Excel'),
                       ),
                     ),
                   ],

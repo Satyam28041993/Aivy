@@ -139,3 +139,12 @@ describe("finding", () => {
     expect(await searchCrmContacts("u1", "zzz")).toEqual([]);
   });
 });
+
+describe("mergeNotes", () => {
+  it("adds the back's text under the front's, once", async () => {
+    const { mergeNotes } = await import("./contactStore");
+    expect(mergeNotes("Purchase Head", "Plot 12, Waluj")).toBe("Purchase Head\nPlot 12, Waluj");
+    expect(mergeNotes("Purchase Head\nPlot 12, Waluj", "Plot 12, Waluj")).toBe("Purchase Head\nPlot 12, Waluj");
+    expect(mergeNotes("", "Plot 12")).toBe("Plot 12");
+  });
+});

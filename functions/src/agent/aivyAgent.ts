@@ -34,6 +34,7 @@ import {
 import {
   historyLineForAttachments,
   loadInlineParts,
+  ownedAgentFilePath,
   parseAttachmentRefs,
 } from "./fileParts";
 
@@ -180,6 +181,10 @@ export const aivyAgent = onCall(
     const loaded = attachments.length
       ? await loadInlineParts(uid, attachments)
       : { parts: [], skipped: [] as string[] };
+    const readable = attachments
+      .filter((a) => !loaded.skipped.includes(a.name))
+      .map((a) => ({ ...a, storagePath: ownedAgentFilePath(uid, a.storagePath) ?? "" }))
+      .filter((a) => a.storagePath);
     const skippedNote =
       loaded.skipped.length > 0
         ? `\n(Could not read: ${loaded.skipped.join(", ")}.)`
@@ -196,6 +201,7 @@ export const aivyAgent = onCall(
           googleToken,
           userCity: cityFrom(memory),
           coords,
+          attachments: readable,
         },
         systemPrompt,
         history,

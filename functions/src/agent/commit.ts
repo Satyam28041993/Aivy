@@ -950,14 +950,18 @@ async function commitSavedContact(
     email: d.email || null,
     notes: d.notes || null,
     source: "visiting_card",
+    cardImages: d.cardImages ?? [],
     existingId: d.existingId,
   });
   const who = [contact.name, contact.company].filter(Boolean).join(" · ");
+  const sides = contact.cardImages?.length ?? 0;
   return {
     ok: true,
     message: d.replacing ? `Updated ${who}.` : `Saved ${who}.`,
     createdIds: [contact.id],
-    summary: `saved contact ${contact.name}`,
+    summary:
+      `saved contact ${contact.name} (contact_id ${contact.id}, ${sides} card photo${sides === 1 ? "" : "s"})` +
+      (sides === 1 ? " — if they now send the back of this card, pass this contact_id" : ""),
   };
 }
 

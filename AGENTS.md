@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after travel expense (`record_travel_expense`) and the visit location question._
+_Last updated: after merging the file library and the visiting-card front/back fixes._travel_expense`) and the visit location question._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -309,6 +309,18 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   and PDF only — PPT and Excel are refused with a sentence, not a second
   editor. `find_contact` reads the CRM book first, so a saved card is
   findable on web without Google.
+- **Visiting cards, front and back** (merged from the Cursor branch, then
+  fixed against what the user asked). Some cards are front only, some front +
+  back. Two photos in one message are one contact read from both sides; a
+  back sent later passes `contact_id` from the commit summary and adds to
+  that contact. `saveContact` only adds on update — an empty field keeps what
+  was saved, notes are appended, card photos are unioned (`cardImages`, max
+  4) — so a back with no number cannot wipe the front's. Tools get this
+  turn's checked uploads as `ctx.attachments`; the model never copies a
+  Storage path, which is why library items used to be filed without their
+  file. Records has a **Visiting cards** chip and section; the screen shows
+  each card's front/back photos, Call, WhatsApp, and builds the Excel on the
+  phone (`excel` + `file_saver`).
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
