@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the first live E2E smoke run and its fixes._travel_expense`) and the visit location question._
+_Last updated: after the live E2E runs, delete-all and clients, and APK build36._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
