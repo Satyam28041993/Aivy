@@ -15,6 +15,9 @@ import '../../projects/models/project_models.dart';
 import '../../projects/presentation/project_detail_sheet.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../../tasks/models/task_item.dart';
+import '../../visits/data/visit_repository.dart';
+import '../../visits/models/visit_record.dart';
+import '../../visits/presentation/visits_screen.dart';
 import '../models/order_record.dart';
 import '../models/quotation_record.dart';
 
@@ -46,13 +49,14 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-enum _Lens { all, money, orders, quotes, reminders, work }
+enum _Lens { all, visits, money, orders, quotes, reminders, work }
 
 class _ReportsScreenState extends State<ReportsScreen> {
   late final ChatRepository _repository;
   late final ClientRepository _clients;
   late final PaymentRepository _payments;
   late final ProjectRepository _projects;
+  late final VisitRepository _visits;
 
   final TextEditingController _search = TextEditingController();
   _Lens _lens = _Lens.all;
@@ -65,6 +69,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _clients = ClientRepository();
     _payments = PaymentRepository(clients: _clients);
     _projects = ProjectRepository();
+    _visits = VisitRepository();
     _search.addListener(() {
       if (mounted) {
         setState(() {});
@@ -139,6 +144,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 28),
                 children: [
+                  if (_shows(_Lens.visits)) ...[
+                    _VisitRecords(
+                      repository: _visits,
+                      userId: widget.userId,
+                      matches: _matches,
+                    ),
+                    const SizedBox(height: 22),
+                  ],
                   if (_shows(_Lens.money)) ...[
                     _MoneyRecords(
                       payments: _payments,
@@ -220,6 +233,7 @@ class _Header extends StatelessWidget {
 
   static const Map<_Lens, String> _labels = {
     _Lens.all: 'All',
+    _Lens.visits: 'Visits',
     _Lens.money: 'Money',
     _Lens.orders: 'Orders',
     _Lens.quotes: 'Quotations',
@@ -492,6 +506,140 @@ class _DueRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Visits — the DSR. A short summary here; the whole table, the Excel download
+// and the sheet live on their own screen, where a phone has the width for it.
+// ---------------------------------------------------------------------------
+
+class _VisitRecords extends StatelessWidget {
+  const _VisitRecords({
+    required this.repository,
+    required this.userId,
+    required this.matches,
+  });
+
+  final VisitRepository repository;
+  final String userId;
+  final bool Function(List<String?>) matches;
+
+  void _open(BuildContext context) {
+    unawaited(VisitsScreen.open(context, userId: userId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<VisitRecord>>(
+      stream: repository.watchVisits(userId, limit: 200),
+      builder: (context, snap) {
+        final all = snap.data ?? const <VisitRecord>[];
+        final rows =
+            all.where((v) => matches(v.searchFields)).toList(growable: false);
+        final now = DateTime.now();
+        final monthStart = DateTime(now.year, now.month);
+        final thisMonth =
+            rows.where((v) => !v.visitDate.isBefore(monthStart)).length;
+        final nowMs = now.millisecondsSinceEpoch;
+        final ahead = rows.where((v) => v.followUpMs > nowMs).length;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AivySectionHeader(
+              title: 'Visits (DSR)',
+              count: rows.length,
+              action: 'Open all',
+              onAction: () => _open(context),
+            ),
+            if (!snap.hasData)
+              const AivyCard(child: _Loading())
+            else
+              AivyCard(
+                onTap: () => _open(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        AivyPill('$thisMonth this month', color: AivyUi.info),
+                        const SizedBox(width: 8),
+                        AivyPill('$ahead follow-ups', color: AivyUi.warn),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (rows.isEmpty)
+                      Text(
+                        'No visits yet. Tell Aivy "visit record karo" after a meeting.',
+                        style: AivyUi.soft(context),
+                      )
+                    else
+                      for (final v in rows.take(3)) _VisitLine(visit: v),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _open(context),
+                        icon: const Icon(Icons.table_chart_outlined, size: 18),
+                        label: const Text('Open visits · Excel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _VisitLine extends StatelessWidget {
+  const _VisitLine({required this.visit});
+
+  final VisitRecord visit;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = visit;
+    final when = v.dateLabel.isNotEmpty
+        ? v.dateLabel
+        : DateFormat('dd MMM').format(v.visitDate);
+    final detail = [v.products, v.status].where((s) => s.isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 86,
+            child: Text(when, style: AivyUi.soft(context)),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  v.clientName,
+                  style: AivyUi.body(context)
+                      .copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (detail.isNotEmpty)
+                  Text(
+                    detail,
+                    style: AivyUi.soft(context),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _OrderRecords extends StatelessWidget {
   const _OrderRecords({

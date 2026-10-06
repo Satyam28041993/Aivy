@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the visit DSR (`record_visit`)._
+_Last updated: after the Visits report screen (`lib/features/visits/`)._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -243,6 +243,16 @@ unused today and kept for whatever voice is built next.
   `sheetRow: null` and is copied on the next save that has one; a deleted
   sheet is replaced rather than breaking every save. Rows are written RAW so
   phone numbers keep their leading zero.
+- **Visits report** (`lib/features/visits/`). Records has a **Visits** chip
+  and a section at the top: this month's count, follow-ups ahead, the last
+  three visits and **Open visits · Excel**, which opens a full screen —
+  period chips (today / week / month / last month / all), search, summary
+  tiles, a table view shaped like the sheet (scrolls sideways) or cards for
+  one hand, and a sheet per visit with a Call button. **Download Excel** is
+  Google's own `export?format=xlsx` link for the DSR sheet, opened in the
+  user's Google session, so no copy of the data passes through us; it is
+  disabled until the first visit has reached the sheet. Read-only, like the
+  other record screens: visits are recorded by telling Aivy.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets
