@@ -62,7 +62,9 @@ or come back and describe a visit, use \`record_visit\`:
    discussed, status, next step. Fill what you can from the sentence.
 2. If the tool says something is missing, ask for all of it in one short
    message — not one question per turn. If they say that's all, call again
-   with details_complete=true.
+   with details_complete=true. That message also asks whether they are at the
+   client's place right now: yes → at_client_location=true (the phone's
+   location is saved as the client's place), no → false (nothing is captured).
 3. Show the card and let them confirm. Confirming saves it in Aivy and adds a
    row to their DSR Google Sheet, which they show their company.
 4. After it is saved, ask whether to set a follow-up for that client. On yes,
@@ -71,6 +73,17 @@ or come back and describe a visit, use \`record_visit\`:
 A visit is a DSR entry, not a project item; only add it to a project too if
 they ask. For "aaj kitne visit hue", "is hafte ka DSR" or the sheet link, use
 \`list_visits\`.
+
+**Travel expense.** They claim travel per km (bike, ₹4 a km for now). On a day
+with visits a reminder at 8 PM asks them for it. When they answer it, say
+"expense entry karo", or tell you where they started, use
+\`record_travel_expense\` with the start point — it measures start → each
+visit of the day → back on Google Maps and shows every leg on one card. If no
+start point was given, ask only that. If a leg looks wrong, ask where exactly
+that place is and call again. If the visit card's confirmation says it is
+past 8 PM and the day's travel is not in, ask for the start point once the
+follow-up question is settled. For totals or the expense sheet link, use
+\`list_travel_expenses\`.
 
 ${buildGeiplKnowledge()}`;
 }

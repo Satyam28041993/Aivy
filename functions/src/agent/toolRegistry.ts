@@ -37,6 +37,7 @@ import {
 import { findDocumentTool, readDocumentTool } from "./brochures";
 import { getPriceTool } from "./priceBook";
 import { listVisitsTool, recordVisitTool, setVisitFollowupTool } from "./tools/visitTools";
+import { listTravelExpensesTool, recordTravelExpenseTool } from "./tools/expenseTools";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -977,7 +978,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         client_name: { type: "string", description: "Company / client visited." },
         contact_person: { type: "string", description: "Who they met, with designation if said (e.g. 'Mr. Sharma, Purchase Head')." },
         contact_phone: { type: "string", description: "Contact number, if given." },
-        location: { type: "string", description: "Area/city of the visit. Leave empty to use the phone's location." },
+        location: { type: "string", description: "Area/city of the visit, if they said it. Empty with at_client_location=true uses the phone's location." },
         visit_type: { type: "string", enum: ["New", "Follow-up", "Demo", "Service", "Payment collection", "Other"] },
         products: { type: "string", description: "Products discussed, e.g. 'BX410T, wax-resin ribbon, 100x50 PP labels'." },
         discussion: { type: "string", description: "What was discussed / remarks, in their words, cleaned up." },
@@ -985,6 +986,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
         next_step: { type: "string", description: "The next action, e.g. 'Send quotation for 2 printers'." },
         when_phrase: { type: "string", description: "Visit day if not today ('kal', '3 Oct'). Empty = today." },
         day_period: DAY_PERIOD,
+        at_client_location: { type: "boolean", description: "Their answer to 'are you at the client's place right now?' — true saves the phone's location as the client's. Ask; never assume." },
         details_complete: { type: "boolean", description: "True once the missing details were asked for and answered or declined." },
       },
       required: ["client_name"],
@@ -1025,6 +1027,45 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "record_travel_expense",
+    description:
+      "Record the day's travel expense (km claim). Use when they answer the " +
+      "8 PM expense reminder, say 'expense entry karo' / 'aaj ka travel', or " +
+      "tell you where they started today. Routes start → each visit recorded " +
+      "that day, in order → back to the start (or end_point) on Google Maps, " +
+      "prices it per km and shows one card with every leg. After they confirm " +
+      "it goes to Aivy and, one row per leg, to their expense Google Sheet.",
+    parameters: {
+      type: "object",
+      properties: {
+        start_point: { type: "string", description: "Where the day started: 'ghar'/'home', 'office', a saved place, or an area ('Cidco N-5, Aurangabad')." },
+        end_point: { type: "string", description: "Where the day ended, only if not back at the start." },
+        when_phrase: { type: "string", description: "The day, if not today ('kal'). Empty = today." },
+        stops: {
+          type: "array",
+          items: { type: "string" },
+          description: "Places visited in order — ONLY when they list them; empty = use that day's recorded visits.",
+        },
+      },
+      required: ["start_point"],
+    },
+  },
+  {
+    name: "list_travel_expenses",
+    description:
+      "Read back travel expenses: 'is mahine ka travel kitna hua', 'expense " +
+      "sheet ka link'. Returns days, km, ₹ and the sheet link.",
+    parameters: {
+      type: "object",
+      properties: {
+        period: {
+          type: "string",
+          enum: ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_30_days"],
+        },
+      },
+    },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -1060,6 +1101,8 @@ const HANDLERS: Record<string, ToolHandler> = {
   record_visit: recordVisitTool,
   set_visit_followup: setVisitFollowupTool,
   list_visits: listVisitsTool,
+  record_travel_expense: recordTravelExpenseTool,
+  list_travel_expenses: listTravelExpensesTool,
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,
@@ -1102,6 +1145,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "create_task",
   "record_visit",
   "set_visit_followup",
+  "record_travel_expense",
 ]);
 
 export function isKnownTool(name: string): boolean {

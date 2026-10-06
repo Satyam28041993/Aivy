@@ -104,6 +104,8 @@ const base = {
   contactPerson: "Mr. Sharma, Purchase",
   contactPhone: "09876543210",
   location: "Waluj, Aurangabad",
+  lat: null,
+  lng: null,
   visitType: "Demo",
   products: "BX410T",
   discussion: "Demo done, wants RFID option",

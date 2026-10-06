@@ -24,7 +24,8 @@ export type DraftKind =
   | "sheet_row"
   | "saved_place"
   | "visit"
-  | "visit_followup";
+  | "visit_followup"
+  | "travel_expense";
 
 export type DraftStatus = "pending" | "committed" | "cancelled" | "superseded";
 
@@ -160,6 +161,9 @@ export interface VisitDraftData {
   contactPerson: string;
   contactPhone: string;
   location: string;
+  /** Optional: drafts made before the pin was kept have neither. */
+  lat?: number | null;
+  lng?: number | null;
   visitType: string;
   products: string;
   discussion: string;
@@ -176,6 +180,23 @@ export interface VisitFollowupDraftData {
   whenMs: number;
   whenLabel: string;
   note: string;
+  timezone: string;
+}
+
+/** A day's travel, start → each visit → back, priced per km. */
+export interface TravelExpenseDraftData {
+  kind: "travel_expense";
+  /** yyyy-MM-dd — also the record's id, one per day. */
+  day: string;
+  dateMs: number;
+  dateLabel: string;
+  startPoint: string;
+  endPoint: string;
+  vehicle: string;
+  ratePerKm: number;
+  legs: Array<{ from: string; to: string; purpose: string; km: number; amount: number }>;
+  totalKm: number;
+  totalAmount: number;
   timezone: string;
 }
 
@@ -260,7 +281,8 @@ export type DraftData =
   | SheetRowDraftData
   | SavedPlaceDraftData
   | VisitDraftData
-  | VisitFollowupDraftData;
+  | VisitFollowupDraftData
+  | TravelExpenseDraftData;
 
 /** One line on the confirm card: "Client", "Rohan Traders". */
 export interface DraftCardLine {

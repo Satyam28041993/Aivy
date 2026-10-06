@@ -54,15 +54,21 @@ export async function recordVisitTool(ctx: ToolContext, args: Record<string, unk
   // Cross-question once for the missing essentials. The model sets
   // details_complete when the user has answered or said there is nothing more,
   // so a skipped field never loops.
-  if (args.details_complete !== true) {
-    const missing = missingVisitDetails(args);
-    if (missing.length > 0) {
-      return fail(
-        "needs_detail",
-        `Before saving the visit, ask in one message for: ${missing.join("; ")}. ` +
-          "If they say there is nothing more, call record_visit again with details_complete=true.",
-      );
-    }
+  // The user asked to be asked, every time, whether the phone is standing at
+  // the client — yes keeps the pin (and the client becomes a saved place),
+  // no keeps nothing. Asked alongside any missing details, in one message.
+  const askPin = Boolean(ctx.coords) && typeof args.at_client_location !== "boolean";
+  const missing = args.details_complete === true ? [] : missingVisitDetails(args);
+  if (askPin) {
+    missing.push("whether they are at the client's place right now, so its location can be saved (yes / no)");
+  }
+  if (missing.length > 0) {
+    return fail(
+      "needs_detail",
+      `Before saving the visit, ask in one message for: ${missing.join("; ")}. ` +
+        "Pass at_client_location=true/false from their answer. " +
+        "If they say there is nothing more, call record_visit again with details_complete=true.",
+    );
   }
 
   const resolved = await referenceClient(ctx, clientName, true);
@@ -90,13 +96,14 @@ export async function recordVisitTool(ctx: ToolContext, args: Record<string, unk
   }
   const dateLabel = sheetDate(visitMs, ctx.timezone);
 
-  // Where: what they said, else where the phone is now — they are usually
-  // standing outside the client when they record it.
+  // Where: what they said; the phone's fix only when they said they are at
+  // the client.
   let location = str(args.location);
-  if (!location && ctx.coords) {
+  const pin = args.at_client_location === true && ctx.coords ? { lat: ctx.coords.lat, lng: ctx.coords.lng } : null;
+  if (!location && pin) {
     location =
-      (await nearestPlaceLabel(ctx.coords).catch(() => null)) ??
-      (await reverseGeocode(ctx.coords).catch(() => null)) ??
+      (await nearestPlaceLabel(pin).catch(() => null)) ??
+      (await reverseGeocode(pin).catch(() => null)) ??
       "";
   }
 
@@ -111,6 +118,8 @@ export async function recordVisitTool(ctx: ToolContext, args: Record<string, unk
     contactPerson: str(args.contact_person),
     contactPhone: str(args.contact_phone),
     location,
+    lat: pin?.lat ?? null,
+    lng: pin?.lng ?? null,
     visitType,
     products: str(args.products),
     discussion: str(args.discussion),
@@ -128,6 +137,7 @@ export async function recordVisitTool(ctx: ToolContext, args: Record<string, unk
   };
   add("Met", [data.contactPerson, data.contactPhone].filter(Boolean).join(" · "));
   add("Location", data.location);
+  if (pin) lines.push({ label: "Pin", value: `Current location saved as ${client.name}'s place` });
   add("Visit type", data.visitType);
   add("Products", data.products);
   add("Discussion", data.discussion);

@@ -27,6 +27,8 @@ import { logProjectEvent } from "./projectEvents";
 import { getDraft, markDraftStatus } from "./draftStore";
 import { savePlace } from "./placesStore";
 import { saveVisit, setVisitFollowUp, syncVisitsToSheet } from "./visitStore";
+import { dayKey, expensePromptId, getExpense, saveExpense, syncExpensesToSheet } from "./expenseStore";
+import { cancelReminders } from "./reminderCancel";
 import { normalizeName } from "./nameNormalize";
 import {
   effectiveRemainingAmount,
@@ -57,6 +59,7 @@ import type {
   SheetRowDraftData,
   VisitDraftData,
   VisitFollowupDraftData,
+  TravelExpenseDraftData,
 } from "./draftTypes";
 
 /**
@@ -108,9 +111,13 @@ async function writeReminder(
     clientName?: string | null;
     priority?: string | null;
     extra?: Record<string, unknown>;
+    /** A fixed id, for a reminder there must only ever be one of. */
+    id?: string;
   },
 ): Promise<string> {
-  const ref = userRef(uid).collection("reminders").doc();
+  const ref = opts.id
+    ? userRef(uid).collection("reminders").doc(opts.id)
+    : userRef(uid).collection("reminders").doc();
   const createdMs = Date.now();
   const data: Record<string, unknown> = {
     title: opts.title.trim(),
@@ -793,6 +800,8 @@ async function commitVisit(
     contactPerson: d.contactPerson,
     contactPhone: d.contactPhone,
     location: d.location,
+    lat: d.lat ?? null,
+    lng: d.lng ?? null,
     visitType: d.visitType,
     products: d.products,
     discussion: d.discussion,
@@ -802,12 +811,27 @@ async function commitVisit(
     followUpLabel: "",
     followUpReminderId: "",
   });
+  // "Yes, I'm at the client" also files the client as a saved place, so
+  // "Bajaj ka location" and directions work afterwards.
+  if (d.lat != null && d.lng != null) {
+    await savePlace(uid, { name: client.name, lat: d.lat, lng: d.lng, address: d.location }).catch((e) =>
+      logger.warn("visit pin not saved as a place", { err: e instanceof Error ? e.message : String(e) }),
+    );
+  }
   const sync = await syncVisitsToSheet(uid, opts.googleToken, d.timezone);
+  const expense = await askForExpense(uid, d.visitDateMs, d.timezone).catch((e) => {
+    logger.warn("expense prompt failed", { err: e instanceof Error ? e.message : String(e) });
+    return "none" as const;
+  });
+  const later =
+    expense === "ask_now"
+      ? " Today's travel expense is not recorded yet and it is past 8 PM: once the follow-up question is settled, ask where they started today."
+      : "";
   return {
     ok: true,
     message: `Visit saved — ${client.name}, ${d.dateLabel}.${sheetClause(sync)}\n\nShould I set a follow-up for ${client.name}? (yes / no)`,
     createdIds: [visit.id],
-    summary: `visit ${visit.id} ${client.name} ${d.dateLabel} — waiting to hear whether to set a follow-up`,
+    summary: `visit ${visit.id} ${client.name} ${d.dateLabel} — waiting to hear whether to set a follow-up.${later}`,
   };
 }
 
@@ -837,6 +861,77 @@ async function commitVisitFollowup(
     message: `Follow-up set — ${d.clientName}, ${d.whenLabel}. I'll remind you.${sheet}`,
     createdIds: [reminderId],
     summary: `follow-up ${d.clientName} ${d.whenLabel} (visit ${d.visitId})`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Travel expense
+// ---------------------------------------------------------------------------
+
+const EXPENSE_PROMPT_HOUR = 20;
+
+/**
+ * On a day with visits, the user wants Aivy to ask for the expense at 8 PM.
+ * The first visit of the day sets that one reminder (fixed id, so a second
+ * visit does not add another); a visit saved after 8 PM asks in the chat
+ * instead. Nothing happens when the day's travel is already in.
+ */
+async function askForExpense(
+  uid: string,
+  visitMs: number,
+  timezone: string,
+): Promise<"scheduled" | "ask_now" | "none"> {
+  const now = DateTime.now().setZone(timezone);
+  const today = dayKey(now.toMillis(), timezone);
+  if (dayKey(visitMs, timezone) !== today) return "none";
+  if (await getExpense(uid, today)) return "none";
+  const at = now.startOf("day").set({ hour: EXPENSE_PROMPT_HOUR });
+  if (now >= at) return "ask_now";
+  const id = expensePromptId(today);
+  const existing = await userRef(uid).collection("reminders").doc(id).get();
+  if (existing.exists) return "scheduled";
+  await writeReminder(uid, {
+    id,
+    title: "Travel expense — tell Aivy where you started today",
+    scheduledMs: at.toMillis(),
+    type: "reminder",
+    subType: "expense_prompt",
+    note: "Aivy will measure the km from today's visits and add them to the expense sheet.",
+  });
+  return "scheduled";
+}
+
+async function commitTravelExpense(
+  uid: string,
+  d: TravelExpenseDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  if (await getExpense(uid, d.day)) {
+    return { ok: false, message: `Travel for ${d.dateLabel} is already recorded.`, createdIds: [], summary: "" };
+  }
+  await saveExpense(uid, {
+    id: d.day,
+    dateMs: d.dateMs,
+    dateLabel: d.dateLabel,
+    startPoint: d.startPoint,
+    endPoint: d.endPoint,
+    vehicle: d.vehicle,
+    ratePerKm: d.ratePerKm,
+    legs: d.legs,
+    totalKm: d.totalKm,
+    totalAmount: d.totalAmount,
+  });
+  // The 8 PM ask is answered, whenever it was.
+  await cancelReminders(uid, [expensePromptId(d.day)]);
+  const sync = await syncExpensesToSheet(uid, opts.googleToken, d.timezone);
+  const sheet = sync.problem
+    ? ` Saved in Aivy; ${sync.problem}`
+    : ` Added to the expense sheet${sync.created ? " (new sheet created in your Drive)" : ""}.${sync.url ? `\n${sync.url}` : ""}`;
+  return {
+    ok: true,
+    message: `Travel saved — ${d.dateLabel}: ${d.totalKm} km × ₹${d.ratePerKm} = ₹${d.totalAmount}.${sheet}`,
+    createdIds: [d.day],
+    summary: `travel expense ${d.dateLabel} ${d.totalKm} km ₹${d.totalAmount}`,
   };
 }
 
@@ -908,6 +1003,9 @@ export async function commitDraft(
       break;
     case "visit_followup":
       result = await commitVisitFollowup(uid, draft.data, opts);
+      break;
+    case "travel_expense":
+      result = await commitTravelExpense(uid, draft.data, opts);
       break;
     default:
       return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };

@@ -127,7 +127,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after the Visits report screen (`lib/features/visits/`)._
+_Last updated: after travel expense (`record_travel_expense`) and the visit location question._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -253,6 +253,30 @@ unused today and kept for whatever voice is built next.
   user's Google session, so no copy of the data passes through us; it is
   disabled until the first visit has reached the sheet. Read-only, like the
   other record screens: visits are recorded by telling Aivy.
+- **Visit location is asked, not assumed.** When the phone has a fix,
+  `record_visit` will not draw the card until the user has said whether they
+  are at the client's place right now (`at_client_location`), in the same
+  message as any missing details. Yes keeps the pin on the visit and saves the
+  client as a saved place (so "Bajaj ka location" and directions work); no
+  captures nothing.
+- **Travel expense** (`agent/expenseStore.ts`, `agent/tools/expenseTools.ts`;
+  tools `record_travel_expense`, `list_travel_expenses`). Bike, ₹4/km for now
+  (`DEFAULT_RATE_PER_KM`; `users/{uid}/meta/expenseSettings {ratePerKm,
+  vehicle}` overrides it without a deploy) — the rest of the policy is not
+  known yet. The first visit of a day sets one 8 PM reminder (fixed id
+  `expense-prompt-yyyy-MM-dd`, subType `expense_prompt`); a visit saved after
+  8 PM asks in the chat instead. The user gives the start point (a saved place
+  like "ghar", or an area); Aivy routes start → each visit of the day in the
+  order made → back on Google Maps (two-wheeler, car if that fails; a visit's
+  pin when it has one, else "client, location"), one card with every leg.
+  Confirm writes `users/{uid}/travelExpenses/{yyyy-MM-dd}` — one per day,
+  a second entry for the same day is refused — cancels the 8 PM reminder, and
+  appends one row per leg to "Aivy Expenses - Great Eastern travel" in their
+  Drive, with the day totals on the last leg only so the Amount column sums to
+  the claim. Same catch-up rule as the DSR. Records has an **Expenses** chip
+  and section; **Open expenses · Excel** shows days as routes or a leg table,
+  with Download Excel. Not yet: odometer readings, toll/food/other heads, bill
+  photos — waiting on the company policy.
 - **Brochure links are file cards** (`message_links.dart`, `_FileCard` in
   `agent_message_bubble.dart`). A Firebase Storage link is named by its file
   ("DS-2208 2D DS2278-BT.pdf", not "firebasestorage.googleapis.com") and gets

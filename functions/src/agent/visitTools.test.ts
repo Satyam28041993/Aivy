@@ -68,9 +68,33 @@ describe("record_visit", () => {
   });
 
   it("saves with gaps once the user has said that is all", async () => {
-    const r = await recordVisitTool(CTX, { client_name: "Bajaj Auto", products: "BX410T", details_complete: true });
+    const r = await recordVisitTool(CTX, {
+      client_name: "Bajaj Auto",
+      products: "BX410T",
+      details_complete: true,
+      at_client_location: false,
+    });
     expect(r.ok).toBe(true);
     expect(created).toHaveLength(1);
+  });
+
+  it("asks whether they are at the client before using the phone's location", async () => {
+    const r = await recordVisitTool(CTX, { client_name: "Bajaj Auto", details_complete: true });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/at the client's place/);
+    expect(created).toHaveLength(0);
+  });
+
+  it("does not ask about the location when the phone has no fix", async () => {
+    const r = await recordVisitTool({ ...CTX, coords: null }, { client_name: "Bajaj Auto", details_complete: true });
+    expect(r.ok).toBe(true);
+  });
+
+  it("keeps no pin when they are not at the client", async () => {
+    await recordVisitTool(CTX, { client_name: "Exide", details_complete: true, at_client_location: false });
+    const data = created[0].data as { lat: number | null; location: string };
+    expect(data.lat).toBeNull();
+    expect(data.location).toBe("");
   });
 
   it("draws one card with the date, the client, the phone's location and where it saves", async () => {
@@ -81,6 +105,7 @@ describe("record_visit", () => {
       discussion: "Demo done",
       status: "Interested",
       visit_type: "demo",
+      at_client_location: true,
     });
     expect(r.ok).toBe(true);
     const d = created[0];
@@ -91,15 +116,16 @@ describe("record_visit", () => {
     expect(get("Location")).toBe("Waluj MIDC, Aurangabad");
     expect(get("Visit type")).toBe("Demo");
     expect(get("Saves to")).toBe("Aivy + DSR Google Sheet");
+    expect((d.data as { lat: number }).lat).toBe(19.85);
   });
 
   it("dates a visit 'kal' to yesterday", async () => {
-    await recordVisitTool(CTX, { client_name: "Exide", when_phrase: "kal", details_complete: true });
+    await recordVisitTool(CTX, { client_name: "Exide", when_phrase: "kal", details_complete: true, at_client_location: false });
     expect((created[0].data as { dateLabel: string }).dateLabel).toBe("05-Oct-2026");
   });
 
   it("says the sheet will catch up when Google is not connected", async () => {
-    await recordVisitTool({ ...CTX, googleToken: null }, { client_name: "Exide", details_complete: true });
+    await recordVisitTool({ ...CTX, googleToken: null }, { client_name: "Exide", details_complete: true, at_client_location: false });
     const lines = created[0].lines as Array<{ label: string; value: string }>;
     expect(lines.find((l) => l.label === "Saves to")?.value).toMatch(/catches up/);
   });

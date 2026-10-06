@@ -57,6 +57,9 @@ export interface VisitRecord {
   contactPerson: string;
   contactPhone: string;
   location: string;
+  /** The phone's fix when the location came from it — routes the expense. */
+  lat: number | null;
+  lng: number | null;
   visitType: string;
   products: string;
   discussion: string;
@@ -114,6 +117,8 @@ function fromDoc(id: string, d: Record<string, unknown>): VisitRecord {
     contactPerson: s("contactPerson"),
     contactPhone: s("contactPhone"),
     location: s("location"),
+    lat: typeof d.lat === "number" ? d.lat : null,
+    lng: typeof d.lng === "number" ? d.lng : null,
     visitType: s("visitType"),
     products: s("products"),
     discussion: s("discussion"),

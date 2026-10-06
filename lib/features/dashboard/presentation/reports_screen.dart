@@ -15,6 +15,9 @@ import '../../projects/models/project_models.dart';
 import '../../projects/presentation/project_detail_sheet.dart';
 import '../../reminders/models/reminder_item.dart';
 import '../../tasks/models/task_item.dart';
+import '../../expenses/data/expense_repository.dart';
+import '../../expenses/models/travel_expense.dart';
+import '../../expenses/presentation/expenses_screen.dart';
 import '../../visits/data/visit_repository.dart';
 import '../../visits/models/visit_record.dart';
 import '../../visits/presentation/visits_screen.dart';
@@ -49,7 +52,7 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-enum _Lens { all, visits, money, orders, quotes, reminders, work }
+enum _Lens { all, visits, expenses, money, orders, quotes, reminders, work }
 
 class _ReportsScreenState extends State<ReportsScreen> {
   late final ChatRepository _repository;
@@ -57,6 +60,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late final PaymentRepository _payments;
   late final ProjectRepository _projects;
   late final VisitRepository _visits;
+  late final ExpenseRepository _expenses;
 
   final TextEditingController _search = TextEditingController();
   _Lens _lens = _Lens.all;
@@ -70,6 +74,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _payments = PaymentRepository(clients: _clients);
     _projects = ProjectRepository();
     _visits = VisitRepository();
+    _expenses = ExpenseRepository();
     _search.addListener(() {
       if (mounted) {
         setState(() {});
@@ -149,6 +154,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       repository: _visits,
                       userId: widget.userId,
                       matches: _matches,
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                  if (_shows(_Lens.expenses)) ...[
+                    _ExpenseRecords(
+                      repository: _expenses,
+                      userId: widget.userId,
                     ),
                     const SizedBox(height: 22),
                   ],
@@ -234,6 +246,7 @@ class _Header extends StatelessWidget {
   static const Map<_Lens, String> _labels = {
     _Lens.all: 'All',
     _Lens.visits: 'Visits',
+    _Lens.expenses: 'Expenses',
     _Lens.money: 'Money',
     _Lens.orders: 'Orders',
     _Lens.quotes: 'Quotations',
@@ -637,6 +650,113 @@ class _VisitLine extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Travel expense — this month's km claim; the full list and Excel on its own
+// screen.
+// ---------------------------------------------------------------------------
+
+class _ExpenseRecords extends StatelessWidget {
+  const _ExpenseRecords({required this.repository, required this.userId});
+
+  final ExpenseRepository repository;
+  final String userId;
+
+  void _open(BuildContext context) {
+    unawaited(ExpensesScreen.open(context, userId: userId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<TravelExpense>>(
+      stream: repository.watchExpenses(userId, limit: 62),
+      builder: (context, snap) {
+        final now = DateTime.now();
+        final monthStart = DateTime(now.year, now.month);
+        final month = (snap.data ?? const <TravelExpense>[])
+            .where((e) => !e.date.isBefore(monthStart))
+            .toList(growable: false);
+        final km = month.fold<double>(0, (a, e) => a + e.totalKm);
+        final amount = month.fold<double>(0, (a, e) => a + e.totalAmount);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AivySectionHeader(
+              title: 'Travel expense',
+              count: month.length,
+              action: 'Open all',
+              onAction: () => _open(context),
+            ),
+            if (!snap.hasData)
+              const AivyCard(child: _Loading())
+            else
+              AivyCard(
+                onTap: () => _open(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        AivyPill('${trimNum(km)} km this month', color: AivyUi.info),
+                        const Spacer(),
+                        Text(
+                          AivyUi.inrExact(amount),
+                          style: AivyUi.body(context).copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AivyUi.ok,
+                            fontFeatures: AivyUi.tabular,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (month.isEmpty)
+                      Text(
+                        'Nothing this month yet. On a day with visits Aivy asks at 8 PM where you started.',
+                        style: AivyUi.soft(context),
+                      )
+                    else
+                      for (final e in month.take(3))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 86,
+                                child: Text(e.dateLabel, style: AivyUi.soft(context)),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  '${trimNum(e.totalKm)} km · ${e.legs.length} legs',
+                                  style: AivyUi.body(context),
+                                ),
+                              ),
+                              Text(
+                                AivyUi.inrExact(e.totalAmount),
+                                style: AivyUi.soft(context).copyWith(fontFeatures: AivyUi.tabular),
+                              ),
+                            ],
+                          ),
+                        ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _open(context),
+                        icon: const Icon(Icons.two_wheeler_outlined, size: 18),
+                        label: const Text('Open expenses · Excel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
