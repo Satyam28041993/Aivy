@@ -185,6 +185,12 @@ function toolResponseForModel(result: Awaited<ReturnType<typeof dispatchTool>>):
         lines: result.draft.lines,
       },
       hint: result.hint,
+      // Every card, every time — the live runs showed the model drifting into
+      // "I have updated…" and pasting the card's lines into the chat.
+      reply_rule:
+        "NOT saved yet. The card is already on their screen. Reply in ONE short sentence that points " +
+        "at it and asks — e.g. \"Here's the updated contact for Priya — confirm?\". Never 'I have " +
+        "saved/set/added/updated…', and do not repeat the card's lines.",
     };
   }
   return { ok: true, data: result.data };
