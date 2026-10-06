@@ -66,6 +66,10 @@ const USER_COLLECTIONS = [
   // leaves projects behind is not a reset.
   "projects",
   "occasions",
+  "visits",
+  "travelExpenses",
+  "trash",
+  "aiUsage",
 ] as const;
 
 /** Docs under `users/{uid}/meta` that are state, not settings. */

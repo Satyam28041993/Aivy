@@ -9,6 +9,8 @@
  * field picker.
  */
 
+import type { DeleteTarget } from "./deleteStore";
+
 export type DraftKind =
   | "meeting"
   | "reminder"
@@ -26,6 +28,8 @@ export type DraftKind =
   | "visit"
   | "visit_followup"
   | "travel_expense"
+  | "delete_record"
+  | "restore_deleted"
   | "saved_contact"
   | "library_item";
 
@@ -229,6 +233,20 @@ export interface LibraryItemDraftData {
   existingId: string | null;
 }
 
+/** Records to delete, resolved before the card was drawn. */
+export interface DeleteRecordDraftData {
+  kind: "delete_record";
+  targets: DeleteTarget[];
+  timezone: string;
+}
+
+/** A trashed record to put back. */
+export interface RestoreDeletedDraftData {
+  kind: "restore_deleted";
+  trashId: string;
+  label: string;
+}
+
 /** One thing to remember, filed under a key of its own. */
 export interface RememberedFact {
   /** Stable subject key — "wife", "anniversary", "city". */
@@ -312,6 +330,8 @@ export type DraftData =
   | VisitDraftData
   | VisitFollowupDraftData
   | TravelExpenseDraftData
+  | DeleteRecordDraftData
+  | RestoreDeletedDraftData
   | SavedContactDraftData
   | LibraryItemDraftData;
 

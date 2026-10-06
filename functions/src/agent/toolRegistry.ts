@@ -38,6 +38,8 @@ import { findDocumentTool, readDocumentTool } from "./brochures";
 import { getPriceTool } from "./priceBook";
 import { listVisitsTool, recordVisitTool, setVisitFollowupTool } from "./tools/visitTools";
 import { listTravelExpensesTool, recordTravelExpenseTool } from "./tools/expenseTools";
+import { deleteRecordTool, listTrashTool, restoreDeletedTool } from "./tools/deleteTools";
+import { DELETE_KINDS } from "./deleteStore";
 import {
   findPlacesTool,
   forgetPlaceTool,
@@ -1159,6 +1161,44 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     },
   },
   {
+    name: "delete_record",
+    description:
+      "Delete something they ask to delete ('ye reminder delete karo', 'Bajaj " +
+      "wala visit hata do', 'kal ka travel expense hatao'). Finds it; if " +
+      "several match it returns the options — ask which (or whether all) and " +
+      "call again with its id or all_matches=true. Draws a delete card; " +
+      "nothing goes until they confirm. A copy is kept in trash. Money " +
+      "already received cannot be deleted.",
+    parameters: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: [...DELETE_KINDS] },
+        query: { type: "string", description: "How they named it: title, client, person, place, or a date ('kal', '3 Oct')." },
+        id: { type: "string", description: "Exact id from the options of a previous call, or from 'recently saved'." },
+        all_matches: { type: "boolean", description: "True only when they said to delete every match." },
+      },
+      required: ["kind"],
+    },
+  },
+  {
+    name: "restore_deleted",
+    description:
+      "Bring back something deleted ('wapas lao', 'undo delete'). Empty = the " +
+      "last thing deleted. Draws a card; restores on confirm.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Words from what was deleted, if they said which." },
+        trash_id: { type: "string", description: "Exact trash id from a previous answer." },
+      },
+    },
+  },
+  {
+    name: "list_deleted",
+    description: "What was deleted recently ('kya delete hua tha'), for choosing what to bring back.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "web_search",
     description:
       "Search the web for general knowledge, news, prices, how-to questions — " +
@@ -1196,6 +1236,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   list_visits: listVisitsTool,
   record_travel_expense: recordTravelExpenseTool,
   list_travel_expenses: listTravelExpensesTool,
+  delete_record: deleteRecordTool,
+  restore_deleted: restoreDeletedTool,
+  list_deleted: (ctx) => listTrashTool(ctx),
   create_calendar_event: createCalendarEventTool,
   send_email: sendEmailTool,
   append_sheet_row: appendSheetRowTool,
@@ -1242,6 +1285,8 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "record_visit",
   "set_visit_followup",
   "record_travel_expense",
+  "delete_record",
+  "restore_deleted",
   "save_contact",
   "save_library_item",
 ]);

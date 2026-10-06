@@ -136,7 +136,7 @@ fingerprint would break Google sign-in.
 
 ## Where things stand
 
-_Last updated: after merging the file library and the visiting-card front/back fixes._travel_expense`) and the visit location question._
+_Last updated: after delete-with-confirmation, the AI usage screen and the file-library merge._travel_expense`) and the visit location question._
 
 The leftover remotes are gone and `main` has been fast-forwarded to the live
 branch, so the working agreement and the old short environment file are no
@@ -321,6 +321,29 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   file. Records has a **Visiting cards** chip and section; the screen shows
   each card's front/back photos, Call, WhatsApp, and builds the Excel on the
   phone (`excel` + `file_saver`).
+- **Delete, with a card and a trash copy** (`agent/deleteStore.ts`,
+  `tools/deleteTools.ts`; tools `delete_record`, `restore_deleted`,
+  `list_deleted`). Reminders, tasks, projects, visits, a day of travel, saved
+  places, occasions, one remembered fact, contacts, library items,
+  quotations, orders and dues with nothing paid. Several matches → the tool
+  returns options and the model must ask. Confirm copies the document (and a
+  project's items) to `users/{uid}/trash/{id}` **before** deleting, cancels
+  linked reminders (by id, and by `visitId`/`projectId`/`quotationId`/
+  `relatedReminderId`), and blanks — not removes — a visit's DSR row or a
+  day's expense rows, because later records remember their row numbers.
+  Restore puts the document back; a visit rewrites its row on the next sync,
+  a day of travel is appended again; cancelled reminders stay cancelled.
+  Received money is the ledger and is never offered. Clients themselves are
+  not deletable yet — too much hangs off them.
+- **AI usage & cost** (`agent/aiUsage.ts`, `lib/features/ai_usage/`). Every
+  chat turn and morning brief writes `users/{uid}/aiUsage`: the user's
+  message, the reply, the tools called, Gemini's own token counts summed
+  across hops, and the cost at Gemini 2.5 Flash's standard paid price ($0.30
+  in / $2.50 out per million, thinking billed as output, cached input a
+  tenth; ₹88 to the dollar). More → **AI usage & cost**. "In" is the whole
+  request — system prompt, history, tool results — which is why it dwarfs
+  the message. On the free tier the real bill is nothing; the screen says so.
+  Prices live in `PRICES`, pinned by `aiUsage.test.ts`.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

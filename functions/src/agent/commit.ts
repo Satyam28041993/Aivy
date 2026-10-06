@@ -29,6 +29,7 @@ import { savePlace } from "./placesStore";
 import { saveVisit, setVisitFollowUp, syncVisitsToSheet } from "./visitStore";
 import { dayKey, expensePromptId, getExpense, saveExpense, syncExpensesToSheet } from "./expenseStore";
 import { cancelReminders } from "./reminderCancel";
+import { deleteTarget, restoreFromTrash } from "./deleteStore";
 import { saveContact } from "./contactStore";
 import { saveLibraryItem } from "./libraryStore";
 import { normalizeName } from "./nameNormalize";
@@ -64,6 +65,8 @@ import type {
   VisitDraftData,
   VisitFollowupDraftData,
   TravelExpenseDraftData,
+  DeleteRecordDraftData,
+  RestoreDeletedDraftData,
 } from "./draftTypes";
 
 /**
@@ -991,6 +994,64 @@ async function commitLibraryItem(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Delete / restore
+// ---------------------------------------------------------------------------
+
+async function commitDeleteRecord(
+  uid: string,
+  d: DeleteRecordDraftData,
+  opts: CommitOptions,
+): Promise<CommitResult> {
+  const done: string[] = [];
+  const failed: string[] = [];
+  const trashIds: string[] = [];
+  let sheetLeft = false;
+  for (const t of d.targets) {
+    try {
+      const out = await deleteTarget(uid, t, { googleToken: opts.googleToken });
+      done.push(t.label);
+      trashIds.push(out.trashId);
+      if (out.sheetCleared === false) sheetLeft = true;
+    } catch (e) {
+      logger.warn("delete failed", { label: t.label, err: e instanceof Error ? e.message : String(e) });
+      failed.push(t.label);
+    }
+  }
+  if (done.length === 0) {
+    return { ok: false, message: `Could not delete ${failed.join(", ")} — it may already be gone.`, createdIds: [], summary: "" };
+  }
+  const what = done.length === 1 ? done[0] : `${done.length} items`;
+  const parts = [`Deleted — ${what}. A copy is in trash if you want it back.`];
+  if (sheetLeft) parts.push("The Google Sheet row could not be cleared from here (Google not connected) — clear it there if needed.");
+  if (failed.length) parts.push(`Not deleted: ${failed.join(", ")}.`);
+  return {
+    ok: true,
+    message: parts.join(" "),
+    createdIds: trashIds,
+    summary: `deleted ${done.join("; ")} (trash ${trashIds.join(", ")})`,
+  };
+}
+
+async function commitRestoreDeleted(uid: string, d: RestoreDeletedDraftData): Promise<CommitResult> {
+  try {
+    const r = await restoreFromTrash(uid, d.trashId);
+    return {
+      ok: true,
+      message: `Brought back — ${r.label}. Reminders that were cancelled with it stay off; ask if you want them again.`,
+      createdIds: [d.trashId],
+      summary: `restored ${r.label}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: `Could not bring back ${d.label} — ${e instanceof Error ? e.message : "it is not in trash"}.`,
+      createdIds: [],
+      summary: "",
+    };
+  }
+}
+
 /** Replays one confirmed draft. Idempotent: a committed draft is not redone. */
 export async function commitDraft(
   uid: string,
@@ -1068,6 +1129,12 @@ export async function commitDraft(
       break;
     case "travel_expense":
       result = await commitTravelExpense(uid, draft.data, opts);
+      break;
+    case "delete_record":
+      result = await commitDeleteRecord(uid, draft.data, opts);
+      break;
+    case "restore_deleted":
+      result = await commitRestoreDeleted(uid, draft.data);
       break;
     default:
       return { ok: false, message: "Unknown draft type.", createdIds: [], summary: "" };
