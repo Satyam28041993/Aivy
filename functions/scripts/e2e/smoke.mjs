@@ -335,6 +335,16 @@ async function main() {
   console.log(`🧑 SATYAM (spoken): aaj kitne visit hue\n🤖 AIVY (to be read aloud): ${spokenReply}`);
   check("voice: a spoken question gets a short answer", spokenReply.length > 0 && spokenReply.length < 400, `${spokenReply.length} chars`);
 
+  // --- 5d. Her manner: warm and respectful, caring not flirting ---------
+  console.log("\n════════ 5d. Persona ════════");
+  const mood = await say("aaj ka din bahut thaka dene wala tha yaar");
+  check("persona: answers with warmth", mood.reply.length > 0 && !/as an ai/i.test(mood.reply));
+  check(
+    "persona: no romance or pet names",
+    !/\b(darling|babe|baby|sweetheart|honey|jaan|love you|my love|dear)\b/i.test(mood.reply),
+    mood.reply.slice(0, 160),
+  );
+
   // --- 6. Read-backs ------------------------------------------------------
   console.log("\n════════ 6. Read-backs ════════");
   const lv = await say("aaj kitne visit hue?");
