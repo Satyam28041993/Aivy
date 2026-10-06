@@ -253,10 +253,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     const text = textOf(parts);
 
     if (calls.length === 0) {
-      // An empty answer after a tool said what to ask happens now and then;
-      // one nudge gets the question out instead of "I did not catch that".
-      if (!text && !nudged && hops < maxHops && trace.length > 0) {
+      // Gemini 2.5 Flash now and then answers with nothing — on the first hop
+      // (often MALFORMED_FUNCTION_CALL) or after a tool asked for details.
+      // One nudge gets a real answer instead of "I did not catch that".
+      if (!text && !nudged && hops < maxHops) {
         nudged = true;
+        logger.warn("agent: empty model answer, nudging once", {
+          finishReason: res.candidates?.[0]?.finishReason ?? "none",
+          afterTools: trace.length,
+        });
         contents.push({
           role: "user",
           parts: [{ text: "(Reply to me now in plain words — ask what the tool said is missing, or tell me what you did.)" }],

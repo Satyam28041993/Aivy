@@ -282,7 +282,7 @@ export async function listVisitsTool(ctx: ToolContext, args: Record<string, unkn
       discussion: v.discussion,
       status: v.status,
       next_step: v.nextStep,
-      follow_up: v.followUpMs > 0 ? v.followUpLabel : "",
+      ...(v.followUpMs > 0 ? { follow_up: v.followUpLabel } : {}),
       in_sheet: v.sheetRow != null,
     })),
     ...(sheet ? { dsr_sheet_link: sheet } : {}),

@@ -340,6 +340,13 @@ describe("after the live smoke test", () => {
     expect(JSON.stringify(r.newContents)).not.toContain("Reply to me now");
   });
 
+  it("nudges an empty first answer too, before any tool ran", async () => {
+    const empty: GeminiResponse = { candidates: [{ content: { parts: [] }, finishReason: "MALFORMED_FUNCTION_CALL" }] };
+    const s = scripted(empty, say("Which client did you visit?"));
+    const r = await runAgentTurn({ ...base, userText: "visit record karo", transport: s.transport });
+    expect(r.reply).toBe("Which client did you visit?");
+  });
+
   it("never shows the model's thought summary as the reply", async () => {
     const s = scripted({
       candidates: [{ content: { parts: [{ text: "thinking…", thought: true } as never, { text: "Done." }] } }],

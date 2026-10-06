@@ -368,6 +368,9 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   before the tap and internal visit ids in a list; the prompt now words a
   pending card as waiting and keeps ids to itself, and the smoke test checks
   both.
+  The third run caught an empty *first* answer — Gemini 2.5 Flash sometimes
+  returns nothing before any tool runs (often `MALFORMED_FUNCTION_CALL`);
+  the one nudge now covers every empty answer and logs the finish reason.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
