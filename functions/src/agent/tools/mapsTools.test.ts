@@ -313,6 +313,24 @@ describe("saved places", () => {
     expect(createDraftMock.mock.calls.at(-1)![0].data.address).toBe("");
   });
 
+  it("asks before saving a far-off named place as where they stand", async () => {
+    // Said from Vasai: "Andheri Station East" once saved Vasai under that name.
+    const ANDHERI = { id: "g1", name: "Andheri Station East", address: "Andheri East, Mumbai", coords: { lat: 19.1197, lng: 72.8468 } };
+    resolveMock.mockResolvedValue(ANDHERI);
+    const ask = await savePlaceTool(LOCATED, { name: "Andheri Station East" });
+    expect(ask.ok === false && ask.reason).toBe("needs_detail");
+    if (!ask.ok) expect(ask.message).toMatch(/record_travel_expense/);
+    expect(createDraftMock).not.toHaveBeenCalled();
+
+    await savePlaceTool(LOCATED, { name: "Andheri Station East", use_named_place: true });
+    expect(createDraftMock.mock.calls.at(-1)![0].data).toMatchObject({ lat: 19.1197, address: "Andheri East, Mumbai" });
+
+    geocodeMock.mockResolvedValue("Vasai East");
+    await savePlaceTool(LOCATED, { name: "Andheri Station East", use_named_place: false });
+    expect(createDraftMock.mock.calls.at(-1)![0].data).toMatchObject({ lat: 19.3919 });
+    resolveMock.mockReset();
+  });
+
   it("asks for a fix instead of saving a place it cannot locate", async () => {
     const res = await savePlaceTool(CTX, { name: "Godown" });
     expect(res.ok === false && res.reason).toBe("needs_detail");

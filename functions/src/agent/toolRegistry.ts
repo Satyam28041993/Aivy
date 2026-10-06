@@ -662,10 +662,17 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     description:
       "Save where the user is standing right now under a name they choose — " +
       "'is location ko Rohan Office ke naam se save karlo', 'ye godown save kar " +
-      "lo'. Uses their phone's live position. Creates a draft for confirmation.",
+      "lo'. Uses their phone's live position. Creates a draft for confirmation. " +
+      "NOT for the day's start point ('starting point', 'start point', 'kahan se " +
+      "nikla') — that is record_travel_expense. If the name is itself a place on " +
+      "the map far from where they stand, the tool asks which one they mean.",
     parameters: {
       type: "object",
       properties: {
+        use_named_place: {
+          type: "boolean",
+          description: "Their answer when the tool asked: true = save the place the name points to on the map; false = save where they are standing.",
+        },
         name: {
           type: "string",
           description: "The name they gave it, e.g. 'Rohan Office', 'godown'.",
@@ -1126,7 +1133,8 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     description:
       "Record the day's travel expense (km claim). Use when they answer the " +
       "8 PM expense reminder, say 'expense entry karo' / 'aaj ka travel', or " +
-      "tell you where they started today. Routes start → each visit recorded " +
+      "tell you where they started today — 'mark my starting point X', 'start " +
+      "point X tha', 'subah X se nikla' (also misspelt 'staring point'). Routes start → each visit recorded " +
       "that day, in order → back to the start (or end_point) on Google Maps, " +
       "prices it per km and shows one card with every leg. After they confirm " +
       "it goes to Aivy and, one row per leg, to their expense Google Sheet.",

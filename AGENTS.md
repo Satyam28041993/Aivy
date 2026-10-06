@@ -436,6 +436,15 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   separate?": same → that exact name, separate → the name with "(new)",
   which `referenceClient` strips and creates. Reads just use the existing
   client.
+- **The 8 PM answer must land in the expense.** First live use: he tapped the
+  reminder, said "mark my starting point andheri station east", and Aivy
+  drew a *Save place* card — named Andheri, holding his phone's spot in
+  Vasai. Two fixes. `expenseAwaitingStart` (prompt reminder set, no travel
+  saved today, it is past ~7:30 PM) puts **Waiting for an answer right now**
+  at the top of the prompt, so a place he names is the start point. And
+  `save_place` no longer saves the phone's position under a name that is
+  itself a map place more than 1.5 km away: it asks which he means
+  (`use_named_place`) and points at `record_travel_expense`.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and

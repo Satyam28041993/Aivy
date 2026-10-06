@@ -178,6 +178,23 @@ export async function saveExpense(
   return record;
 }
 
+/**
+ * Whether today's 8 PM "where did you start?" is still unanswered: the prompt
+ * reminder was set (so there were visits) and no travel is saved for today.
+ * The model is told, so whatever place he names next is read as the answer.
+ */
+export async function expenseAwaitingStart(uid: string, nowMs: number, timezone: string): Promise<boolean> {
+  const day = dayKey(nowMs, timezone);
+  const [prompt, saved] = await Promise.all([
+    getFirestore().collection("users").doc(uid).collection("reminders").doc(expensePromptId(day)).get(),
+    expensesRef(uid).doc(day).get(),
+  ]);
+  if (!prompt.exists || saved.exists) return false;
+  const at = Number(prompt.get("scheduledTimeMs") ?? 0);
+  // Before 8 PM it has not been asked yet; a stray place name then means a place.
+  return at > 0 && nowMs >= at - 30 * 60 * 1000;
+}
+
 export async function listExpenses(
   uid: string,
   opts: { fromMs: number; toMs: number },

@@ -268,6 +268,9 @@ export async function whereAmITool(ctx: ToolContext): Promise<ToolResult> {
  * resolved to, which is the only way to catch a bad GPS fix before it becomes
  * the place you navigate to for the next year.
  */
+/** Further than this from the phone, a name that is a map place is asked about. */
+const NAMED_PLACE_FAR_KM = 1.5;
+
 export async function savePlaceTool(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -286,14 +289,39 @@ export async function savePlaceTool(
     );
   }
 
+  // "Andheri Station East" said from Vasai once saved Vasai under that name.
+  // When the name is itself a place on the map, well away from where the
+  // phone is, ask which one is meant instead of quietly saving the wrong spot.
+  let point: Coords = coords;
+  let address = "";
+  const choice = args.use_named_place;
+  if (choice !== false) {
+    const named = await resolvePlacePoint({ query: name, coords, near: ctx.userCity ?? null });
+    const far = named?.coords ? crowDistanceKm(coords, named.coords) : 0;
+    if (named?.coords && far > NAMED_PLACE_FAR_KM) {
+      if (choice !== true) {
+        return fail(
+          "needs_detail",
+          `"${name}" is a place on the map (${named.address || named.name}), about ${Math.round(far)} km from where ` +
+            "they are standing. Ask which to save under this name: that place, or where they are right now. " +
+            "Then call again with use_named_place true or false. If they meant the start point of today's travel, " +
+            "use record_travel_expense instead.",
+        );
+      }
+      point = named.coords;
+      address = named.address || named.name;
+    }
+  }
+
   // Best-effort: a place with no address is still a usable place.
   // A card showing raw coordinates is one the user cannot check, so the nearest
   // known place stands in when Geocoding is unavailable.
-  let address = "";
-  try {
-    address = (await reverseGeocode(coords)) ?? (await nearestPlaceLabel(coords)) ?? "";
-  } catch {
-    address = "";
+  if (!address) {
+    try {
+      address = (await reverseGeocode(point)) ?? (await nearestPlaceLabel(point)) ?? "";
+    } catch {
+      address = "";
+    }
   }
 
   const existing = await findSavedPlace(ctx.uid, name);
@@ -301,7 +329,7 @@ export async function savePlaceTool(
 
   const lines = [
     { label: "Name", value: name },
-    { label: "Place", value: address || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` },
+    { label: "Place", value: address || `${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}` },
   ];
   if (replacing) {
     lines.push({ label: "Note", value: "This will replace the place saved under this name" });
@@ -317,8 +345,8 @@ export async function savePlaceTool(
     data: {
       kind: "saved_place",
       name,
-      lat: coords.lat,
-      lng: coords.lng,
+      lat: point.lat,
+      lng: point.lng,
       address,
       replacing,
     },

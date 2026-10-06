@@ -144,6 +144,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("site:dinolabeldigital.com");
   });
 
+  it("reads a place named after the 8 PM ask as the start point", () => {
+    // Live: "mark my starting point andheri station east" became a saved place.
+    expect(prompt).not.toContain("Today's travel expense is waiting");
+    const waiting = buildSystemPrompt({ ...CTX, expenseWaiting: true });
+    expect(waiting).toContain("**Today's travel expense is waiting for his start point.**");
+    expect(waiting).toMatch(/Do not save it as a\s+place/);
+  });
+
   it("is a warm, calm, respectful companion — caring, never flirting", () => {
     expect(prompt).toContain("**Who you are to him.**");
     expect(prompt).toMatch(/Respect comes\s+first, always/);

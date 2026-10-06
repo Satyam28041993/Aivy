@@ -32,6 +32,7 @@ import {
   touchChat,
 } from "./chatStore";
 import { logAiUsage } from "./aiUsage";
+import { expenseAwaitingStart } from "./expenseStore";
 import {
   historyLineForAttachments,
   loadInlineParts,
@@ -156,10 +157,11 @@ export const aivyAgent = onCall(
     const chat = await ensureChat(uid, str(payload.chatId) || null);
     const chatId = chat.id;
 
-    const [memory, history, pending] = await Promise.all([
+    const [memory, history, pending, expenseWaiting] = await Promise.all([
       getUserMemory(uid).catch(() => ({}) as Record<string, unknown>),
       loadHistory(uid, chatId),
       listPendingDrafts(uid, chatId, 3),
+      expenseAwaitingStart(uid, Date.parse(nowIso) || Date.now(), timezone).catch(() => false),
     ]);
 
     const systemPrompt = buildSystemPrompt({
@@ -176,6 +178,7 @@ export const aivyAgent = onCall(
       googleConnected: googleToken != null,
       hasLiveLocation: coords != null,
       spoken: payload.spoken === true,
+      expenseWaiting,
     });
 
     await appendMessage(uid, chatId, { role: "user", text: displayText || promptText });

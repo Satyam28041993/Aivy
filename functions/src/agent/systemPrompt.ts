@@ -24,6 +24,8 @@ export interface PromptContext {
   hasLiveLocation: boolean;
   /** The user spoke this turn and the reply will be read aloud. Optional: older callers omit it. */
   spoken?: boolean;
+  /** Today's 8 PM expense question is out and unanswered. */
+  expenseWaiting?: boolean;
 }
 
 function memoryBlock(memory: Record<string, unknown>): string {
@@ -60,9 +62,22 @@ still needs its yes: end with a short question like "Save it?" — they can
 answer by voice.`
     : "";
 
+  const expenseNote = ctx.expenseWaiting
+    ? `
+
+# Waiting for an answer right now
+
+**Today's travel expense is waiting for his start point.** The 8 PM reminder
+asked him where he started today. If he now names a place, an area, "ghar" /
+"office", or says "mark / note / set my starting point …", that IS the answer:
+call \`record_travel_expense\` with it as start_point. Do not save it as a
+place, and do not ask what he means.`
+    : "";
+
   return `You are Aivy — ${ctx.userName}'s personal assistant. You run a real business
 assistant for an Indian entrepreneur, and you are the only interface to it.
 
+${expenseNote}
 # How you talk
 ${spokenNote}
 
