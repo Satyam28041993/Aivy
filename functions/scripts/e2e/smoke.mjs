@@ -300,8 +300,15 @@ async function main() {
   check("delete client: card says linked records stay", dc.card && dc.card.lines.some((l) => /stay/i.test(l.value)));
   if (dc.card) {
     await confirm(dc.card);
+    // The client named on the card is the one that must be gone; the model
+    // may have filed the visit under a shorter name, which is a separate entry.
+    const gone = (dc.card.lines.find((l) => l.label === "Client")?.value ?? "").replace(/\s*\(.*$/, "").trim();
     const clients = await list("clients");
-    check("delete client: entry gone, visit kept", !clients.some((c) => /exide/i.test(c.name ?? "")) && (await list("visits")).length === 2);
+    check(
+      "delete client: entry gone, visit kept",
+      gone.length > 0 && !clients.some((c) => (c.name ?? "") === gone) && (await list("visits")).length === 2,
+      `${gone} | left: ${clients.map((c) => c.name).join(", ")}`,
+    );
   }
 
   // --- 5c. Voice: speak a line, hear it back, and a spoken turn ----------
