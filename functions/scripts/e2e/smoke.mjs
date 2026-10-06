@@ -304,6 +304,37 @@ async function main() {
     check("delete client: entry gone, visit kept", !clients.some((c) => /exide/i.test(c.name ?? "")) && (await list("visits")).length === 2);
   }
 
+  // --- 5c. Voice: speak a line, hear it back, and a spoken turn ----------
+  console.log("\n════════ 5c. Voice ════════");
+  const spoken = await post(
+    `${FN}/aivySpeak`,
+    { data: { text: "**Visit saved** — Bajaj Auto, ₹50,000 order. https://example.com/x" } },
+    { Authorization: `Bearer ${token}` },
+  );
+  const audio = spoken.result?.audioBase64 ?? "";
+  const mime = spoken.result?.mimeType ?? "";
+  console.log(`🔊 aivySpeak → ${mime}, ${Math.round((audio.length * 3) / 4 / 1024)} KB${spoken.error ? ` ERROR ${JSON.stringify(spoken).slice(0, 300)}` : ""}`);
+  check("voice: Aivy speaks (audio comes back)", audio.length > 2000, mime);
+  if (audio) {
+    const heard = await post(
+      `${FN}/aivyTranscribe`,
+      { data: { audioBase64: audio, mimeType: mime || "audio/mpeg" } },
+      { Authorization: `Bearer ${token}` },
+    );
+    const text = heard.result?.text ?? "";
+    console.log(`🎤 aivyTranscribe → "${text}"${heard.error ? ` ERROR ${JSON.stringify(heard).slice(0, 300)}` : ""}`);
+    check("voice: what she said is heard back", /bajaj/i.test(text) && /visit/i.test(text), text);
+    check("voice: the link was not read out", !/example/i.test(text));
+  }
+  const sp = await post(
+    `${FN}/aivyAgent`,
+    { data: { text: "aaj kitne visit hue", timezone: TZ, chatId, spoken: true } },
+    { Authorization: `Bearer ${token}` },
+  );
+  const spokenReply = sp.result?.reply ?? "";
+  console.log(`🧑 SATYAM (spoken): aaj kitne visit hue\n🤖 AIVY (to be read aloud): ${spokenReply}`);
+  check("voice: a spoken question gets a short answer", spokenReply.length > 0 && spokenReply.length < 400, `${spokenReply.length} chars`);
+
   // --- 6. Read-backs ------------------------------------------------------
   console.log("\n════════ 6. Read-backs ════════");
   const lv = await say("aaj kitne visit hue?");
