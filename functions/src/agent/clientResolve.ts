@@ -26,6 +26,7 @@ export interface AgentClient {
 export type ClientResolution =
   | { status: "single"; client: AgentClient }
   | { status: "ambiguous"; candidates: AgentClient[] }
+  | { status: "similar"; client: AgentClient; query: string }
   | { status: "not_found"; query: string };
 
 /** Trim + lowercase only — matches `ClientRepository.normalizeForMatch`. */
@@ -137,6 +138,17 @@ export async function resolveClient(
     if (byKey.length > 1) {
       return { status: "ambiguous", candidates: byKey };
     }
+  }
+
+  // "Exide Industries Chikalthana" when "Exide Industries" exists: the same
+  // company with a place added, or a separate branch. Only the user knows, so
+  // it is asked rather than guessed — guessing "new" made two clients of one.
+  const longer = all.filter((c) => {
+    const cn = normalizeForMatch(c.name);
+    return cn.length >= 4 && qn.startsWith(`${cn} `);
+  });
+  if (longer.length === 1) {
+    return { status: "similar", client: longer[0]!, query: q };
   }
 
   return { status: "not_found", query: q };

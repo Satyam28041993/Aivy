@@ -91,7 +91,24 @@ export async function referenceClient(
     };
   }
 
+  // "(new)" is the model's answer to the "same or separate?" question below.
+  const forcedNew = /\s*\(new\)\s*$/i.test(name);
+  if (forcedNew && allowCreate) {
+    return { ref: { id: null, name: capitalizeWords(name.replace(/\s*\(new\)\s*$/i, "")), createNew: true } };
+  }
+
   const res = await resolveClient(ctx.uid, name);
+  if (res.status === "similar") {
+    return {
+      failure: fail(
+        "needs_client_choice",
+        `"${name}" looks like the existing client "${res.client.name}". Ask whether it is the same client. ` +
+          `If the same, call again with client_name "${res.client.name}"; if a separate client, call again ` +
+          `with client_name "${name} (new)".`,
+        [{ id: res.client.id, label: res.client.name }],
+      ),
+    };
+  }
   if (res.status === "single") {
     return { ref: { id: res.client.id, name: res.client.name, createNew: false } };
   }

@@ -427,7 +427,15 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   Affection is care, not flirting: no romance, no pet names, nothing he
   would mind a client overhearing, because he often has her on speaker in
   front of one. Replies stay in English. The Neural2 voice runs slightly
-  slower and softer (rate 0.97, pitch +0.5) to sound calm.
+  slower and softer (rate 0.97, pitch +0.5) to sound calm. She calls him by
+  name, not "Sir" — the first run of the persona said "Sir".
+- **One company, one client.** A live run filed a visit under "Exide
+  Industries" and then an order under "Exide Industries Chikalthana" — a
+  second, new client. `resolveClient` now reports `similar` when a name is
+  an existing client's name plus more words, and write tools ask "same or
+  separate?": same → that exact name, separate → the name with "(new)",
+  which `referenceClient` strips and creates. Reads just use the existing
+  client.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
