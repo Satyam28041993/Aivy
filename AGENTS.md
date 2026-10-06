@@ -371,6 +371,9 @@ now used by the Aivy paperclip — a photo or PDF uploads to
   The third run caught an empty *first* answer — Gemini 2.5 Flash sometimes
   returns nothing before any tool runs (often `MALFORMED_FUNCTION_CALL`);
   the one nudge now covers every empty answer and logs the finish reason.
+  The fourth had "I have updated…" and the card's lines pasted into the
+  chat; every draft result now carries a `reply_rule`. The fifth run was
+  35/35 with a clean transcript, and the APK was built from that head.
 - **Projects** (`functions/src/agent/projectStore.ts`, `tools/projectTools.ts`).
   A project holds whatever that job needs — no fixed pipeline, because every job
   is shaped differently. Items carry a kind, a date and a status, and
