@@ -319,6 +319,10 @@ async function main() {
     (r) => r.withCard && /\b(saved|recorded|restored|deleted|added)\b\s*[—-]/i.test(r.text),
   );
   check("never claims 'saved/deleted' before the confirm tap", early.length === 0, early.map((r) => r.text.slice(0, 120)).join(" | "));
+  const doneTooSoon = replies.filter((r) => r.withCard && /\bI(?: have|'ve) (?:set|added|saved|recorded|deleted|restored)\b/i.test(r.text));
+  check("words a pending card as waiting, not 'I have set…'", doneTooSoon.length === 0, doneTooSoon.map((r) => r.text.slice(0, 100)).join(" | "));
+  const ids = replies.filter((r) => /\b(?:visit|contact|trash)[ _]?id\b/i.test(r.text));
+  check("never shows record ids", ids.length === 0, ids.map((r) => r.text.slice(0, 100)).join(" | "));
   const lost = replies.filter((r) => /did not catch that/i.test(r.text));
   check("never answers 'I did not catch that'", lost.length === 0, `${lost.length} time(s)`);
 
