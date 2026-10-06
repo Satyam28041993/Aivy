@@ -1,0 +1,30 @@
+name: E2E smoke
+
+# Talks to the LIVE deployed agent as the user would — visit, follow-up,
+# travel expense, visiting card, delete and undo — under a throwaway anonymous
+# account, then reads Firestore back. The Claude Code environment cannot reach
+# cloudfunctions.net, so this is where an end-to-end run happens.
+#
+# A push that touches functions/scripts/e2e/ runs it (bump RUN to re-run);
+# workflow_dispatch works once this file is on the default branch.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "functions/scripts/e2e/**"
+
+concurrency:
+  group: e2e-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run the conversation
+        run: node functions/scripts/e2e/smoke.mjs
