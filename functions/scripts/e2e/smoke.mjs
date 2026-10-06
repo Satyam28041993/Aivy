@@ -278,6 +278,32 @@ async function main() {
     }
   }
 
+  // --- 5b. "Jo bhi orders hai unko delete kardo", and a client -----------
+  // The user hit a refusal here on the live app; this pins the fix.
+  console.log("\n════════ 5b. Delete all orders, delete a client ════════");
+  for (const line of [
+    "Bajaj Auto ka order aaya 50000 ka, 2 BX410T printer",
+    "Exide Industries Chikalthana ka order aaya 20000 ka TTR ribbons",
+  ]) {
+    const o = await untilCard("order", line, ["haan yahi order hai, save karo"]);
+    if (o.card) await confirm(o.card);
+  }
+  const ordersBefore = await list("orders");
+  check("orders: two recorded to delete", ordersBefore.length === 2, `${ordersBefore.length}`);
+  const da = await untilCard("delete_record", "jo bhi orders hai unko delete kardo", ["haan saare orders delete karo"]);
+  check("delete all orders: one card, both orders on it", da.card && da.card.lines.filter((l) => /₹/.test(l.value)).length === 2);
+  if (da.card) {
+    await confirm(da.card);
+    check("delete all orders: none left", (await list("orders")).length === 0);
+  }
+  const dc = await untilCard("delete_record", "Exide Industries Chikalthana client bhi delete kar do", ["haan wahi client"]);
+  check("delete client: card says linked records stay", dc.card && dc.card.lines.some((l) => /stay/i.test(l.value)));
+  if (dc.card) {
+    await confirm(dc.card);
+    const clients = await list("clients");
+    check("delete client: entry gone, visit kept", !clients.some((c) => /exide/i.test(c.name ?? "")) && (await list("visits")).length === 2);
+  }
+
   // --- 6. Read-backs ------------------------------------------------------
   console.log("\n════════ 6. Read-backs ════════");
   const lv = await say("aaj kitne visit hue?");
